@@ -1,0 +1,85 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Store {
+  id           String   @id @default(uuid())
+  shopDomain   String   @unique
+  accessToken  String
+  scope        String
+  label        String?
+  isActive     Boolean  @default(true)
+  installedAt  DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  variantMaps   VariantMap[]
+  productCaches ProductCache[]
+  sourceLogs    SyncLog[]      @relation("SourceStore")
+  destLogs      SyncLog[]      @relation("DestinationStore")
+  @@map("stores")
+}
+
+model VariantMap {
+  id                String   @id @default(uuid())
+  sku               String
+  storeId           String
+  shopifyProductId  String
+  shopifyVariantId  String
+  inventoryItemId   String
+  locationId        String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  @@unique([storeId, shopifyVariantId])
+  @@index([sku])
+  @@map("variant_maps")
+}
+
+model ProductCache {
+  id                  String   @id @default(uuid())
+  storeId             String
+  shopifyProductId    String
+  shopifyVariantId    String
+  sku                 String?
+  title               String
+  imageUrl            String?
+  inventoryQuantity   Int      @default(0)
+  updatedAt           DateTime @updatedAt
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  @@unique([storeId, shopifyVariantId])
+  @@index([sku])
+  @@map("product_cache")
+}
+
+model SyncLog {
+  id                   String   @id @default(uuid())
+  sku                  String
+  sourceStoreId        String
+  destinationStoreId   String
+  previousQuantity     Int
+  updatedQuantity      Int
+  status               String
+  failureReason        String?
+  triggerType          String   @default("WEBHOOK")
+  webhookEventId       String?
+  createdAt            DateTime @default(now())
+  sourceStore      Store @relation("SourceStore",      fields: [sourceStoreId],      references: [id])
+  destinationStore Store @relation("DestinationStore", fields: [destinationStoreId], references: [id])
+  @@index([sku])
+  @@index([status])
+  @@index([createdAt])
+  @@map("sync_logs")
+}
+
+model WebhookEvent {
+  id          String   @id
+  topic       String
+  shopDomain  String
+  processedAt DateTime @default(now())
+  @@index([shopDomain, topic])
+  @@map("webhook_events")
+}
