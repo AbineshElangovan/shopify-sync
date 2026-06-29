@@ -1,65 +1,106 @@
-import Image from "next/image";
 
-export default function Home() {
+import { ArrowUpIcon, ArrowDownIcon } from '@shopify/polaris-icons'
+
+const STATS = [
+  {
+    label: 'Total Products',
+    value: '0',
+    sub: 'No products synced yet',
+    color: 'bg-blue-50 text-blue-700',
+    border: 'border-blue-100',
+  },
+  {
+    label: 'Connected Stores',
+    value: '0',
+    sub: 'No stores connected yet',
+    color: 'bg-purple-50 text-purple-700',
+    border: 'border-purple-100',
+  },
+  {
+    label: 'Successful Syncs',
+    value: '0',
+    sub: 'No syncs completed yet',
+    color: 'bg-green-50 text-green-700',
+    border: 'border-green-100',
+  },
+  {
+    label: 'Failed Syncs',
+    value: '0',
+    sub: 'No failures recorded',
+    color: 'bg-red-50 text-red-700',
+    border: 'border-red-100',
+  },
+]
+
+const RECENT_COLUMNS = ['SKU', 'Source Store', 'Destination', 'Qty Change', 'Status', 'Time']
+
+export default function DashboardPage() {
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+
+      
+      <div className="mb-8">
+        <h1 className="text-2xl font-semibold text-gray-900">Dashboard</h1>
+        <p className="mt-1 text-sm text-gray-500">
+          Overview of your inventory synchronization activity across all connected stores.
+        </p>
+      </div>
+
+      {/* Stat Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
+        {STATS.map(({ label, value, sub, color, border }) => (
+          <div key={label} className={`card border ${border} p-6 flex flex-col gap-3`}>
+            <span className="text-sm font-medium text-gray-500">{label}</span>
+            <span className="text-3xl font-bold text-gray-900">{value}</span>
+            <span className={`text-xs font-medium px-2 py-1 rounded-md w-fit ${color}`}>
+              {sub}
+            </span>
+          </div>
+        ))}
+      </div>
+
+      {/* Recent Activity */}
+      <div className="card">
+        <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+          <h2 className="text-base font-semibold text-gray-900">Recent Sync Activity</h2>
+          <a href="/logs" className="text-sm text-blue-600 hover:text-blue-700 font-medium transition-colors">
+            View all logs
           </a>
         </div>
-      </main>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="bg-gray-50 border-b border-gray-100">
+                {RECENT_COLUMNS.map((col) => (
+                  <th key={col} className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                    {col}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td colSpan={RECENT_COLUMNS.length} className="px-6 py-16 text-center">
+                  <div className="flex flex-col items-center gap-3">
+                    <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="w-6 h-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                      </svg>
+                    </div>
+                    <p className="text-sm font-medium text-gray-500">No sync activity yet</p>
+                    <p className="text-xs text-gray-400">Connect your Shopify stores to start syncing inventory.</p>
+                    <a href="/settings" className="btn-primary mt-1">
+                      Connect a Store
+                    </a>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
     </div>
-  );
+  )
 }
