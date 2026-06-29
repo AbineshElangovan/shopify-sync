@@ -1,16 +1,18 @@
+
 'use client'
-import { Page, Grid, BlockStack, Button, IndexTable, Badge, Avatar, ProgressBar, Text } from '@shopify/polaris'
+import { Page, Grid, BlockStack, Button, IndexTable, Badge, ProgressBar, Text } from '@shopify/polaris'
 import type { IndexTableProps } from '@shopify/polaris'
-import { RefreshIcon } from '@shopify/polaris-icons'
+import { RefreshIcon, ProductIcon, ChartVerticalIcon, AlertTriangleIcon, CheckCircleIcon } from '@shopify/polaris-icons'
 import ReusableTable from '@/components/ui/table'
+import StatCard from '@/components/ui/StatCard'
 
 type Headings = IndexTableProps['headings']
 
 const STATS = [
-  { label: 'TOTAL PRODUCTS',  value: '248', bg: 'bg-purple-600'  },
-  { label: 'TOTAL INVENTORY', value: '12,540', bg: 'bg-cyan-500' },
-  { label: 'LOW STOCK',       value: '14', bg: 'bg-rose-500'     },
-  { label: 'ACTIVE PRODUCTS', value: '231', bg: 'bg-emerald-500' },
+  { label: 'TOTAL PRODUCTS',  value: '248',    bg: 'bg-indigo-600',  icon: ProductIcon },
+  { label: 'TOTAL INVENTORY', value: '12,540', bg: 'bg-sky-500',     icon: ChartVerticalIcon },
+  { label: 'LOW STOCK',       value: '14',     bg: 'bg-amber-500',   icon: AlertTriangleIcon },
+  { label: 'ACTIVE PRODUCTS', value: '231',    bg: 'bg-emerald-500', icon: CheckCircleIcon },
 ]
 
 const ACTIVITY_HEADINGS: Headings = [
@@ -47,18 +49,18 @@ const ACTIVITIES = [
 ]
 
 const LOW_STOCK = [
-  { id: '1', initials: 'AA', color: 'bg-green-500',  product: 'Apple AirPods Pro',  sku: 'AP001', stock: 2,  max: 50, status: 'Critical', statusColor: 'critical' as const },
-  { id: '2', initials: 'UH', color: 'bg-orange-400', product: 'USB-C Hub',          sku: 'UC003', stock: 4,  max: 50, status: 'Critical', statusColor: 'critical' as const },
+  { id: '1', initials: 'AA', color: 'bg-green-500',  product: 'Apple AirPods Pro',   sku: 'AP001', stock: 2, max: 50, status: 'Critical', statusColor: 'critical' as const },
+  { id: '2', initials: 'UH', color: 'bg-orange-400', product: 'USB-C Hub',           sku: 'UC003', stock: 4, max: 50, status: 'Critical', statusColor: 'critical' as const },
   { id: '3', initials: 'MK', color: 'bg-red-400',    product: 'Mechanical Keyboard', sku: 'KB010', stock: 5, max: 50, status: 'Low',      statusColor: 'warning'  as const },
-  { id: '4', initials: 'WM', color: 'bg-pink-400',   product: 'Wireless Mouse',     sku: 'MS002', stock: 7,  max: 50, status: 'Low',      statusColor: 'warning'  as const },
+  { id: '4', initials: 'WM', color: 'bg-pink-400',   product: 'Wireless Mouse',      sku: 'MS002', stock: 7, max: 50, status: 'Low',      statusColor: 'warning'  as const },
 ]
 
 const RECENT_PRODUCTS = [
-  { id: '1', initials: 'NA', color: 'bg-purple-500', product: 'Nike Air Max 90',    vendor: 'Nike',    price: '₹4,999',  status: 'Active'   },
-  { id: '2', initials: 'AW', color: 'bg-blue-400',   product: 'Apple Watch SE',     vendor: 'Apple',   price: '₹29,999', status: 'Active'   },
-  { id: '3', initials: 'AT', color: 'bg-teal-500',   product: 'Adidas Tote Bag',    vendor: 'Adidas',  price: '₹1,299',  status: 'Active'   },
-  { id: '4', initials: 'L5', color: 'bg-yellow-500', product: 'Levis 511 Jeans',    vendor: 'Levis',   price: '₹3,499',  status: 'Inactive' },
-  { id: '5', initials: 'PR', color: 'bg-pink-500',   product: 'Puma Running Shoes', vendor: 'Puma',    price: '₹5,999',  status: 'Active'   },
+  { id: '1', initials: 'NA', color: 'bg-purple-500', product: 'Nike Air Max 90',    vendor: 'Nike',   price: '₹4,999',  status: 'Active'   },
+  { id: '2', initials: 'AW', color: 'bg-blue-400',   product: 'Apple Watch SE',     vendor: 'Apple',  price: '₹29,999', status: 'Active'   },
+  { id: '3', initials: 'AT', color: 'bg-teal-500',   product: 'Adidas Tote Bag',    vendor: 'Adidas', price: '₹1,299',  status: 'Active'   },
+  { id: '4', initials: 'L5', color: 'bg-yellow-500', product: 'Levis 511 Jeans',    vendor: 'Levis',  price: '₹3,499',  status: 'Inactive' },
+  { id: '5', initials: 'PR', color: 'bg-pink-500',   product: 'Puma Running Shoes', vendor: 'Puma',   price: '₹5,999',  status: 'Active'   },
 ]
 
 export default function DashboardView() {
@@ -74,24 +76,17 @@ export default function DashboardView() {
 
         {/* Stat Cards */}
         <Grid>
-          {STATS.map(({ label, value, bg }) => (
+          {STATS.map(({ label, value, bg, icon }) => (
             <Grid.Cell key={label} columnSpan={{ xs: 6, sm: 3, md: 3, lg: 3, xl: 3 }}>
-              <div className={bg + ' rounded-xl px-6 py-7 flex items-center justify-between shadow-sm'}>
-                <BlockStack gap="100">
-                  <span className="text-white/80 text-xs font-semibold uppercase tracking-widest">
-                    {label}
-                  </span>
-                  <span className="text-white text-4xl font-bold">{value}</span>
-                </BlockStack>
-              </div>
+              <StatCard label={label} value={value} bg={bg} icon={icon} />
             </Grid.Cell>
           ))}
         </Grid>
 
-        {/* Recent Inventory Activities */}
+       
         <ReusableTable
           title="Recent Inventory Activities"
-          accentColor="bg-green-500"
+          accentColor="bg-indigo-500"
           linkLabel="View all logs"
           linkUrl="/logs"
           resourceName={{ singular: 'activity', plural: 'activities' }}
@@ -132,10 +127,10 @@ export default function DashboardView() {
           ))}
         </ReusableTable>
 
-        {/* Low Stock Products */}
+       
         <ReusableTable
           title="Low Stock Products — Sorted by Stock (Lowest First)"
-          accentColor="bg-rose-500"
+          accentColor="bg-amber-500"
           linkLabel="View all products"
           linkUrl="/products"
           resourceName={{ singular: 'product', plural: 'products' }}
@@ -176,10 +171,10 @@ export default function DashboardView() {
           ))}
         </ReusableTable>
 
-        {/* Recent Added Products */}
+       
         <ReusableTable
           title="Recent Added Products"
-          accentColor="bg-blue-500"
+          accentColor="bg-emerald-500"
           linkLabel="View all products"
           linkUrl="/products"
           resourceName={{ singular: 'product', plural: 'products' }}

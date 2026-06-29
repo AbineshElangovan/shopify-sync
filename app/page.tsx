@@ -46,7 +46,7 @@ export default function DashboardPage() {
         </p>
       </div>
 
-      {/* Stat Cards */}
+   
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
         {STATS.map(({ label, value, sub, color, border }) => (
           <div key={label} className={`card border ${border} p-6 flex flex-col gap-3`}>
@@ -59,7 +59,6 @@ export default function DashboardPage() {
         ))}
       </div>
 
-      {/* Recent Activity */}
       <div className="card">
         <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
           <h2 className="text-base font-semibold text-gray-900">Recent Sync Activity</h2>

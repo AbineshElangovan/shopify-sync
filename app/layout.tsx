@@ -13,7 +13,7 @@ export const metadata: Metadata = {
 }
 
 const NAV_LINKS = [
-  { href: '/dashboard', label: 'Dashboard' },
+  { href: '/', label: 'Dashboard' },
   { href: '/products',  label: 'Products'  },
   { href: '/sync',      label: 'Sync'      },
   { href: '/logs',      label: 'Logs'      },
