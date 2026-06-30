@@ -1,25 +1,16 @@
-import { NextRequest, NextResponse } from "next/server";
-import crypto from "crypto";
+import { NextRequest } from "next/server";
+import { shopify } from "@/lib/shopify";
 
-export async function GET(request: NextRequest) {
- 
-  const shop = request.nextUrl.searchParams.get("shop");
-
-  
+export async function GET(req: NextRequest) {
+  const shop = req.nextUrl.searchParams.get("shop");
   if (!shop) {
-    return NextResponse.json(
-      { error: "Shop parameter is missing" },
-      { status: 400 }
-    );
+    return new Response("Missing shop parameter", { status: 400 });
   }
-  const state = crypto.randomBytes(16).toString("hex");
-  const authUrl =
-    `https://${shop}/admin/oauth/authorize` +
-    `?client_id=${process.env.SHOPIFY_API_KEY}` +
-    `&scope=${process.env.SHOPIFY_SCOPES}` +
-    `&redirect_uri=${process.env.SHOPIFY_APP_URL}/api/auth/callback` +
-    `&state=${state}`;
 
-
-  return NextResponse.redirect(authUrl);
+  return shopify.auth.begin({
+    shop: shopify.utils.sanitizeShop(shop, true)!,
+    callbackPath: "/api/auth/callback",
+    isOnline: false,
+    rawRequest: req,
+  });
 }

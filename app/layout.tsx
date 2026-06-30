@@ -4,6 +4,7 @@ import { Inter } from 'next/font/google'
 import Link from 'next/link'
 import Image from 'next/image'
 import './globals.css'
+import ShopifyProvider from "@/components/providers/AppBridgeProvider";
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -68,9 +69,11 @@ export default function RootLayout({
           </div>
         </header>
 
-        <main className="min-h-screen bg-gray-50">
-          {children}
-        </main>
+        <ShopifyProvider>
+     <main className="min-h-screen bg-gray-50">
+       {children}
+      </main>
+     </ShopifyProvider>
 
         <footer className="bg-gray-900 text-gray-300">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
