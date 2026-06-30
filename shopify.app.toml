@@ -13,4 +13,4 @@ api_version = "2026-07"
 scopes = "read_inventory,read_products,write_inventory,write_products"
 
 [auth]
-redirect_urls = [ "https://snowboard-sequence-justin-sounds.trycloudflare.com/api/auth" ]
+redirect_urls = ["https://snowboard-sequence-justin-sounds.trycloudflare.com/api/auth/callback"]
