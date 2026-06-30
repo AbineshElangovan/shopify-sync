@@ -11,7 +11,7 @@ export async function getAdminClient(shopDomain: string) {
     throw new Error(`Store ${shopDomain} is not active or not found.`);
   }
 
-  // Create a session object for offline access
+  
   const session = new Session({
     id: `offline_${shopDomain}`,
     shop: shopDomain,
@@ -20,7 +20,7 @@ export async function getAdminClient(shopDomain: string) {
     accessToken: store.accessToken,
   });
 
-  // Return the GraphQL client
+  
   const client = new shopify.clients.Graphql({ session });
   return client;
 }
@@ -31,7 +31,7 @@ async function handleGraphQLError(error: any, shopDomain: string) {
     throw new Error(`Shopify GraphQL Error: ${error.message}`);
   }
 
-  // Check for 401 Unauthorized (invalid token / uninstalled)
+ 
   if (error.response?.code === 401 || error.response?.status === 401 || error.statusCode === 401) {
     console.warn(`Access token invalid for ${shopDomain}. Marking store as inactive.`);
     await prisma.store.update({

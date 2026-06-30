@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyWebhook } from "@/lib/shopify/webhooks";
 import { prisma } from "@/lib/db/prisma";
+import { processInventoryUpdate } from "@/lib/shopify/sync-service";
 
 export async function POST(req: NextRequest) {
   try {
@@ -28,8 +29,9 @@ export async function POST(req: NextRequest) {
     const payload = JSON.parse(rawBody);
     console.log(`Processing inventory update for shop ${shop}:`, payload);
     
-    // In future phases, you would trigger actual synchronization logic here
-    // Example: fetch mapped variants from database and sync to destination store
+    // Trigger actual synchronization logic here
+    // Process asynchronously to ensure webhook responds quickly
+    processInventoryUpdate(shop, payload, webhookId).catch(console.error);
 
     return new NextResponse("Webhook processed successfully", { status: 200 });
   } catch (error: any) {
