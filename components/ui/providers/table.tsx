@@ -44,7 +44,7 @@ export default function ReusableTable({
       <div className="px-5 py-4 border-b border-gray-100">
         <InlineStack align="space-between" blockAlign="center">
           <InlineStack gap="200" blockAlign="center">
-            <div className={\`w-1 h-5 rounded-full \${accentColor}\`} />
+            <div className={`w-1 h-5 rounded-full ${accentColor}`} />
             <Text as="h2" variant="headingMd" fontWeight="semibold">
               {title}
             </Text>

@@ -7,7 +7,7 @@ interface StatCardProps {
   label: string
   value: string
   bg: string
-  icon: ComponentType<{ width?: number; height?: number; fill?: string }>
+  icon: ComponentType<any>
 }
 
 export default function StatCard({ label, value, bg, icon: Icon }: StatCardProps) {
