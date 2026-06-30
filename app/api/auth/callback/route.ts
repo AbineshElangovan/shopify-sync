@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { shopify } from "@/lib/shopify";
 import { prisma } from "@/lib/db/prisma";
+import { registerWebhooks } from "@/lib/shopify/webhooks";
 
 export async function GET(req: NextRequest) {
   try {
@@ -33,6 +34,9 @@ export async function GET(req: NextRequest) {
 
     // The session itself is automatically saved to the Session table by PrismaSessionStorage
     // because we provided sessionStorage to the shopifyApi() configuration in lib/shopify/index.ts.
+
+    // Register webhooks for this shop
+    await registerWebhooks(session);
 
     // Get the redirect URL back to the embedded application
     // Wait, getEmbeddedAppUrl might need a string for host or it extracts from the request if missing, but typically it's safer to extract host parameter manually if it needs it.

@@ -1,6 +1,6 @@
 import "@shopify/shopify-api/adapters/web-api";
 import { webApiAdapterInitialized } from "@shopify/shopify-api/adapters/web-api";
-import { shopifyApi, ApiVersion } from "@shopify/shopify-api";
+import { shopifyApi, ApiVersion, DeliveryMethod } from "@shopify/shopify-api";
 import { sessionStorage } from "./session-storage";
 
 // This ensures the adapter import is not tree-shaken
@@ -13,4 +13,19 @@ export const shopify = shopifyApi({
   apiVersion: ApiVersion.July26,
   isEmbeddedApp: true,
   sessionStorage,
+});
+
+shopify.webhooks.addHandlers({
+  INVENTORY_LEVELS_UPDATE: {
+    deliveryMethod: DeliveryMethod.Http,
+    callbackUrl: "/api/webhooks/inventory-levels-update",
+  },
+  PRODUCTS_UPDATE: {
+    deliveryMethod: DeliveryMethod.Http,
+    callbackUrl: "/api/webhooks/products-update",
+  },
+  APP_UNINSTALLED: {
+    deliveryMethod: DeliveryMethod.Http,
+    callbackUrl: "/api/webhooks/app-uninstalled",
+  },
 });
