@@ -1,5 +1,5 @@
 
-export type SyncStatus = 'SYNCED' | 'SKIPPED' | 'FAILED' | 'PENDING'
+export type SyncStatus = 'SYNCED' | 'SKIPPED' | 'FAILED' 
 export type TriggerType = 'WEBHOOK' | 'MANUAL' | 'SCHEDULED'
 
 export interface Store {

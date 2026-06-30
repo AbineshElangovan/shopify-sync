@@ -3,11 +3,11 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
-model Store {
+model Store {npx prisma migrate dev --name init
   id           String   @id @default(uuid())
   shopDomain   String   @unique
   accessToken  String
