@@ -1,6 +1,7 @@
 import "@shopify/shopify-api/adapters/web-api";
 import { webApiAdapterInitialized } from "@shopify/shopify-api/adapters/web-api";
 import { shopifyApi, ApiVersion } from "@shopify/shopify-api";
+import { sessionStorage } from "./session-storage";
 
 // This ensures the adapter import is not tree-shaken
 console.log(`Shopify Web API Adapter Initialized: ${webApiAdapterInitialized}`);
@@ -11,4 +12,5 @@ export const shopify = shopifyApi({
   hostName: process.env.SHOPIFY_APP_URL!.replace(/^https?:\/\//, ""),
   apiVersion: ApiVersion.July26,
   isEmbeddedApp: true,
+  sessionStorage,
 });

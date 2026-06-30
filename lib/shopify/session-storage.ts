@@ -1,6 +1,4 @@
 import { PrismaSessionStorage } from "@shopify/shopify-app-session-storage-prisma";
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "@/lib/db/prisma";
 
-const prisma = new PrismaClient();
-
-export const sessionStorage = new PrismaSessionStorage(prisma); 
+export const sessionStorage = new PrismaSessionStorage(prisma);
