@@ -14,3 +14,5 @@ export * from './SearchBar';
 export * from './Filter';
 export * from './Toast';
 export * from './ConfirmationDialog';
+export * from './BarChart';
+export * from './PageLoader';

@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { Card, Table, Badge, SearchBar, Filter, Pagination, Loading, EmptyState } from '@/components/common';
+import { Card, Table, Badge, SearchBar, Filter, Pagination, EmptyState } from '@/components/common';
 import { ChoiceList, IndexTable } from '@shopify/polaris';
 
 export default function SyncPage() {
@@ -121,34 +121,35 @@ export default function SyncPage() {
       <Card>
         <h2 className="text-xl font-bold mb-4">Synchronization Logs</h2>
         {loading ? (
-          <div className="flex justify-center p-8"><Loading /></div>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '56px 20px', gap: 14 }}>
+            <style>{`@keyframes sync-spin{to{transform:rotate(360deg)}}.sync-ring{width:44px;height:44px;border-radius:50%;border:4px solid #e5e7eb;border-top-color:#6366f1;animation:sync-spin 0.75s linear infinite}`}</style>
+            <div className="sync-ring" />
+            <p style={{ margin: 0, fontSize: 13, color: '#9ca3af', fontWeight: 500 }}>Loading synchronization logs…</p>
+          </div>
         ) : data?.logs?.length > 0 ? (
           <Table 
-            itemCount={data.logs.length}
-            headings={[
-              { title: 'Date' },
-              { title: 'SKU' },
-              { title: 'Source Store' },
-              { title: 'Target Store' },
-              { title: 'Quantity' },
-              { title: 'Status' }
+            paginate={false}
+            searchable={false}
+            filterable={false}
+            headerColor="#4338ca"
+            columns={[
+              { title: 'Date', key: 'date' },
+              { title: 'SKU', key: 'sku' },
+              { title: 'Source Store', key: 'source' },
+              { title: 'Target Store', key: 'target' },
+              { title: 'Quantity', key: 'quantity' },
+              { title: 'Status', key: 'status', type: 'status', badgeRules: { 'SUCCESS': 'success', 'FAILED': 'critical', 'PENDING': 'warning' } }
             ]}
-          >
-            {data.logs.map((log: any, index: number) => (
-              <IndexTable.Row id={log.id} key={log.id} position={index}>
-                <IndexTable.Cell>{new Date(log.createdAt).toLocaleString()}</IndexTable.Cell>
-                <IndexTable.Cell>{log.sku}</IndexTable.Cell>
-                <IndexTable.Cell>{log.sourceStore?.label || log.sourceStore?.shopDomain || 'Unknown'}</IndexTable.Cell>
-                <IndexTable.Cell>{log.destinationStore?.label || log.destinationStore?.shopDomain || 'Unknown'}</IndexTable.Cell>
-                <IndexTable.Cell>{`${log.previousQuantity} → ${log.updatedQuantity}`}</IndexTable.Cell>
-                <IndexTable.Cell>
-                  <Badge tone={log.status === 'SUCCESS' ? 'success' : log.status === 'FAILED' ? 'critical' : 'warning'}>
-                    {log.status}
-                  </Badge>
-                </IndexTable.Cell>
-              </IndexTable.Row>
-            ))}
-          </Table>
+            items={data.logs.map((log: any) => ({
+              id: log.id,
+              date: new Date(log.createdAt).toLocaleString(),
+              sku: log.sku,
+              source: log.sourceStore?.label || log.sourceStore?.shopDomain || 'Unknown',
+              target: log.destinationStore?.label || log.destinationStore?.shopDomain || 'Unknown',
+              quantity: `${log.previousQuantity} → ${log.updatedQuantity}`,
+              status: log.status
+            }))}
+          />
         ) : (
           <EmptyState 
             heading="No synchronization logs found"

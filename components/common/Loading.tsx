@@ -1,11 +1,11 @@
 "use client";
 import React from 'react';
-import { ProgressBar as PolarisProgressBar } from '@shopify/polaris';
+import { Spinner as PolarisSpinner } from '@shopify/polaris';
 
-export type LoadingProps = React.ComponentProps<typeof PolarisProgressBar>;
+export type LoadingProps = React.ComponentProps<typeof PolarisSpinner>;
 
 export function Loading(props: LoadingProps) {
   return (
-    <PolarisProgressBar {...props} />
+    <PolarisSpinner size="large" {...props} />
   );
 }

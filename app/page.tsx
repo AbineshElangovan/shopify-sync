@@ -1,105 +1,268 @@
+import { prisma } from '@/lib/db/prisma';
+import { BlockStack, Layout } from '@shopify/polaris';
+import { DashboardCards } from '@/components/dashboard/DashboardCards';
+import { DashboardCharts } from '@/components/dashboard/DashboardCharts';
+import { Table, ColumnConfig } from '@/components/common/Table';
 
-import { ArrowUpIcon, ArrowDownIcon } from '@shopify/polaris-icons'
+export const dynamic = 'force-dynamic';
 
-const STATS = [
-  {
-    label: 'Total Products',
-    value: '0',
-    sub: 'No products synced yet',
-    color: 'bg-blue-50 text-blue-700',
-    border: 'border-blue-100',
-  },
-  {
-    label: 'Connected Stores',
-    value: '0',
-    sub: 'No stores connected yet',
-    color: 'bg-purple-50 text-purple-700',
-    border: 'border-purple-100',
-  },
-  {
-    label: 'Successful Syncs',
-    value: '0',
-    sub: 'No syncs completed yet',
-    color: 'bg-green-50 text-green-700',
-    border: 'border-green-100',
-  },
-  {
-    label: 'Failed Syncs',
-    value: '0',
-    sub: 'No failures recorded',
-    color: 'bg-red-50 text-red-700',
-    border: 'border-red-100',
-  },
-]
+export default async function DashboardPage() {
 
-const RECENT_COLUMNS = ['SKU', 'Source Store', 'Destination', 'Qty Change', 'Status', 'Time']
+  // ── Statistics ──
+  const totalProducts  = await prisma.productCache.count();
+  const invResult      = await prisma.productCache.aggregate({ _sum: { inventoryQuantity: true } });
+  const totalInventory = invResult._sum.inventoryQuantity ?? 0;
+  const activeProducts = await prisma.productCache.count({ where: { inventoryQuantity: { gt: 0 } } });
+  const lowStockCount  = await prisma.productCache.count({ where: { inventoryQuantity: { lte: 15 } } });
 
-export default function DashboardPage() {
+  const latestSync = await prisma.syncLog.findFirst({ orderBy: { createdAt: 'desc' } });
+  let timeStr = 'Just now';
+  if (latestSync) {
+    const diffMins = Math.floor((Date.now() - latestSync.createdAt.getTime()) / 60000);
+    timeStr = diffMins < 1 ? 'Just now' : diffMins < 60 ? `${diffMins} mins ago` : `${Math.floor(diffMins / 60)} hrs ago`;
+  }
+
+  const stats = { totalProducts, totalInventory, lowStock: lowStockCount, activeProducts, lastUpdated: timeStr };
+
+  // ── Chart data – one entry per store ──
+  const stores = await prisma.store.findMany({ include: { productCaches: true } });
+
+  const combinedData = stores.map((s) => {
+    const products   = s.productCaches.length;
+    const inventory  = s.productCaches.reduce((acc, p) => acc + p.inventoryQuantity, 0);
+    const salesValue = inventory * 500; // proxy: ₹500 per unit
+    return {
+      name: s.label || s.shopDomain,
+      'Total Products': products,
+      'Total Inventory': inventory,
+      'Total Sales Value': salesValue,
+    };
+  });
+
+  const chartData = { combinedData };
+
+  // ── Store Summary Table ──
+  const storeSummaryData = stores.map((store) => ({
+    id: store.id,
+    storeName: store.label || store.shopDomain,
+    totalProducts: store.productCaches.length,
+    totalInventory: store.productCaches.reduce((a, p) => a + p.inventoryQuantity, 0),
+    activeProducts: store.productCaches.filter((p) => p.inventoryQuantity > 0).length,
+    lastSynced: timeStr,
+  }));
+
+  const storeSummaryColumns: ColumnConfig[] = [
+    { title: 'Store Name',      key: 'storeName',      type: 'bold' },
+    { title: 'Total Products',  key: 'totalProducts'               },
+    { title: 'Total Inventory', key: 'totalInventory'              },
+    { title: 'Active Products', key: 'activeProducts'              },
+    { title: 'Last Synced',     key: 'lastSynced'                  },
+  ];
+
+  // ── Store Sales Table ──
+  // Each store: Total Products, Total Inventory, Sales Value, Sync count
+  const storeSyncCounts = await Promise.all(
+    stores.map(async (s) => ({
+      storeId: s.id,
+      totalSyncs: await prisma.syncLog.count({ where: { sourceStoreId: s.id } }),
+      successSyncs: await prisma.syncLog.count({ where: { sourceStoreId: s.id, status: 'SUCCESS' } }),
+    }))
+  );
+
+  const storeSalesData = stores.map((store) => {
+    const syncInfo    = storeSyncCounts.find((sc) => sc.storeId === store.id);
+    const inventory   = store.productCaches.reduce((a, p) => a + p.inventoryQuantity, 0);
+    const salesValue  = inventory * 500;
+    return {
+      id: store.id,
+      storeName: store.label || store.shopDomain,
+      totalProducts: store.productCaches.length,
+      totalInventory: inventory,
+      salesValue: `₹${salesValue.toLocaleString()}`,
+      totalSyncs: syncInfo?.totalSyncs ?? 0,
+      successSyncs: syncInfo?.successSyncs ?? 0,
+      syncRate: syncInfo && syncInfo.totalSyncs > 0
+        ? `${Math.round((syncInfo.successSyncs / syncInfo.totalSyncs) * 100)}%`
+        : 'N/A',
+    };
+  });
+
+  const storeSalesColumns: ColumnConfig[] = [
+    { title: 'Store Name',      key: 'storeName',      type: 'bold' },
+    { title: 'Total Products',  key: 'totalProducts'               },
+    { title: 'Total Inventory', key: 'totalInventory'              },
+    { title: 'Sales Value (₹)', key: 'salesValue',     type: 'bold' },
+    { title: 'Total Syncs',     key: 'totalSyncs'                  },
+    { title: 'Successful',      key: 'successSyncs'                },
+    { title: 'Success Rate',    key: 'syncRate'                    },
+  ];
+
+  // ── Low Stock Products Table ──
+  const lowStockRaw = await prisma.productCache.findMany({
+    where: { inventoryQuantity: { lte: 15 } },
+    orderBy: { inventoryQuantity: 'asc' },
+    take: 100,
+  });
+
+  const lowStockProducts = lowStockRaw.map((p) => ({
+    id: p.id,
+    imageUrl: p.imageUrl,
+    title: p.title,
+    sku: p.sku || 'N/A',
+    inventoryQuantity: p.inventoryQuantity,
+    stockLevel: p.inventoryQuantity <= 5 ? 'Critical' : p.inventoryQuantity <= 15 ? 'Low' : 'Good',
+    updatedDate: p.updatedAt.toLocaleDateString(),
+    updatedTime: p.updatedAt.toLocaleTimeString(),
+  }));
+
+  const lowStockColumns: ColumnConfig[] = [
+    { title: 'Image',        key: 'imageUrl',          type: 'image'                                                                                 },
+    { title: 'Product Name', key: 'title',             type: 'bold'                                                                                  },
+    { title: 'SKU',          key: 'sku'                                                                                                             },
+    { title: 'Quantity',     key: 'inventoryQuantity', type: 'bold'                                                                                  },
+    { title: 'Stock Level',  key: 'stockLevel',        type: 'badge', badgeRules: { Critical: 'critical', Low: 'warning', Good: 'success' }           },
+    { title: 'Updated Date', key: 'updatedDate'                                                                                                      },
+    { title: 'Updated Time', key: 'updatedTime'                                                                                                      },
+  ];
+
+  // ── Recently Added Products Table ──
+  const recentlyAddedRaw = await prisma.productCache.findMany({
+    orderBy: { updatedAt: 'desc' },
+    take: 100,
+  });
+
+  const recentlyAddedProducts = recentlyAddedRaw.map((p) => ({
+    id: p.id,
+    imageUrl: p.imageUrl,
+    title: p.title,
+    vendor: 'ESHAN',
+    sku: p.sku || 'N/A',
+    inventoryQuantity: p.inventoryQuantity,
+    stockLevel: p.inventoryQuantity <= 5 ? 'Critical' : p.inventoryQuantity <= 15 ? 'Low' : 'Good',
+    status: p.inventoryQuantity > 0 ? 'Active' : 'Out of Stock',
+    addedDate: p.updatedAt.toLocaleDateString(),
+    addedTime: p.updatedAt.toLocaleTimeString(),
+  }));
+
+  const recentlyAddedColumns: ColumnConfig[] = [
+    { title: 'Image',        key: 'imageUrl',          type: 'image'                                                                                         },
+    { title: 'Product Name', key: 'title',             type: 'bold'                                                                                          },
+    { title: 'Vendor',       key: 'vendor'                                                                                                                    },
+    { title: 'SKU',          key: 'sku'                                                                                                                       },
+    { title: 'Stock',        key: 'inventoryQuantity', type: 'bold'                                                                                           },
+    { title: 'Stock Level',  key: 'stockLevel',        type: 'badge', badgeRules: { Critical: 'critical', Low: 'warning', Good: 'success' }                   },
+    { title: 'Status',       key: 'status',            type: 'badge', badgeRules: { Active: 'success', 'Out of Stock': 'critical' }                           },
+    { title: 'Added Date',   key: 'addedDate'                                                                                                                 },
+    { title: 'Added Time',   key: 'addedTime'                                                                                                                 },
+  ];
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+      <BlockStack gap="800">
 
-      
-      <div className="mb-8">
-        <h1 className="text-2xl font-semibold text-gray-900">Dashboard</h1>
-        <p className="mt-1 text-sm text-gray-500">
-          Overview of your inventory synchronization activity across all connected stores.
-        </p>
-      </div>
-
-   
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
-        {STATS.map(({ label, value, sub, color, border }) => (
-          <div key={label} className={`card border ${border} p-6 flex flex-col gap-3`}>
-            <span className="text-sm font-medium text-gray-500">{label}</span>
-            <span className="text-3xl font-bold text-gray-900">{value}</span>
-            <span className={`text-xs font-medium px-2 py-1 rounded-md w-fit ${color}`}>
-              {sub}
-            </span>
-          </div>
-        ))}
-      </div>
-
-      <div className="card">
-        <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-          <h2 className="text-base font-semibold text-gray-900">Recent Sync Activity</h2>
-          <a href="/logs" className="text-sm text-blue-600 hover:text-blue-700 font-medium transition-colors">
-            View all logs
-          </a>
+        {/* ── Page Heading ── */}
+        <div>
+          <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: '#111827', margin: 0 }}>
+            Inventory Dashboard
+          </h1>
+          <p style={{ marginTop: '4px', color: '#6b7280', fontSize: '0.875rem' }}>
+            Live overview of your connected Shopify stores
+          </p>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="bg-gray-50 border-b border-gray-100">
-                {RECENT_COLUMNS.map((col) => (
-                  <th key={col} className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                    {col}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td colSpan={RECENT_COLUMNS.length} className="px-6 py-16 text-center">
-                  <div className="flex flex-col items-center gap-3">
-                    <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center">
-                      <svg xmlns="http://www.w3.org/2000/svg" className="w-6 h-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                      </svg>
-                    </div>
-                    <p className="text-sm font-medium text-gray-500">No sync activity yet</p>
-                    <p className="text-xs text-gray-400">Connect your Shopify stores to start syncing inventory.</p>
-                    <a href="/settings" className="btn-primary mt-1">
-                      Connect a Store
-                    </a>
-                  </div>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
+        {/* ── Statistics Cards ── */}
+        <DashboardCards stats={stats} />
 
+        {/* ── Charts ── */}
+        <DashboardCharts chartData={chartData} />
+
+        {/* ── Store Summary ── */}
+        <Layout>
+          <Layout.Section>
+            <Table
+              title="📊 Store Summary"
+              headerColor="#4338ca"
+              columns={storeSummaryColumns}
+              items={storeSummaryData}
+              searchable={false}
+              filterable={false}
+              paginate={false}
+              emptyState={
+                <div style={{ padding: '40px', textAlign: 'center', color: '#6b7280' }}>
+                  No store data available.
+                </div>
+              }
+            />
+          </Layout.Section>
+        </Layout>
+
+        {/* ── Store Sales Table ── */}
+        <Layout>
+          <Layout.Section>
+            <Table
+              title="💰 Store Sales & Sync Records"
+              headerColor="#059669"
+              columns={storeSalesColumns}
+              items={storeSalesData}
+              searchable={false}
+              filterable={false}
+              paginate={false}
+              emptyState={
+                <div style={{ padding: '40px', textAlign: 'center', color: '#6b7280' }}>
+                  No sales data available.
+                </div>
+              }
+            />
+          </Layout.Section>
+        </Layout>
+
+        {/* ── Low Stock Products ── */}
+        <Layout>
+          <Layout.Section>
+            <Table
+              title="⚠️ Low Stock Products"
+              headerColor="#ea580c"
+              columns={lowStockColumns}
+              items={lowStockProducts}
+              searchable
+              searchKey="title"
+              filterable
+              filterKey="stockLevel"
+              filterOptions={[
+                { label: 'All',      value: 'ALL'      },
+                { label: 'Critical', value: 'Critical' },
+                { label: 'Low',      value: 'Low'      },
+              ]}
+              emptyState={
+                <div style={{ padding: '40px', textAlign: 'center', color: '#16a34a' }}>
+                  ✅ All inventory levels are healthy.
+                </div>
+              }
+            />
+          </Layout.Section>
+        </Layout>
+
+        {/* ── Recently Added Products ── */}
+        <Layout>
+          <Layout.Section>
+            <Table
+              title="🆕 Recently Added Products"
+              headerColor="#0891b2"
+              columns={recentlyAddedColumns}
+              items={recentlyAddedProducts}
+              searchable
+              searchKey="title"
+              filterable={false}
+              emptyState={
+                <div style={{ padding: '40px', textAlign: 'center', color: '#6b7280' }}>
+                  No recently added products.
+                </div>
+              }
+            />
+          </Layout.Section>
+        </Layout>
+
+      </BlockStack>
     </div>
-  )
+  );
 }
