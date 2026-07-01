@@ -1,37 +1,56 @@
-import { prisma } from "@/lib/db/prisma";
+import { prisma } from '@/lib/db/prisma';
+import { SyncLog } from '@prisma/client';
 
-export async function createSyncLog(data: {
+export type SyncStatus = 'SUCCESS' | 'FAILED' | 'PENDING';
+
+interface LogSyncParams {
   sku: string;
   sourceStoreId: string;
   destinationStoreId: string;
   previousQuantity: number;
   updatedQuantity: number;
-  status: "SUCCESS" | "FAILED";
+  status: SyncStatus;
   failureReason?: string;
+  triggerType?: string;
   webhookEventId?: string;
-}) {
+}
+
+export async function createSyncLog(params: LogSyncParams): Promise<SyncLog> {
   try {
-    return await prisma.syncLog.create({
+    const log = await prisma.syncLog.create({
       data: {
-        ...data,
-        triggerType: "WEBHOOK",
+        sku: params.sku,
+        sourceStoreId: params.sourceStoreId,
+        destinationStoreId: params.destinationStoreId,
+        previousQuantity: params.previousQuantity,
+        updatedQuantity: params.updatedQuantity,
+        status: params.status,
+        failureReason: params.failureReason,
+        triggerType: params.triggerType || 'WEBHOOK',
+        webhookEventId: params.webhookEventId,
       },
     });
+    return log;
   } catch (error) {
-    console.error("Failed to create SyncLog:", error);
-    // Don't throw, we don't want to fail the actual sync process if logging fails
-    return null;
+    console.error('Error creating sync log:', error);
+    throw error;
   }
 }
 
-export async function updateSyncLog(id: string, data: { status: "SUCCESS" | "FAILED"; failureReason?: string }) {
+export async function getSyncLogs(limit: number = 50, skip: number = 0) {
   try {
-    return await prisma.syncLog.update({
-      where: { id },
-      data,
+    const logs = await prisma.syncLog.findMany({
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+      skip,
+      include: {
+        sourceStore: { select: { shopDomain: true, label: true } },
+        destinationStore: { select: { shopDomain: true, label: true } },
+      }
     });
+    return logs;
   } catch (error) {
-    console.error(`Failed to update SyncLog ${id}:`, error);
-    return null;
+    console.error('Error fetching sync logs:', error);
+    throw error;
   }
 }
