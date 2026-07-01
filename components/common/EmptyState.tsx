@@ -2,9 +2,7 @@
 import React from 'react';
 import { EmptyState as PolarisEmptyState } from '@shopify/polaris';
 
-export interface EmptyStateProps {
-  [key: string]: any;
-}
+export type EmptyStateProps = React.ComponentProps<typeof PolarisEmptyState>;
 
 export function EmptyState(props: EmptyStateProps) {
   return (

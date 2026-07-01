@@ -1,26 +1,50 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { AppProvider } from "@shopify/polaris";
 import { Provider as AppBridgeProvider } from "@shopify/app-bridge-react";
+import '@shopify/polaris/build/esm/styles.css';
 
 export default function ShopifyProvider({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const [host, setHost] = useState<string | null>(null);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+    const urlParams = new URLSearchParams(window.location.search);
+    const hostParam = urlParams.get("host");
+    if (hostParam) {
+      setHost(hostParam);
+    }
+  }, []);
+
+  const polarisProvider = (
+    <AppProvider i18n={{}}>
+      {children}
+    </AppProvider>
+  );
+
+  if (!mounted) {
+    return polarisProvider; // default server render without AppBridge
+  }
+
+  if (!host) {
+    return polarisProvider; // not in shopify admin
+  }
+
   return (
     <AppBridgeProvider
       config={{
-
-
-        apiKey: process.env.NEXT_PUBLIC_SHOPIFY_API_KEY!,
-        host: "",
+        apiKey: process.env.NEXT_PUBLIC_SHOPIFY_API_KEY || "",
+        host: host,
         forceRedirect: true,
       }}
     >
-      <AppProvider i18n={{}}>
-        {children}
-      </AppProvider>
+      {polarisProvider}
     </AppBridgeProvider>
   );
 }

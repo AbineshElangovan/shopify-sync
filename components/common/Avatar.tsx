@@ -2,9 +2,7 @@
 import React from 'react';
 import { Avatar as PolarisAvatar } from '@shopify/polaris';
 
-export interface AvatarProps {
-  [key: string]: any;
-}
+export type AvatarProps = React.ComponentProps<typeof PolarisAvatar>;
 
 export function Avatar(props: AvatarProps) {
   return (

@@ -1,46 +1,59 @@
 import { NextResponse } from 'next/server';
-import { processInventoryUpdate } from '@/lib/shopify/sync-service';
-import crypto from 'crypto';
+import { prisma } from '@/lib/db/prisma';
+import { Prisma } from '@prisma/client';
 
-export async function POST(req: Request) {
+export async function GET(req: Request) {
   try {
-    const shopDomain = req.headers.get('x-shopify-shop-domain');
-    const topic = req.headers.get('x-shopify-topic');
-    const webhookId = req.headers.get('x-shopify-webhook-id');
+    const { searchParams } = new URL(req.url);
+    const page = parseInt(searchParams.get('page') || '1', 10);
+    const limit = parseInt(searchParams.get('limit') || '10', 10);
+    const status = searchParams.get('status');
+    const search = searchParams.get('search');
 
-    if (!shopDomain || !topic) {
-      return new NextResponse('Missing required headers', { status: 400 });
+    const skip = (page - 1) * limit;
+
+    const where: Prisma.SyncLogWhereInput = {};
+    if (status && status !== 'ALL') {
+      where.status = status;
+    }
+    if (search) {
+      where.sku = { contains: search, mode: 'insensitive' };
     }
 
-    if (topic !== 'inventory_levels/update') {
-      return new NextResponse('Ignored topic', { status: 200 });
-    }
+    const [logs, total, totalStats, successStats, failedStats] = await Promise.all([
+      prisma.syncLog.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit,
+        include: {
+          sourceStore: { select: { shopDomain: true, label: true } },
+          destinationStore: { select: { shopDomain: true, label: true } },
+        }
+      }),
+      prisma.syncLog.count({ where }),
+      prisma.syncLog.count(),
+      prisma.syncLog.count({ where: { status: 'SUCCESS' } }),
+      prisma.syncLog.count({ where: { status: 'FAILED' } }),
+    ]);
 
-    // Since we are not strictly validating the HMAC right here for simplicity, 
-    // typically you'd read the raw body and validate it against the Shopify client secret.
-    const body = await req.json();
+    return NextResponse.json({
+      logs,
+      pagination: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      },
+      stats: {
+        total: totalStats,
+        success: successStats,
+        failed: failedStats,
+      }
+    });
 
-    const { inventory_item_id, location_id, available } = body;
-
-    if (!inventory_item_id || !location_id || typeof available !== 'number') {
-      return new NextResponse('Invalid payload', { status: 400 });
-    }
-
-    // Start background processing so we return 200 immediately to Shopify
-    // Next.js (App Router) on Vercel will likely kill the process if we just fire-and-forget
-    // but assuming standard node environment or 'waitUntil' using Next.js specific extensions.
-    // We will await it here for safety, though it could delay the webhook response.
-    await processInventoryUpdate(
-      shopDomain,
-      inventory_item_id.toString(),
-      location_id.toString(),
-      available,
-      webhookId || undefined
-    );
-
-    return new NextResponse('Webhook processed', { status: 200 });
   } catch (error: any) {
-    console.error('Error processing webhook:', error);
+    console.error('Failed to fetch sync logs:', error);
     return new NextResponse(`Error: ${error.message}`, { status: 500 });
   }
 }

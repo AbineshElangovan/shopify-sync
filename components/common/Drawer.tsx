@@ -2,9 +2,7 @@
 import React from 'react';
 import { Frame as PolarisFrame } from '@shopify/polaris';
 
-export interface DrawerProps {
-  [key: string]: any;
-}
+export type DrawerProps = React.ComponentProps<typeof PolarisFrame>;
 
 export function Drawer(props: DrawerProps) {
   return (

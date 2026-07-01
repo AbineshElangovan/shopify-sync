@@ -2,9 +2,7 @@
 import React from 'react';
 import { Filters as PolarisFilters } from '@shopify/polaris';
 
-export interface FilterProps {
-  [key: string]: any;
-}
+export type FilterProps = React.ComponentProps<typeof PolarisFilters>;
 
 export function Filter(props: FilterProps) {
   return (

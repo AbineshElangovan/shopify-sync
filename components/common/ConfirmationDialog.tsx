@@ -2,9 +2,7 @@
 import React from 'react';
 import { Modal as PolarisModal } from '@shopify/polaris';
 
-export interface ConfirmationDialogProps {
-  [key: string]: any;
-}
+export type ConfirmationDialogProps = React.ComponentProps<typeof PolarisModal>;
 
 export function ConfirmationDialog(props: ConfirmationDialogProps) {
   return (

@@ -49,7 +49,7 @@ export async function GET(req: NextRequest) {
     
     // Pass along any headers returned by the SDK (like Set-Cookie)
     if (headers) {
-      headers.forEach((value, key) => {
+      headers.forEach((value: string, key: string) => {
         response.headers.set(key, value);
       });
     }

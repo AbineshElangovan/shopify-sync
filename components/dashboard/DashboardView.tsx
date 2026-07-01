@@ -3,8 +3,8 @@
 import { Page, Grid, BlockStack, Button, IndexTable, Badge, ProgressBar, Text } from '@shopify/polaris'
 import type { IndexTableProps } from '@shopify/polaris'
 import { RefreshIcon, ProductIcon, ChartVerticalIcon, AlertTriangleIcon, CheckCircleIcon } from '@shopify/polaris-icons'
-import ReusableTable from '@/components/ui/table'
-import StatCard from '@/components/ui/StatCard'
+import { Table as ReusableTable } from '@/components/common/Table'
+import { Card as StatCard } from '@/components/common/Card'
 
 type Headings = IndexTableProps['headings']
 
@@ -76,9 +76,17 @@ export default function DashboardView() {
 
         {/* Stat Cards */}
         <Grid>
-          {STATS.map(({ label, value, bg, icon }) => (
+          {STATS.map(({ label, value, bg, icon: Icon }) => (
             <Grid.Cell key={label} columnSpan={{ xs: 6, sm: 3, md: 3, lg: 3, xl: 3 }}>
-              <StatCard label={label} value={value} bg={bg} icon={icon} />
+              <StatCard>
+                <div style={{ padding: '16px', display: 'flex', alignItems: 'center', gap: '16px' }}>
+                  <Icon />
+                  <div>
+                    <h3 style={{ fontSize: '14px', margin: 0, fontWeight: 'normal' }}>{label}</h3>
+                    <p style={{ fontSize: '24px', margin: 0, fontWeight: 'bold' }}>{value}</p>
+                  </div>
+                </div>
+              </StatCard>
             </Grid.Cell>
           ))}
         </Grid>

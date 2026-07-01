@@ -2,9 +2,7 @@
 import React from 'react';
 import { RadioButton as PolarisRadioButton } from '@shopify/polaris';
 
-export interface RadioProps {
-  [key: string]: any;
-}
+export type RadioProps = React.ComponentProps<typeof PolarisRadioButton>;
 
 export function Radio(props: RadioProps) {
   return (

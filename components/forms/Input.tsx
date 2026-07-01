@@ -2,9 +2,7 @@
 import React from 'react';
 import { TextField as PolarisTextField } from '@shopify/polaris';
 
-export interface InputProps {
-  [key: string]: any;
-}
+export type InputProps = React.ComponentProps<typeof PolarisTextField>;
 
 export function Input(props: InputProps) {
   return (

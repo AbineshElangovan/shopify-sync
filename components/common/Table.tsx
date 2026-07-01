@@ -2,9 +2,7 @@
 import React from 'react';
 import { IndexTable as PolarisIndexTable } from '@shopify/polaris';
 
-export interface TableProps {
-  [key: string]: any;
-}
+export type TableProps = React.ComponentProps<typeof PolarisIndexTable>;
 
 export function Table(props: TableProps) {
   return (

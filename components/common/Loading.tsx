@@ -2,9 +2,7 @@
 import React from 'react';
 import { ProgressBar as PolarisProgressBar } from '@shopify/polaris';
 
-export interface LoadingProps {
-  [key: string]: any;
-}
+export type LoadingProps = React.ComponentProps<typeof PolarisProgressBar>;
 
 export function Loading(props: LoadingProps) {
   return (

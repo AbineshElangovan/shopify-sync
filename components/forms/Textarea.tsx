@@ -2,9 +2,7 @@
 import React from 'react';
 import { TextField as PolarisTextField } from '@shopify/polaris';
 
-export interface TextareaProps {
-  [key: string]: any;
-}
+export type TextareaProps = React.ComponentProps<typeof PolarisTextField>;
 
 export function Textarea(props: TextareaProps) {
   return (

@@ -2,9 +2,7 @@
 import React from 'react';
 import { Toast as PolarisToast } from '@shopify/polaris';
 
-export interface ToastProps {
-  [key: string]: any;
-}
+export type ToastProps = React.ComponentProps<typeof PolarisToast>;
 
 export function Toast(props: ToastProps) {
   return (
