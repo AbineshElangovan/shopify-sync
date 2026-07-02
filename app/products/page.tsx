@@ -1,12 +1,26 @@
 import { prisma } from '@/lib/db/prisma';
 import { Table, ColumnConfig } from '@/components/common/Table';
 import { BlockStack } from '@shopify/polaris';
+import { cleanupSeededData, hasValidShopifyAccessToken, syncStoreProducts } from '@/lib/shopify/sync-service';
 
 export const dynamic = 'force-dynamic';
 
 export default async function ProductsPage() {
+  await cleanupSeededData();
+
+  const activeStores = await prisma.store.findMany({ where: { isActive: true } });
+  const validStores = activeStores.filter((store) => hasValidShopifyAccessToken(store.accessToken));
+
+  await Promise.allSettled(
+    validStores.map((store) => syncStoreProducts(store.shopDomain))
+  );
+
+  const validStoreIds = validStores.map((store) => store.id);
+  const productCacheWhere = validStoreIds.length > 0 ? { storeId: { in: validStoreIds } } : { id: { in: [] } };
+
   // Fetch all products with store info
   const products = await prisma.productCache.findMany({
+    where: productCacheWhere,
     orderBy: { updatedAt: 'desc' },
     include: { store: true },
   });
@@ -110,7 +124,7 @@ export default async function ProductsPage() {
 
         {/* ── Products Table ── */}
         <Table
-          title="🛍️ All Products"
+          title="All Products"
           headerColor="#6366f1"
           columns={columns}
           items={tableItems}

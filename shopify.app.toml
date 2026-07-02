@@ -1,16 +1,18 @@
 # Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
 
-client_id = "8760e720738a05de86eaf0caab94c206"
-name = "ESHAN Inventory Sync"
-application_url = "https://snowboard-sequence-justin-sounds.trycloudflare.com"
+client_id = "f82dbdee74418429d3510c35ca99aae3"
+name = "ESHAN Chennai Store"
+application_url = "https://dz50mdfc-3000.inc1.devtunnels.ms"
 embedded = true
 
 [webhooks]
-api_version = "2026-07"
+api_version = "2026-10"
 
 [access_scopes]
-# Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
 scopes = "read_inventory,read_products,write_inventory,write_products"
 
 [auth]
-redirect_urls = ["https://snowboard-sequence-justin-sounds.trycloudflare.com/api/auth/callback"]
+redirect_urls = ["https://dz50mdfc-3000.inc1.devtunnels.ms/api/auth/callback"]
+
+[build]
+automatically_update_urls_on_dev = true
