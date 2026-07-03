@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db/prisma';
-import { syncStoreProducts, hasValidShopifyAccessToken } from '@/lib/shopify/sync-service';
+import { syncStoreProducts, hasValidShopifyAccessToken } from '@/services/shopify';
 
 /**
  * POST /api/sync-products

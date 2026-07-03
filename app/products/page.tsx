@@ -1,11 +1,17 @@
 import { prisma } from '@/lib/db/prisma';
 import { Table, ColumnConfig } from '@/components/common/Table';
 import { BlockStack } from '@shopify/polaris';
-import { cleanupSeededData, hasValidShopifyAccessToken, syncStoreProducts } from '@/lib/shopify/sync-service';
+import { cleanupSeededData, hasValidShopifyAccessToken, syncStoreProducts, verifyStoreInstallation } from '@/services/shopify';
 
 export const dynamic = 'force-dynamic';
 
-export default async function ProductsPage() {
+export default async function ProductsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ shop?: string; host?: string }>;
+}) {
+  const params = await searchParams;
+  await verifyStoreInstallation(params.shop, params.host);
   await cleanupSeededData();
 
   const activeStores = await prisma.store.findMany({ where: { isActive: true } });

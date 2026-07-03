@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { fetchShopInfo, fetchProducts } from "@/lib/shopify/admin";
+import { fetchShopInfo, fetchProducts } from "@/services/shopify";
 
 export async function GET(req: NextRequest) {
   const shop = req.nextUrl.searchParams.get("shop");

@@ -3,17 +3,10 @@ import { BlockStack, Layout } from '@shopify/polaris';
 import { DashboardCards } from '@/components/dashboard/DashboardCards';
 import { DashboardCharts } from '@/components/dashboard/DashboardCharts';
 import { Table, ColumnConfig } from '@/components/common/Table';
-import { verifyStoreInstallation } from '@/services/shopify';
 
 export const dynamic = 'force-dynamic';
 
-export default async function DashboardPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ shop?: string; host?: string }>;
-}) {
-  const params = await searchParams;
-  await verifyStoreInstallation(params.shop, params.host);
+export default async function DashboardPage() {
 
 
   const totalProducts = await prisma.productCache.count();

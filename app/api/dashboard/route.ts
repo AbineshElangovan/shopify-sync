@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db/prisma';
-import { hasValidShopifyAccessToken } from '@/lib/shopify/sync-service';
+import { hasValidShopifyAccessToken } from '@/services/shopify';
 
 /**
  * GET /api/dashboard

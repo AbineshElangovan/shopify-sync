@@ -1,11 +1,17 @@
 import { prisma } from '@/lib/db/prisma';
 import { Card, Table, Badge } from '@/components/common';
 import { BlockStack, Layout } from '@shopify/polaris';
-import { hasValidShopifyAccessToken } from '@/lib/shopify/sync-service';
+import { hasValidShopifyAccessToken, verifyStoreInstallation } from '@/services/shopify';
 
 export const dynamic = 'force-dynamic';
 
-export default async function SettingsPage() {
+export default async function SettingsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ shop?: string; host?: string }>;
+}) {
+  const params = await searchParams;
+  await verifyStoreInstallation(params.shop, params.host);
   const stores = await prisma.store.findMany();
 
   const formattedStores = stores.map((s) => ({

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyWebhook } from '@/lib/shopify/webhooks';
 import { prisma } from '@/lib/db/prisma';
-import { processInventoryUpdate } from '@/lib/shopify/sync-service';
+import { processInventoryUpdate } from '@/services/shopify';
 
 export async function POST(req: NextRequest) {
   try {
