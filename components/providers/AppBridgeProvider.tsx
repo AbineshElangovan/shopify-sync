@@ -2,8 +2,18 @@
 
 import { useEffect, useState } from "react";
 import { AppProvider } from "@shopify/polaris";
-import { Provider as AppBridgeProvider } from "@shopify/app-bridge-react";
+import { Provider as AppBridgeProvider, useAppBridge } from "@shopify/app-bridge-react";
 import '@shopify/polaris/build/esm/styles.css';
+
+function AppBridgeTracker() {
+  const app = useAppBridge();
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      (window as any).shopifyApp = app;
+    }
+  }, [app]);
+  return null;
+}
 
 export default function ShopifyProvider({
   children,
@@ -44,6 +54,7 @@ export default function ShopifyProvider({
         forceRedirect: true,
       }}
     >
+      <AppBridgeTracker />
       {polarisProvider}
     </AppBridgeProvider>
   );

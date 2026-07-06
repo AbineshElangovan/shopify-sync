@@ -2,11 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db/prisma';
 import { syncStoreProducts, hasValidShopifyAccessToken } from '@/services/shopify';
 
-/**
- * POST /api/sync-products
- * Manually triggers product sync for all active stores (or a specific shop).
- * This is called by the "Sync Now" button on the dashboard.
- */
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => ({}));
@@ -44,10 +40,7 @@ export async function POST(req: NextRequest) {
   }
 }
 
-/**
- * GET /api/sync-products
- * Returns the current product cache count per store (useful for status checks).
- */
+
 export async function GET() {
   try {
     const stores = await prisma.store.findMany({

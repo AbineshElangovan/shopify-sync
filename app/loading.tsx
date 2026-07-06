@@ -1,4 +1,5 @@
-import { PageLoader } from '@/components/common/PageLoader';
+import { PageLoader } from '@/components/common';
+
 export default function Loading() {
-  return <PageLoader rows={6} cols={7} />;
+  return <PageLoader showStats showCharts showTable />;
 }

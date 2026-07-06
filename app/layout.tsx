@@ -4,7 +4,9 @@ import Image from 'next/image';
 import Link from 'next/link';
 import './globals.css';
 import ShopifyProvider from '@/components/providers/AppBridgeProvider';
+import { Suspense } from 'react';
 import NavBar from './NavBar';
+import Script from 'next/script';
 
 const inter = Inter({ subsets: ['latin'] });
 
@@ -22,14 +24,18 @@ const FOOTER_LINKS = [
 
 const BUSINESS_HOURS = [
   { day: 'Monday — Friday', hours: '10:00 AM – 6:00 PM', closed: false },
-  { day: 'Saturday',        hours: '12:00 PM – 6:00 PM', closed: false },
-  { day: 'Sunday',          hours: 'Holiday',             closed: true  },
+  { day: 'Saturday', hours: '12:00 PM – 6:00 PM', closed: false },
+  { day: 'Sunday', hours: 'Holiday', closed: true },
 ];
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
       <body className={inter.className}>
+        <Script
+          src="https://cdn.shopify.com/shopify-app-bridge/actions/app-bridge.js"
+          strategy="beforeInteractive"
+        />
         <main className="min-h-screen bg-gray-50">
           <ShopifyProvider>
 
@@ -39,24 +45,25 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               className="sticky top-0 z-50 shadow-lg"
             >
               <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                <div className="flex items-center justify-between h-16">
+                <div className="flex items-center justify-between py-3">
 
-                  {/* Logo & Branding */}
                   <Link href="/" className="flex items-center gap-3 shrink-0">
                     <Image
                       src="/logo.png"
                       alt="InventorySync logo"
-                      width={40}
-                      height={40}
+                      width={75}
+                      height={75}
                       className="rounded-lg"
+                      style={{ width: '75px', height: '75px' }}
                     />
                     <span className="text-lg font-semibold text-white tracking-wide">
                       ESHAN InventorySync
                     </span>
                   </Link>
 
-                  {/* Nav links — active state handled client-side */}
-                  <NavBar />
+                  <Suspense fallback={<div className="text-gray-400 text-sm">Loading navigation...</div>}>
+                    <NavBar />
+                  </Suspense>
 
                 </div>
               </div>
@@ -75,7 +82,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                   {/* Branding */}
                   <div className="flex flex-col gap-4">
                     <div className="flex items-center gap-3">
-                      <Image src="/logo.png" alt="InventorySync logo" width={36} height={36} className="rounded-lg" />
+                      <Image src="/logo.png" alt="InventorySync logo" width={75} height={75} className="rounded-lg" style={{ width: '75px', height: '75px' }} />
                       <span className="text-white text-lg font-semibold">ESHAN InventorySync</span>
                     </div>
                     <p className="text-sm text-gray-400 leading-relaxed">

@@ -5,6 +5,7 @@ import { registerWebhooks } from "@/lib/shopify/webhooks";
 import { createSyncLog } from "@/lib/shopify/sync-log";
 import { NextRequest, NextResponse } from "next/server";
 import { redirect } from "next/navigation";
+import { ShopifyGraphQLClient } from "@/lib/shopify/GraphQLClient";
 
 /**
  * Validates if a Shopify access token is valid and not a placeholder/mock.
@@ -87,11 +88,20 @@ export async function beginAuth(shop: string, rawRequest: NextRequest) {
     throw new Error("Invalid shop domain");
   }
 
+  // Construct secure Request using the configured shopify hostName
+  const hostName = shopify.config.hostName;
+  const secureUrl = `https://${hostName}${rawRequest.nextUrl.pathname}${rawRequest.nextUrl.search}`;
+  console.log("[OAuth] beginAuth creating secure cleanRequest:", { secureUrl, hostName });
+  const cleanRequest = new Request(secureUrl, {
+    method: rawRequest.method,
+    headers: rawRequest.headers,
+  });
+
   return await shopify.auth.begin({
     shop: sanitizedShop,
     callbackPath: "/api/auth/callback",
     isOnline: false,
-    rawRequest: rawRequest,
+    rawRequest: cleanRequest,
   });
 }
 
@@ -101,8 +111,17 @@ export async function beginAuth(shop: string, rawRequest: NextRequest) {
 export async function handleAuthCallback(req: NextRequest) {
   console.log("[OAuth] callback start in Service", { shop: req.nextUrl.searchParams.get("shop") });
 
+  // Construct secure Request using the configured shopify hostName
+  const hostName = shopify.config.hostName;
+  const secureUrl = `https://${hostName}${req.nextUrl.pathname}${req.nextUrl.search}`;
+  console.log("[OAuth] handleAuthCallback creating secure cleanRequest:", { secureUrl });
+  const cleanRequest = new Request(secureUrl, {
+    method: req.method,
+    headers: req.headers,
+  });
+
   const callbackResponse = await shopify.auth.callback({
-    rawRequest: req,
+    rawRequest: cleanRequest,
   });
 
   const { session, headers } = callbackResponse;
@@ -192,15 +211,28 @@ export async function handleAuthCallback(req: NextRequest) {
 
   // Get embedded app URL to redirect the user
   const redirectUrl = await shopify.auth.getEmbeddedAppUrl({
-    rawRequest: req,
+    rawRequest: cleanRequest,
   });
 
   const response = NextResponse.redirect(redirectUrl);
 
   if (headers) {
-    headers.forEach((value: string, key: string) => {
-      response.headers.set(key, value);
-    });
+    if (typeof headers.getSetCookie === "function") {
+      const setCookies = headers.getSetCookie();
+      console.log("[OAuth] handleAuthCallback copying individual cookies:", setCookies);
+      setCookies.forEach((cookieStr: string) => {
+        response.headers.append("Set-Cookie", cookieStr);
+      });
+    } else {
+      headers.forEach((value: string, key: string) => {
+        if (key.toLowerCase() === "set-cookie") {
+          console.log("[OAuth] handleAuthCallback copying cookie (fallback):", value);
+          response.headers.append(key, value);
+        } else {
+          response.headers.set(key, value);
+        }
+      });
+    }
   }
 
   return response;
@@ -732,4 +764,199 @@ export async function verifyStoreInstallation(shop: string | null | undefined, h
     console.log(`[AuthVerify] Store ${normalizedShop} not connected. Redirecting to OAuth.`);
     redirect(`/api/auth?shop=${normalizedShop}&host=${host || ""}&embedded=1`);
   }
+}
+
+/**
+ * Synchronizes Store A data (Milestone 1)
+ * Fetches shop details, products, product variants, and inventory levels.
+ * Stores in PostgreSQL using Prisma upsert.
+ */
+export async function syncStoreA(shopDomain: string) {
+  const normalizedShop = shopDomain.trim().toLowerCase();
+  console.log(`[SyncStoreA] Starting sync for ${normalizedShop}`);
+
+  // 1. Initialize our reusable ShopifyGraphQLClient
+  const client = new ShopifyGraphQLClient(normalizedShop);
+
+  // 2. Fetch Shop details
+  const shopQuery = `
+    query {
+      shop {
+        id
+        name
+        email
+        myshopifyDomain
+      }
+    }
+  `;
+  const shopResult = await client.request<{ data: { shop: any } }>(shopQuery);
+  const shopInfo = shopResult.data?.shop;
+
+  if (!shopInfo) {
+    throw new Error("Could not fetch shop information from Shopify API");
+  }
+
+  console.log(`[SyncStoreA] Fetched shop name: ${shopInfo.name}`);
+
+  // 3. Upsert the Store details in the database to ensure it's up to date
+  const store = await prisma.store.upsert({
+    where: { shopDomain: normalizedShop },
+    update: {
+      label: shopInfo.name,
+      isActive: true,
+    },
+    create: {
+      shopDomain: normalizedShop,
+      accessToken: "", // Assumes it already exists or was set via OAuth callback
+      scope: "",
+      label: shopInfo.name,
+      isActive: true,
+    },
+  });
+
+  // 4. Fetch Products, Variants, and Inventory Levels
+  const productsQuery = `
+    query getProducts($first: Int!) {
+      products(first: $first) {
+        edges {
+          node {
+            id
+            title
+            handle
+            featuredImage {
+              url
+            }
+            variants(first: 50) {
+              edges {
+                node {
+                  id
+                  title
+                  sku
+                  price
+                  inventoryItem {
+                    id
+                    inventoryLevels(first: 10) {
+                      edges {
+                        node {
+                          available
+                          location {
+                            id
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  `;
+
+  // Fetch a reasonable batch of products for Milestone 1 (e.g. 50 products)
+  const productsResult = await client.request<{ data: { products: { edges: any[] } } }>(
+    productsQuery,
+    { first: 50 }
+  );
+
+  const productEdges = productsResult.data?.products?.edges ?? [];
+  console.log(`[SyncStoreA] Fetched ${productEdges.length} products`);
+
+  let syncedProductsCount = 0;
+  let syncedVariantsCount = 0;
+  let totalInventoryCount = 0;
+
+  for (const productEdge of productEdges) {
+    const product = productEdge.node;
+    syncedProductsCount++;
+
+    const variants = product.variants?.edges ?? [];
+    for (const variantEdge of variants) {
+      const variant = variantEdge.node;
+      syncedVariantsCount++;
+
+      const inventoryItemId = variant.inventoryItem?.id ?? "";
+      const levels = variant.inventoryItem?.inventoryLevels?.edges ?? [];
+      
+      // Calculate total available inventory quantity across all locations
+      const variantInventoryQuantity = levels.reduce(
+        (sum: number, levelEdge: any) => sum + (Number(levelEdge.node?.available) || 0),
+        0
+      );
+      totalInventoryCount += variantInventoryQuantity;
+
+      const locationId = levels[0]?.node?.location?.id || null;
+      const sku = variant.sku?.trim() || null;
+      const imageUrl = product.featuredImage?.url || null;
+
+      const variantSuffix = variant.title && variant.title !== "Default Title" ? ` - ${variant.title}` : "";
+      const fullTitle = `${product.title}${variantSuffix}`;
+
+      // 5. Save the data to PostgreSQL using Prisma upsert operations
+      // Store in ProductCache
+      await prisma.productCache.upsert({
+        where: {
+          storeId_shopifyVariantId: {
+            storeId: store.id,
+            shopifyVariantId: variant.id,
+          },
+        },
+        update: {
+          sku,
+          title: fullTitle,
+          imageUrl,
+          inventoryQuantity: variantInventoryQuantity,
+          shopifyProductId: product.id,
+        },
+        create: {
+          storeId: store.id,
+          shopifyProductId: product.id,
+          shopifyVariantId: variant.id,
+          sku,
+          title: fullTitle,
+          imageUrl,
+          inventoryQuantity: variantInventoryQuantity,
+        },
+      });
+
+      // Store in VariantMap
+      await prisma.variantMap.upsert({
+        where: {
+          storeId_shopifyVariantId: {
+            storeId: store.id,
+            shopifyVariantId: variant.id,
+          },
+        },
+        update: {
+          sku: sku || "",
+          shopifyProductId: product.id,
+          inventoryItemId,
+          locationId,
+        },
+        create: {
+          storeId: store.id,
+          sku: sku || "",
+          shopifyProductId: product.id,
+          shopifyVariantId: variant.id,
+          inventoryItemId,
+          locationId,
+        },
+      });
+    }
+  }
+
+  console.log(`[SyncStoreA] Sync completed for ${normalizedShop}:`, {
+    products: syncedProductsCount,
+    variants: syncedVariantsCount,
+    inventory: totalInventoryCount,
+  });
+
+  return {
+    shop: normalizedShop,
+    products: syncedProductsCount,
+    variants: syncedVariantsCount,
+    inventory: totalInventoryCount,
+  };
 }

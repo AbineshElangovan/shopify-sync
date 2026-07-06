@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { Card, Table, Badge, SearchBar, Filter, Pagination, EmptyState } from '@/components/common';
 import { ChoiceList, IndexTable } from '@shopify/polaris';
+import { shopifyFetch } from '@/lib/shopify/Client';
 
 export default function SyncPage() {
   const [data, setData] = useState<any>(null);
@@ -30,7 +31,7 @@ export default function SyncPage() {
         status: statusFilter,
         ...(debouncedSearch && { search: debouncedSearch }),
       });
-      const res = await fetch(`/api/sync?${params.toString()}`);
+      const res = await shopifyFetch(`/api/sync?${params.toString()}`);
       if (res.ok) {
         const json = await res.json();
         setData(json);

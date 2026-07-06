@@ -39,7 +39,7 @@ export async function GET() {
   // Detect stale tunnel URL (Cloudflare tunnels are ephemeral)
   const appUrl = shopify.config.hostName ? `https://${shopify.config.hostName}` : '';
   checks['env.SHOPIFY_APP_URL.reachable'] = {
-    ok: appUrl.includes('trycloudflare.com') || appUrl.includes('ngrok') || appUrl.includes('spin.dev'),
+    ok: appUrl.includes('trycloudflare.com') || appUrl.includes('ngrok') || appUrl.includes('spin.dev') || appUrl.includes('devtunnels.ms'),
     detail: appUrl || 'not set',
   };
 
