@@ -69,7 +69,10 @@ export async function getInventoryItem(shopDomain: string, inventoryItemId: stri
             edges {
               node {
                 id
-                available
+                quantities(names: ["available"]) {
+                  name
+                  quantity
+                }
                 location {
                   id
                   name

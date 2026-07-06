@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { handleAuthCallback } from "@/services/shopify";
 
 export async function GET(req: NextRequest) {
+  console.log("[OAuthCallback] Incoming Callback URL:", req.url);
+  console.log("[OAuthCallback] Query Parameters:", Object.fromEntries(req.nextUrl.searchParams.entries()));
   console.log("[OAuth] callback route hit", {
     url: req.url,
     host: req.headers.get("host"),

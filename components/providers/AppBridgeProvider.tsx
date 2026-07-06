@@ -30,6 +30,13 @@ export default function ShopifyProvider({
     if (hostParam) {
       setHost(hostParam);
     }
+    
+    // Client-side diagnostic storage logging
+    if (typeof window !== "undefined") {
+      console.log("DIAG_COOKIES:", document.cookie);
+      console.log("DIAG_LOCALSTORAGE:", JSON.stringify(localStorage));
+      console.log("DIAG_SESSIONSTORAGE:", JSON.stringify(sessionStorage));
+    }
   }, []);
 
   const polarisProvider = (

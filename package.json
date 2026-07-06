@@ -10,7 +10,7 @@
     "check-db": "node scripts/check-db.js",
     "prisma:studio": "prisma studio",
     "prisma:migrate": "prisma migrate dev",
-    "postinstall": "prisma generate"
+    "prisma:generate": "prisma generate"
   },
   "dependencies": {
     "@prisma/client": "^6.19.0",

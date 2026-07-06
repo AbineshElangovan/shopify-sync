@@ -120,21 +120,47 @@ export async function handleAuthCallback(req: NextRequest) {
     headers: req.headers,
   });
 
+  console.log("[OAuthCallback] Validating auth callback...");
   const callbackResponse = await shopify.auth.callback({
     rawRequest: cleanRequest,
   });
+  console.log("[OAuthCallback] OAuth validation succeeded.");
 
   const { session, headers } = callbackResponse;
   const { shop, accessToken, scope } = session;
 
-  console.log("[OAuth] callback received session from Shopify", {
-    shop,
-    hasAccessToken: Boolean(accessToken),
-    scope,
+  const maskedToken = accessToken 
+    ? `${accessToken.substring(0, 10)}...${accessToken.substring(accessToken.length - 4)}` 
+    : "null";
+
+  console.log("[OAuthCallback] Complete Session Object received:", {
+    id: session.id,
+    shop: session.shop,
+    state: session.state,
+    isOnline: session.isOnline,
+    scope: session.scope,
+    expires: session.expires,
+    accessToken: maskedToken,
   });
 
   if (!accessToken) {
     throw new Error("No access token provided by Shopify");
+  }
+
+  console.log("[OAuthCallback] Attempting storeSession...");
+  await shopify.config.sessionStorage.storeSession(session);
+  console.log("[OAuthCallback] storeSession completed successfully.");
+
+  // Post-session database verification
+  try {
+    const dbSession = await prisma.session.findUnique({ where: { id: session.id } });
+    console.log("[DBVerification] Post-write Session check:", {
+      exists: Boolean(dbSession),
+      storedId: dbSession?.id,
+      storedShop: dbSession?.shop,
+    });
+  } catch (dbErr: any) {
+    console.error("[DBVerification] Error querying Session table post-write:", dbErr.message);
   }
 
   const normalizedShop = shop.trim().toLowerCase();
@@ -192,6 +218,23 @@ export async function handleAuthCallback(req: NextRequest) {
     isActive: storedShop.isActive
   });
 
+  // Post-store database verification
+  try {
+    const dbStore = await prisma.store.findUnique({ where: { shopDomain: normalizedShop } });
+    const storeMaskedToken = dbStore?.accessToken
+      ? `${dbStore.accessToken.substring(0, 10)}...${dbStore.accessToken.substring(dbStore.accessToken.length - 4)}`
+      : "null";
+    console.log("[DBVerification] Post-write Store check:", {
+      exists: Boolean(dbStore),
+      id: dbStore?.id,
+      shopDomain: dbStore?.shopDomain,
+      accessTokenSaved: Boolean(dbStore?.accessToken),
+      accessTokenMasked: storeMaskedToken,
+    });
+  } catch (dbErr: any) {
+    console.error("[DBVerification] Error querying Store table post-write:", dbErr.message);
+  }
+
   // Register Shopify webhooks
   try {
     await registerWebhooks(session);
@@ -242,13 +285,25 @@ export async function handleAuthCallback(req: NextRequest) {
  * Gets offline Shopify GraphQL client.
  */
 export async function getAdminClient(shopDomain: string) {
+  console.log("[AdminClient] Initializing getAdminClient for shop:", shopDomain);
   const store = await prisma.store.findUnique({
     where: { shopDomain },
+  });
+
+  console.log("[AdminClient] Store record query result:", {
+    found: Boolean(store),
+    isActive: store?.isActive,
+    hasAccessToken: Boolean(store?.accessToken),
   });
 
   if (!store || !store.isActive) {
     throw new Error(`Store ${shopDomain} is not active or not found.`);
   }
+
+  const maskedToken = store.accessToken
+    ? `${store.accessToken.substring(0, 10)}...${store.accessToken.substring(store.accessToken.length - 4)}`
+    : "null";
+  console.log("[AdminClient] Instantiating offline Session with token:", maskedToken);
 
   const session = new Session({
     id: `offline_${shopDomain}`,
@@ -258,7 +313,9 @@ export async function getAdminClient(shopDomain: string) {
     accessToken: store.accessToken,
   });
 
-  return new shopify.clients.Graphql({ session });
+  const client = new shopify.clients.Graphql({ session });
+  console.log("[AdminClient] GraphQL client initialized successfully.");
+  return client;
 }
 
 /**
@@ -317,7 +374,10 @@ export async function fetchInventoryLevels(shopDomain: string, inventoryItemId: 
             edges {
               node {
                 id
-                available
+                quantities(names: ["available"]) {
+                  name
+                  quantity
+                }
                 location {
                   id
                   name
@@ -488,7 +548,10 @@ export async function syncStoreProducts(shopDomain: string) {
                       inventoryLevels(first: 10) {
                         edges {
                           node {
-                            available
+                            quantities(names: ["available"]) {
+                              name
+                              quantity
+                            }
                             location {
                               id
                             }
@@ -518,6 +581,8 @@ export async function syncStoreProducts(shopDomain: string) {
     const productEdges = response?.data?.products?.edges ?? [];
     const pageInfo = response?.data?.products?.pageInfo;
 
+    console.log(`[SyncService] Fetched ${productEdges.length} products on page.`);
+
     for (const edge of productEdges) {
       const product = edge.node;
       productCount++;
@@ -528,7 +593,10 @@ export async function syncStoreProducts(shopDomain: string) {
         variantCount++;
         const inventoryItemId = variant.inventoryItem?.id ?? '';
         const inventoryQuantity = (variant.inventoryItem?.inventoryLevels?.edges ?? []).reduce(
-          (sum: number, levelEdge: any) => sum + (Number(levelEdge.node?.available) || 0),
+          (sum: number, levelEdge: any) => {
+            const qtyNode = levelEdge.node?.quantities?.find((q: any) => q.name === "available");
+            return sum + (qtyNode?.quantity ?? 0);
+          },
           0,
         );
         const locationId = variant.inventoryItem?.inventoryLevels?.edges?.[0]?.node?.location?.id || null;
@@ -540,6 +608,7 @@ export async function syncStoreProducts(shopDomain: string) {
 
         syncedVariantIds.push(variant.id);
 
+        console.log(`[SyncService] Upserting ProductCache for SKU: ${sku}, Variant ID: ${variant.id}, Qty: ${inventoryQuantity}`);
         // Perform clean atomic upserts to prevent duplicates while retaining existing database links/ids
         await prisma.productCache.upsert({
           where: {
@@ -566,6 +635,7 @@ export async function syncStoreProducts(shopDomain: string) {
           },
         });
 
+        console.log(`[SyncService] Upserting VariantMap for SKU: ${sku}, Inventory Item ID: ${inventoryItemId}`);
         await prisma.variantMap.upsert({
           where: {
             storeId_shopifyVariantId: {
@@ -838,7 +908,10 @@ export async function syncStoreA(shopDomain: string) {
                     inventoryLevels(first: 10) {
                       edges {
                         node {
-                          available
+                          quantities(names: ["available"]) {
+                            name
+                            quantity
+                          }
                           location {
                             id
                           }
@@ -882,7 +955,10 @@ export async function syncStoreA(shopDomain: string) {
       
       // Calculate total available inventory quantity across all locations
       const variantInventoryQuantity = levels.reduce(
-        (sum: number, levelEdge: any) => sum + (Number(levelEdge.node?.available) || 0),
+        (sum: number, levelEdge: any) => {
+          const qtyNode = levelEdge.node?.quantities?.find((q: any) => q.name === "available");
+          return sum + (qtyNode?.quantity ?? 0);
+        },
         0
       );
       totalInventoryCount += variantInventoryQuantity;

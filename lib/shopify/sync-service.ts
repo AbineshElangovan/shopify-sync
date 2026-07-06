@@ -141,7 +141,10 @@ export async function syncStoreProducts(shopDomain: string) {
                     inventoryLevels(first: 5) {
                       edges {
                         node {
-                          available
+                          quantities(names: ["available"]) {
+                            name
+                            quantity
+                          }
                         }
                       }
                     }
@@ -160,6 +163,7 @@ export async function syncStoreProducts(shopDomain: string) {
   `, { variables: { first: 250 } });
 
   const products = response?.data?.products?.edges ?? [];
+  console.log(`[SyncService] Fetched ${products.length} products to sync.`);
 
   await prisma.variantMap.deleteMany({ where: { storeId: store.id } });
   await prisma.productCache.deleteMany({ where: { storeId: store.id } });
@@ -172,10 +176,14 @@ export async function syncStoreProducts(shopDomain: string) {
       const variant = variantEdge.node;
       const inventoryItemId = variant.inventoryItem?.id ?? null;
       const inventoryQuantity = (variant.inventoryItem?.inventoryLevels?.edges ?? []).reduce(
-        (sum: number, levelEdge: any) => sum + (Number(levelEdge.node?.available) || 0),
+        (sum: number, levelEdge: any) => {
+          const qtyNode = levelEdge.node?.quantities?.find((q: any) => q.name === "available");
+          return sum + (qtyNode?.quantity ?? 0);
+        },
         0,
       );
 
+      console.log(`[SyncService] Creating ProductCache for SKU: ${variant.sku}, Variant ID: ${variant.id}, Qty: ${inventoryQuantity}`);
       await prisma.productCache.create({
         data: {
           storeId: store.id,
@@ -188,6 +196,7 @@ export async function syncStoreProducts(shopDomain: string) {
         },
       });
 
+      console.log(`[SyncService] Creating VariantMap for SKU: ${variant.sku}, Inventory Item ID: ${inventoryItemId}`);
       await prisma.variantMap.create({
         data: {
           storeId: store.id,

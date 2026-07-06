@@ -3,15 +3,26 @@ import { prisma } from "@/lib/db/prisma";
 import { Session, GraphqlQueryError } from "@shopify/shopify-api";
 
 export async function getAdminClient(shopDomain: string) {
+  console.log("[AdminClient] Initializing getAdminClient for shop:", shopDomain);
   const store = await prisma.store.findUnique({
     where: { shopDomain },
+  });
+
+  console.log("[AdminClient] Store record query result:", {
+    found: Boolean(store),
+    isActive: store?.isActive,
+    hasAccessToken: Boolean(store?.accessToken),
   });
 
   if (!store || !store.isActive) {
     throw new Error(`Store ${shopDomain} is not active or not found.`);
   }
 
-  
+  const maskedToken = store.accessToken
+    ? `${store.accessToken.substring(0, 10)}...${store.accessToken.substring(store.accessToken.length - 4)}`
+    : "null";
+  console.log("[AdminClient] Instantiating offline Session with token:", maskedToken);
+
   const session = new Session({
     id: `offline_${shopDomain}`,
     shop: shopDomain,
@@ -20,8 +31,8 @@ export async function getAdminClient(shopDomain: string) {
     accessToken: store.accessToken,
   });
 
-  
   const client = new shopify.clients.Graphql({ session });
+  console.log("[AdminClient] GraphQL client initialized successfully.");
   return client;
 }
 
@@ -148,7 +159,10 @@ export async function fetchInventoryLevels(shopDomain: string, inventoryItemId: 
             edges {
               node {
                 id
-                available
+                quantities(names: ["available"]) {
+                  name
+                  quantity
+                }
                 location {
                   id
                   name

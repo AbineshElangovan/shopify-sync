@@ -58,8 +58,17 @@ export async function GET(req: NextRequest) {
   }
 
   try {
+    console.log("[OAuthStart] Incoming request URL:", req.url);
+    console.log("[OAuthStart] Shop domain:", shop);
     console.log("[Install] Invoking beginAuth for shop:", shop);
     const response = await beginAuth(shop, req);
+    
+    const location = response.headers.get("location") || "";
+    const stateMatch = location.match(/state=([^&]+)/);
+    const state = stateMatch ? stateMatch[1] : "not found";
+    console.log("[OAuthStart] Generated OAuth state:", state);
+    console.log("[OAuthStart] Redirect URL:", location);
+    console.log("[OAuthStart] Set-Cookie headers:", response.headers.getSetCookie());
     console.log("[Install] auth.begin successful redirect", { status: response.status, headers: [...response.headers.entries()] });
     return response;
   } catch (error: any) {
