@@ -39,7 +39,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <main className="min-h-screen bg-gray-50">
           <ShopifyProvider>
 
-            {/* ── Header ── */}
+          
             <header
               style={{ backgroundColor: '#1a1f2e', borderBottom: '1px solid #2d3748' }}
               className="sticky top-0 z-50 shadow-lg"
@@ -51,10 +51,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                     <Image
                       src="/logo.png"
                       alt="InventorySync logo"
-                      width={75}
-                      height={75}
-                      className="rounded-lg"
-                      style={{ width: '75px', height: '75px' }}
+                      width={70}
+                      height={70}
+                      className="w-10 h-auto rounded-lg"
                     />
                     <span className="text-lg font-semibold text-white tracking-wide">
                       ESHAN InventorySync
@@ -71,15 +70,15 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 
             {children}
 
-            {/* ── Footer ── */}
+           
             <footer
               style={{ backgroundColor: '#1a1f2e', borderTop: '1px solid #2d3748' }}
               className="text-gray-300 mt-16"
             >
-              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+              <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-12">
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-10">
 
-                  {/* Branding */}
+              
                   <div className="flex flex-col gap-4">
                     <div className="flex items-center gap-3">
                       <Image src="/logo.png" alt="InventorySync logo" width={75} height={75} className="rounded-lg" style={{ width: '75px', height: '75px' }} />
@@ -90,21 +89,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                     </p>
                   </div>
 
-                  {/* Quick Links */}
-                  <div className="flex flex-col gap-4">
-                    <h3 className="text-white text-sm font-semibold uppercase tracking-wider">Quick Links</h3>
-                    <ul className="flex flex-col gap-2 text-sm">
-                      {FOOTER_LINKS.map(({ href, label }) => (
-                        <li key={href}>
-                          <Link href={href} className="text-gray-400 hover:text-white transition-colors">
-                            {label}
-                          </Link>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-
-                  {/* Contact Us */}
+            
                   <div className="flex flex-col gap-4">
                     <h3 className="text-white text-sm font-semibold uppercase tracking-wider">Contact Us</h3>
                     <ul className="flex flex-col gap-3 text-sm text-gray-400">
@@ -130,7 +115,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                     </ul>
                   </div>
 
-                  {/* Business Hours */}
+                 
                   <div className="flex flex-col gap-4">
                     <h3 className="text-white text-sm font-semibold uppercase tracking-wider">Business Hours</h3>
                     <ul className="flex flex-col gap-2 text-sm">
@@ -145,7 +130,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 
                 </div>
 
-                {/* Bottom bar */}
                 <div className="mt-10 pt-6 border-t border-gray-700 flex flex-col sm:flex-row items-center justify-between gap-4">
                   <p className="text-xs text-gray-500">
                     © {new Date().getFullYear()} ESHAN InventorySync. All rights reserved.
