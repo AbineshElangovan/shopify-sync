@@ -19,6 +19,7 @@ model Store {
 
   variantMaps  VariantMap[]
   productCaches ProductCache[]
+  collections   Collection[]
   sourceLogs   SyncLog[]    @relation("SourceStore")
   destLogs     SyncLog[]    @relation("DestinationStore")
 
@@ -75,6 +76,7 @@ model ProductCache {
   updatedAt         DateTime @updatedAt
 
   store             Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  collections       CollectionProduct[]
 
   @@unique([storeId, shopifyVariantId])
   @@index([sku])
@@ -111,4 +113,32 @@ model WebhookEvent {
 
   @@index([shopDomain, topic])
   @@map("webhook_events")
+}
+
+model Collection {
+  id                  String              @id @default(uuid())
+  storeId             String
+  shopifyCollectionId String
+  title               String
+  handle              String
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+
+  store               Store               @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  products            CollectionProduct[]
+
+  @@unique([storeId, shopifyCollectionId])
+  @@map("collections")
+}
+
+model CollectionProduct {
+  id             String       @id @default(uuid())
+  collectionId   String
+  productCacheId String
+
+  collection     Collection   @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  productCache   ProductCache @relation(fields: [productCacheId], references: [id], onDelete: Cascade)
+
+  @@unique([collectionId, productCacheId])
+  @@map("collection_products")
 }

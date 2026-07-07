@@ -5,14 +5,15 @@ name = "ESHAN Chennai Store"
 application_url = "https://dz50mdfc-3000.inc1.devtunnels.ms"
 embedded = true
 
+[build]
+automatically_update_urls_on_dev = true
+
 [webhooks]
 api_version = "2026-10"
 
 [access_scopes]
+# Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
 scopes = "read_inventory,read_products,write_inventory,write_products"
 
 [auth]
-redirect_urls = ["https://dz50mdfc-3000.inc1.devtunnels.ms/api/auth/callback"]
-
-[build]
-automatically_update_urls_on_dev = true
+redirect_urls = [ "https://dz50mdfc-3000.inc1.devtunnels.ms/api/auth/callback" ]

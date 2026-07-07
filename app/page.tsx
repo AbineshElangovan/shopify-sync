@@ -81,8 +81,8 @@ export default async function DashboardPage({
     sku: p.sku || 'N/A',
     inventoryQuantity: p.inventoryQuantity,
     stockLevel: p.inventoryQuantity <= 5 ? 'Critical' : 'Low',
-    updatedDate: p.updatedAt.toLocaleDateString(),
-    updatedTime: p.updatedAt.toLocaleTimeString(),
+    updatedDate: p.updatedAt.toLocaleDateString('en-US'),
+    updatedTime: p.updatedAt.toLocaleTimeString('en-US'),
   }));
 
   const lowStockColumns: ColumnConfig[] = [
@@ -109,8 +109,8 @@ export default async function DashboardPage({
     sku: p.sku || 'N/A',
     inventoryQuantity: p.inventoryQuantity,
     status: 'Active',
-    addedDate: p.updatedAt.toLocaleDateString(),
-    addedTime: p.updatedAt.toLocaleTimeString(),
+    addedDate: p.updatedAt.toLocaleDateString('en-US'),
+    addedTime: p.updatedAt.toLocaleTimeString('en-US'),
   }));
 
   const recentlyAddedColumns: ColumnConfig[] = [

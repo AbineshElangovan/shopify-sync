@@ -86,12 +86,7 @@ function StatCard({ label, description, value, lastUpdated, icon, gradient, icon
         </p>
       </div>
 
-      {/* Last updated */}
-      <div style={{ marginTop: 'auto', borderTop: '1px solid rgba(255,255,255,0.2)', paddingTop: '10px' }}>
-        <p style={{ fontSize: '0.72rem', opacity: 0.7, margin: 0 }}>
-          🕐 Updated {lastUpdated}
-        </p>
-      </div>
+    
     </div>
   );
 }
@@ -139,7 +134,7 @@ export function DashboardCards({ stats }: DashboardCardsProps) {
           <StatCard
             label={label}
             description={description}
-            value={stats[key].toLocaleString()}
+            value={stats[key].toLocaleString('en-US')}
             lastUpdated={stats.lastUpdated}
             icon={icon}
             gradient={gradient}

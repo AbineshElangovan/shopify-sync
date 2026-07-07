@@ -2,6 +2,7 @@ import { prisma } from '@/lib/db/prisma';
 import { Card, Table, Badge } from '@/components/common';
 import { BlockStack, Layout } from '@shopify/polaris';
 import { hasValidShopifyAccessToken, verifyStoreInstallation } from '@/services/shopify';
+import { ConnectStoreForm } from '@/components/settings/ConnectStoreForm';
 
 export const dynamic = 'force-dynamic';
 
@@ -38,30 +39,33 @@ export default async function SettingsPage({
         <Layout>
           {/* Store Connection Status Card */}
           <Layout.Section>
-            <Table
-              title="🔌 Connected Store Channels"
-              headerColor="#4338ca"
-              columns={[
-                { title: 'Store Label', key: 'label', type: 'bold' },
-                { title: 'Shopify Domain', key: 'domain' },
-                { title: 'Installed On', key: 'installedAt' },
-                {
-                  title: 'Connection State',
-                  key: 'status',
-                  type: 'status',
-                  badgeRules: { CONNECTED: 'success', DISCONNECTED: 'critical' },
-                },
-              ]}
-              items={formattedStores}
-              paginate={false}
-              searchable={false}
-              filterable={false}
-              emptyState={
-                <div style={{ padding: '40px', textAlign: 'center', color: '#6b7280' }}>
-                  No connected store records found. Visit the Partner Dashboard to register this app.
-                </div>
-              }
-            />
+            <BlockStack gap="500">
+              <Table
+                title="🔌 Connected Store Channels"
+                headerColor="#4338ca"
+                columns={[
+                  { title: 'Store Label', key: 'label', type: 'bold' },
+                  { title: 'Shopify Domain', key: 'domain' },
+                  { title: 'Installed On', key: 'installedAt' },
+                  {
+                    title: 'Connection State',
+                    key: 'status',
+                    type: 'status',
+                    badgeRules: { CONNECTED: 'success', DISCONNECTED: 'critical' },
+                  },
+                ]}
+                items={formattedStores}
+                paginate={false}
+                searchable={false}
+                filterable={false}
+                emptyState={
+                  <div style={{ padding: '40px', textAlign: 'center', color: '#6b7280' }}>
+                    No connected store records found. Visit the Partner Dashboard to register this app.
+                  </div>
+                }
+              />
+              <ConnectStoreForm />
+            </BlockStack>
           </Layout.Section>
 
           {/* Sync Preferences & Parameters */}

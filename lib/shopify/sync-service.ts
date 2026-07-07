@@ -165,8 +165,11 @@ export async function syncStoreProducts(shopDomain: string) {
   const products = response?.data?.products?.edges ?? [];
   console.log(`[SyncService] Fetched ${products.length} products to sync.`);
 
+  await prisma.collection.deleteMany({ where: { storeId: store.id } });
   await prisma.variantMap.deleteMany({ where: { storeId: store.id } });
   await prisma.productCache.deleteMany({ where: { storeId: store.id } });
+
+  const shopifyProductToCacheIds = new Map<string, string[]>();
 
   for (const edge of products) {
     const product = edge.node;
@@ -184,7 +187,7 @@ export async function syncStoreProducts(shopDomain: string) {
       );
 
       console.log(`[SyncService] Creating ProductCache for SKU: ${variant.sku}, Variant ID: ${variant.id}, Qty: ${inventoryQuantity}`);
-      await prisma.productCache.create({
+      const cacheRecord = await prisma.productCache.create({
         data: {
           storeId: store.id,
           shopifyProductId: product.id,
@@ -195,6 +198,11 @@ export async function syncStoreProducts(shopDomain: string) {
           inventoryQuantity,
         },
       });
+
+      if (!shopifyProductToCacheIds.has(product.id)) {
+        shopifyProductToCacheIds.set(product.id, []);
+      }
+      shopifyProductToCacheIds.get(product.id)!.push(cacheRecord.id);
 
       console.log(`[SyncService] Creating VariantMap for SKU: ${variant.sku}, Inventory Item ID: ${inventoryItemId}`);
       await prisma.variantMap.create({
@@ -207,6 +215,70 @@ export async function syncStoreProducts(shopDomain: string) {
           locationId: null,
         },
       });
+    }
+  }
+
+  // Fetch Collections
+  const collectionsResponse: any = await client.request(`
+    query getCollections($first: Int!) {
+      collections(first: $first) {
+        edges {
+          node {
+            id
+            title
+            handle
+          }
+        }
+      }
+    }
+  `, { variables: { first: 250 } });
+
+  const collections = collectionsResponse?.data?.collections?.edges ?? [];
+  console.log(`[SyncService] Fetched ${collections.length} collections for store ${shopDomain}`);
+
+  for (const colEdge of collections) {
+    const colNode = colEdge.node;
+    
+    // Save Collection
+    const dbCollection = await prisma.collection.create({
+      data: {
+        storeId: store.id,
+        shopifyCollectionId: colNode.id,
+        title: colNode.title,
+        handle: colNode.handle,
+      },
+    });
+
+    // Fetch Products for each Collection
+    const collectionProductsResponse: any = await client.request(`
+      query getCollectionProducts($id: ID!, $first: Int!) {
+        collection(id: $id) {
+          products(first: $first) {
+            edges {
+              node {
+                id
+              }
+            }
+          }
+        }
+      }
+    `, { variables: { id: colNode.id, first: 250 } });
+
+    const colProducts = collectionProductsResponse?.data?.collection?.products?.edges ?? [];
+    
+    for (const prodEdge of colProducts) {
+      const shopifyProductId = prodEdge.node.id;
+      const cacheIds = shopifyProductToCacheIds.get(shopifyProductId) ?? [];
+      
+      // Save Product Mapping
+      for (const cacheId of cacheIds) {
+        await prisma.collectionProduct.create({
+          data: {
+            collectionId: dbCollection.id,
+            productCacheId: cacheId,
+          },
+        });
+      }
     }
   }
 
@@ -232,13 +304,9 @@ export async function processInventoryUpdate(
       console.log(`Source store ${shopDomain} not found or inactive. Skipping sync.`);
       return;
     }
-
-    // Convert inventoryItemId to standard gid format if it's not already
-    const gidInventoryItemId = inventoryItemId.includes('gid://') 
-      ? inventoryItemId 
+    const gidInventoryItemId = inventoryItemId.includes('gid://')
+      ? inventoryItemId
       : `gid://shopify/InventoryItem/${inventoryItemId}`;
-
-    // Find the variant map in the source store
     const sourceVariantMap = await prisma.variantMap.findFirst({
       where: {
         storeId: sourceStore.id,
@@ -250,10 +318,7 @@ export async function processInventoryUpdate(
       console.log(`No variant map found for inventory item ${gidInventoryItemId} in store ${shopDomain}. Skipping sync.`);
       return;
     }
-
     const { sku } = sourceVariantMap;
-
-    // Find all other stores that have this SKU
     const targetVariantMaps = await prisma.variantMap.findMany({
       where: {
         sku,
@@ -268,8 +333,6 @@ export async function processInventoryUpdate(
       console.log(`No target stores found for SKU ${sku}. Skipping sync.`);
       return;
     }
-
-    // Sync to all target stores
     for (const target of targetVariantMaps) {
       if (!target.store.isActive) continue;
 
@@ -277,9 +340,6 @@ export async function processInventoryUpdate(
       let failureReason = '';
 
       try {
-        // If we don't have the target's locationId, we might need to fetch it first.
-        // For simplicity, we assume we either have it in VariantMap, or we use a default primary location.
-        // We'll require target.locationId to be set during initial sync mapping for reliable updates.
         if (!target.locationId) {
           throw new Error('Target location ID not mapped for this variant.');
         }
@@ -298,12 +358,12 @@ export async function processInventoryUpdate(
         console.error(`Failed to sync SKU ${sku} to ${target.store.shopDomain}:`, error);
       }
 
-      // Log the sync attempt
+
       await createSyncLog({
         sku,
         sourceStoreId: sourceStore.id,
         destinationStoreId: target.store.id,
-        previousQuantity: 0, // We might not know the exact previous quantity at destination
+        previousQuantity: 0,
         updatedQuantity: availableQuantity,
         status: syncStatus,
         failureReason: failureReason || undefined,

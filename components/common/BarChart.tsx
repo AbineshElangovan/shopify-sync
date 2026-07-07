@@ -134,7 +134,7 @@ export function PieChart({ title, subtitle, data, unit = '' }: PieChartProps) {
                   ))}
                 </Pie>
                 <Tooltip
-                  formatter={(value) => [`${unit}${Number(value).toLocaleString()}`, '']}
+                  formatter={(value) => [`${unit}${Number(value).toLocaleString('en-US')}`, '']}
                   contentStyle={{ borderRadius: 8, border: '1px solid #e5e7eb', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', fontSize: 13 }}
                 />
               </RechartsPieChart>
@@ -152,7 +152,7 @@ export function PieChart({ title, subtitle, data, unit = '' }: PieChartProps) {
                     <span style={{ fontSize: 13, color: '#374151', fontWeight: 500 }}>{entry.name}</span>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <span style={{ fontSize: 13, color: '#6b7280' }}>{unit}{entry.value.toLocaleString()}</span>
+                    <span style={{ fontSize: 13, color: '#6b7280' }}>{unit}{entry.value.toLocaleString('en-US')}</span>
                     <span style={{ fontSize: 11, fontWeight: 700, color: entry.color, backgroundColor: `${entry.color}1a`, borderRadius: 20, padding: '1px 7px' }}>
                       {pct}%
                     </span>

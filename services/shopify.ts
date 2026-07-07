@@ -7,9 +7,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { redirect } from "next/navigation";
 import { ShopifyGraphQLClient } from "@/lib/shopify/GraphQLClient";
 
-/**
- * Validates if a Shopify access token is valid and not a placeholder/mock.
- */
 export function hasValidShopifyAccessToken(token: string | null | undefined): boolean {
   if (!token) return false;
   const normalized = token.trim();
@@ -17,10 +14,6 @@ export function hasValidShopifyAccessToken(token: string | null | undefined): bo
   if (/mock|placeholder|your[_-]?token|seed/i.test(normalized)) return false;
   return normalized.startsWith('shp');
 }
-
-/**
- * Cleans up invalid, mock, and seeded store and session records.
- */
 export async function cleanupSeededData() {
   try {
     const seededStoreIds = await prisma.store.findMany({
@@ -79,16 +72,12 @@ export async function cleanupSeededData() {
   }
 }
 
-/**
- * Initiates the Shopify OAuth flow.
- */
 export async function beginAuth(shop: string, rawRequest: NextRequest) {
   const sanitizedShop = shopify.utils.sanitizeShop(shop, true);
   if (!sanitizedShop) {
     throw new Error("Invalid shop domain");
   }
 
-  // Construct secure Request using the configured shopify hostName
   const hostName = shopify.config.hostName;
   const secureUrl = `https://${hostName}${rawRequest.nextUrl.pathname}${rawRequest.nextUrl.search}`;
   console.log("[OAuth] beginAuth creating secure cleanRequest:", { secureUrl, hostName });
@@ -105,13 +94,9 @@ export async function beginAuth(shop: string, rawRequest: NextRequest) {
   });
 }
 
-/**
- * Handles the OAuth Callback.
- */
 export async function handleAuthCallback(req: NextRequest) {
   console.log("[OAuth] callback start in Service", { shop: req.nextUrl.searchParams.get("shop") });
 
-  // Construct secure Request using the configured shopify hostName
   const hostName = shopify.config.hostName;
   const secureUrl = `https://${hostName}${req.nextUrl.pathname}${req.nextUrl.search}`;
   console.log("[OAuth] handleAuthCallback creating secure cleanRequest:", { secureUrl });
@@ -129,8 +114,8 @@ export async function handleAuthCallback(req: NextRequest) {
   const { session, headers } = callbackResponse;
   const { shop, accessToken, scope } = session;
 
-  const maskedToken = accessToken 
-    ? `${accessToken.substring(0, 10)}...${accessToken.substring(accessToken.length - 4)}` 
+  const maskedToken = accessToken
+    ? `${accessToken.substring(0, 10)}...${accessToken.substring(accessToken.length - 4)}`
     : "null";
 
   console.log("[OAuthCallback] Complete Session Object received:", {
@@ -151,7 +136,6 @@ export async function handleAuthCallback(req: NextRequest) {
   await shopify.config.sessionStorage.storeSession(session);
   console.log("[OAuthCallback] storeSession completed successfully.");
 
-  // Post-session database verification
   try {
     const dbSession = await prisma.session.findUnique({ where: { id: session.id } });
     console.log("[DBVerification] Post-write Session check:", {
@@ -165,10 +149,8 @@ export async function handleAuthCallback(req: NextRequest) {
 
   const normalizedShop = shop.trim().toLowerCase();
 
-  // Run cleanup of seeded data
   await cleanupSeededData();
 
-  // Fetch shop information from Shopify using the new session
   let shopLabel = normalizedShop;
   try {
     console.log("[OAuth] Fetching shop details from Shopify GraphQL API for:", normalizedShop);
@@ -180,7 +162,7 @@ export async function handleAuthCallback(req: NextRequest) {
         }
       }
     `);
-    
+
     if (shopResponse.data?.shop?.name) {
       shopLabel = shopResponse.data.shop.name;
       console.log("[OAuth] Successfully retrieved shop name:", shopLabel);
@@ -191,8 +173,6 @@ export async function handleAuthCallback(req: NextRequest) {
     console.error("[OAuth] Failed to fetch shop details from Shopify:", error.message);
     console.log("[OAuth] Falling back to shop domain as label:", normalizedShop);
   }
-
-  // Upsert the active store details
   console.log("[OAuth] Upserting store record in database for shop:", normalizedShop);
   const storedShop = await prisma.store.upsert({
     where: { shopDomain: normalizedShop },
@@ -518,7 +498,7 @@ export async function syncStoreProducts(shopDomain: string) {
   }
 
   const client = await getAdminClient(shopDomain);
-  
+
   let hasNextPage = true;
   let cursor: string | null = null;
   const syncedVariantIds: string[] = [];
@@ -952,7 +932,7 @@ export async function syncStoreA(shopDomain: string) {
 
       const inventoryItemId = variant.inventoryItem?.id ?? "";
       const levels = variant.inventoryItem?.inventoryLevels?.edges ?? [];
-      
+
       // Calculate total available inventory quantity across all locations
       const variantInventoryQuantity = levels.reduce(
         (sum: number, levelEdge: any) => {

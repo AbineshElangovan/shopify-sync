@@ -39,7 +39,7 @@ export function DashboardCharts({ chartData }: DashboardChartsProps) {
       {/* Row 1 – Products vs Inventory grouped bar chart */}
       <BarChart
         title="Inventory Comparison Chart"
-        subtitle="Chennai Store vs Coimbatore Store — Products & Inventory"
+        subtitle="Store Comparison — Products & Inventory"
         data={combinedData}
         xKey="name"
         bars={[

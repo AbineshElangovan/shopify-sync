@@ -24,37 +24,24 @@ export default async function ProductsPage({
   const validStoreIds = validStores.map((store) => store.id);
   const productCacheWhere = validStoreIds.length > 0 ? { storeId: { in: validStoreIds } } : { id: { in: [] } };
 
-  // Fetch all products with store info
+  // Fetch all products with store info and collections
   const products = await prisma.productCache.findMany({
     where: productCacheWhere,
     orderBy: { updatedAt: 'desc' },
-    include: { store: true },
+    include: {
+      store: true,
+      collections: {
+        include: {
+          collection: true,
+        },
+      },
+    },
   });
 
   const totalProducts  = products.length;
   const totalInventory = products.reduce((sum, p) => sum + p.inventoryQuantity, 0);
   const activeProducts = products.filter((p) => p.inventoryQuantity > 0).length;
   const lowStock       = products.filter((p) => p.inventoryQuantity <= 15).length;
-
-  const tableItems = products.map((p) => ({
-    id: p.id,
-    imageUrl: p.imageUrl,
-    title: p.title,
-    sku: p.sku || 'N/A',
-    store: p.store?.label || p.store?.shopDomain || 'Unknown',
-    inventoryQuantity: p.inventoryQuantity,
-    stockLevel:
-      p.inventoryQuantity === 0
-        ? 'Out of Stock'
-        : p.inventoryQuantity <= 5
-        ? 'Critical'
-        : p.inventoryQuantity <= 15
-        ? 'Low'
-        : 'Healthy',
-    status: p.inventoryQuantity > 0 ? 'Active' : 'Inactive',
-    updatedDate: p.updatedAt.toLocaleDateString(),
-    updatedTime: p.updatedAt.toLocaleTimeString(),
-  }));
 
   const columns: ColumnConfig[] = [
     { title: 'Image',        key: 'imageUrl',          type: 'image' },
@@ -82,6 +69,47 @@ export default async function ProductsPage({
     { title: 'Updated Date', key: 'updatedDate' },
     { title: 'Updated Time', key: 'updatedTime' },
   ];
+
+  // Group products by collection
+  const groupedProducts: { [collectionTitle: string]: any[] } = {};
+
+  products.forEach((p) => {
+    const item = {
+      id: p.id,
+      imageUrl: p.imageUrl,
+      title: p.title,
+      sku: p.sku || 'N/A',
+      store: p.store?.label || p.store?.shopDomain || 'Unknown',
+      inventoryQuantity: p.inventoryQuantity,
+      stockLevel:
+        p.inventoryQuantity === 0
+          ? 'Out of Stock'
+          : p.inventoryQuantity <= 5
+          ? 'Critical'
+          : p.inventoryQuantity <= 15
+          ? 'Low'
+          : 'Healthy',
+      status: p.inventoryQuantity > 0 ? 'Active' : 'Inactive',
+      updatedDate: p.updatedAt.toLocaleDateString('en-US'),
+      updatedTime: p.updatedAt.toLocaleTimeString('en-US'),
+    };
+
+    if (p.collections && p.collections.length > 0) {
+      p.collections.forEach((cp) => {
+        const title = cp.collection.title;
+        if (!groupedProducts[title]) {
+          groupedProducts[title] = [];
+        }
+        groupedProducts[title].push(item);
+      });
+    } else {
+      const title = 'Uncategorized';
+      if (!groupedProducts[title]) {
+        groupedProducts[title] = [];
+      }
+      groupedProducts[title].push(item);
+    }
+  });
 
   const STAT_CARDS = [
     { label: 'Total Products',  value: totalProducts,  color: '#6366f1', bg: '#eef2ff' },
@@ -122,35 +150,38 @@ export default async function ProductsPage({
                 {label}
               </p>
               <p style={{ margin: '8px 0 0', fontSize: 28, fontWeight: 700, color }}>
-                {value.toLocaleString()}
+                {value.toLocaleString('en-US')}
               </p>
             </div>
           ))}
         </div>
 
         {/* ── Products Table ── */}
-        <Table
-          title="All Products"
-          headerColor="#6366f1"
-          columns={columns}
-          items={tableItems}
-          searchable
-          searchKey="title"
-          filterable
-          filterKey="stockLevel"
-          filterOptions={[
-            { label: 'All Stock Levels', value: 'ALL'          },
-            { label: 'Healthy',          value: 'Healthy'      },
-            { label: 'Low',              value: 'Low'          },
-            { label: 'Critical',         value: 'Critical'     },
-            { label: 'Out of Stock',     value: 'Out of Stock' },
-          ]}
-          emptyState={
-            <div style={{ padding: '40px', textAlign: 'center', color: '#6b7280' }}>
-              No products found. Connect a Shopify store to start syncing.
-            </div>
-          }
-        />
+        {Object.entries(groupedProducts).map(([collectionName, items]) => (
+          <Table
+            key={collectionName}
+            title={collectionName}
+            headerColor={collectionName === 'Uncategorized' ? '#475569' : '#6366f1'}
+            columns={columns}
+            items={items}
+            searchable
+            searchKey="title"
+            filterable
+            filterKey="stockLevel"
+            filterOptions={[
+              { label: 'All Stock Levels', value: 'ALL'          },
+              { label: 'Healthy',          value: 'Healthy'      },
+              { label: 'Low',              value: 'Low'          },
+              { label: 'Critical',         value: 'Critical'     },
+              { label: 'Out of Stock',     value: 'Out of Stock' },
+            ]}
+            emptyState={
+              <div style={{ padding: '40px', textAlign: 'center', color: '#6b7280' }}>
+                No products found in this collection.
+              </div>
+            }
+          />
+        ))}
 
       </BlockStack>
     </div>

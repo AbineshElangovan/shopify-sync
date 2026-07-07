@@ -11,7 +11,7 @@ function getAppHostName(): string {
   try {
     const rootDir = process.cwd();
     const files = fs.readdirSync(rootDir);
-    // Find customized configs like shopify.app.eshan-chennai-store.toml
+    // Find customized configs like shopify.app.eshan-coimbatore-store.toml
     const activeToml = files.find(f => f.startsWith("shopify.app.") && f.endsWith(".toml") && f !== "shopify.app.toml") || "shopify.app.toml";
     const tomlPath = path.join(rootDir, activeToml);
     if (fs.existsSync(tomlPath)) {

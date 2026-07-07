@@ -3,10 +3,10 @@
 import { getSessionToken } from "@shopify/app-bridge/utilities/session-token";
 
 export async function shopifyFetch(input: RequestInfo, init: RequestInit = {}) {
-  // Wait for App Bridge (v3 or v4) to be initialized (up to 2 seconds)
+
   const maxRetries = 40;
   let retries = 0;
-  
+
   while (
     typeof window !== "undefined" &&
     !(window as any).shopifyApp &&
@@ -19,7 +19,7 @@ export async function shopifyFetch(input: RequestInfo, init: RequestInit = {}) {
 
   const app = typeof window !== "undefined" ? (window as any).shopifyApp : null;
   const shopifyV4 = typeof window !== "undefined" ? (window as any).shopify : null;
-  
+
   let token: string;
 
   if (shopifyV4 && typeof shopifyV4.idToken === "function") {
