@@ -1,9 +1,14 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db/prisma';
 import { Prisma } from '@prisma/client';
+import { authenticate } from '@/lib/shopify/authenticate';
 
-export async function GET(req: Request) {
+export const dynamic = 'force-dynamic';
+
+export async function GET(req: NextRequest) {
   try {
+    const { store } = await authenticate(req);
+
     const { searchParams } = new URL(req.url);
     const page = parseInt(searchParams.get('page') || '1', 10);
     const limit = parseInt(searchParams.get('limit') || '10', 10);
@@ -12,15 +17,20 @@ export async function GET(req: Request) {
 
     const skip = (page - 1) * limit;
 
+    const baseStoreFilter = {
+      OR: [
+        { sourceStoreId: store.id },
+        { destinationStoreId: store.id }
+      ]
+    };
 
-
-    const where: Prisma.SyncLogWhereInput = {};
-    if (status && status !== 'ALL') {
-      where.status = status;
-    }
-    if (search) {
-      where.sku = { contains: search, mode: 'insensitive' };
-    }
+    const where: Prisma.SyncLogWhereInput = {
+      AND: [
+        baseStoreFilter,
+        ...(status && status !== 'ALL' ? [{ status }] : []),
+        ...(search ? [{ sku: { contains: search, mode: 'insensitive' } }] : []),
+      ] as any
+    };
 
     const [logs, total, totalStats, successStats, failedStats] = await Promise.all([
       prisma.syncLog.findMany({
@@ -34,9 +44,9 @@ export async function GET(req: Request) {
         }
       }),
       prisma.syncLog.count({ where }),
-      prisma.syncLog.count(),
-      prisma.syncLog.count({ where: { status: 'SUCCESS' } }),
-      prisma.syncLog.count({ where: { status: 'FAILED' } }),
+      prisma.syncLog.count({ where: baseStoreFilter }),
+      prisma.syncLog.count({ where: { ...baseStoreFilter, status: 'SUCCESS' } }),
+      prisma.syncLog.count({ where: { ...baseStoreFilter, status: 'FAILED' } }),
     ]);
 
     return NextResponse.json({

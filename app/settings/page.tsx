@@ -1,25 +1,96 @@
-import { prisma } from '@/lib/db/prisma';
-import { Card, Table, Badge } from '@/components/common';
-import { BlockStack, Layout } from '@shopify/polaris';
-import { hasValidShopifyAccessToken, verifyStoreInstallation } from '@/services/shopify';
-import { ConnectStoreForm } from '@/components/settings/ConnectStoreForm';
+"use client";
 
-export const dynamic = 'force-dynamic';
+import React, { useState, useEffect } from 'react';
+import { Card, Table } from '@/components/common';
+import { BlockStack, Layout, Button, ChoiceList, InlineStack } from '@shopify/polaris';
+import { shopifyFetch } from '@/lib/shopify/Client';
+import { Input, Checkbox } from '@/components/forms';
 
-export default async function SettingsPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ shop?: string; host?: string }>;
-}) {
-  const params = await searchParams;
-  await verifyStoreInstallation(params.shop, params.host);
-  const stores = await prisma.store.findMany();
+export default function SettingsPage() {
+  const [stores, setStores] = useState<any[]>([]);
+  const [threshold, setThreshold] = useState<string>('15');
+  const [customThreshold, setCustomThreshold] = useState<string>('15');
+  const [autoSync, setAutoSync] = useState<boolean>(true);
+  
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
+
+  useEffect(() => {
+    async function loadData() {
+      try {
+        // Fetch stores list
+        const storesRes = await shopifyFetch('/api/stores?active=false');
+        if (storesRes.ok) {
+          const storesJson = await storesRes.json();
+          setStores(storesJson.stores || []);
+        }
+
+        // Fetch settings
+        const settingsRes = await shopifyFetch('/api/settings');
+        if (settingsRes.ok) {
+          const settingsJson = await settingsRes.json();
+          const threshVal = settingsJson.settings.lowStockThreshold;
+          setAutoSync(settingsJson.settings.autoSyncEnabled);
+
+          if ([5, 10, 20].includes(threshVal)) {
+            setThreshold(threshVal.toString());
+          } else {
+            setThreshold('custom');
+            setCustomThreshold(threshVal.toString());
+          }
+        }
+      } catch (err) {
+        console.error("Error loading settings data:", err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadData();
+  }, []);
+
+  const handleSave = async () => {
+    setSaving(true);
+    setSaveSuccess(false);
+    try {
+      const finalThreshold = threshold === 'custom' 
+        ? parseInt(customThreshold, 10) || 15 
+        : parseInt(threshold, 10);
+
+      const res = await shopifyFetch('/api/settings', {
+        method: 'PUT',
+        body: JSON.stringify({
+          lowStockThreshold: finalThreshold,
+          autoSyncEnabled: autoSync,
+        }),
+      });
+
+      if (res.ok) {
+        setSaveSuccess(true);
+        setTimeout(() => setSaveSuccess(false), 3000);
+      }
+    } catch (err) {
+      console.error("Error saving settings:", err);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '50vh', gap: 14 }}>
+        <style>{`@keyframes sync-spin{to{transform:rotate(360deg)}}.sync-ring{width:44px;height:44px;border-radius:50%;border:4px solid #e5e7eb;border-top-color:#6366f1;animation:sync-spin 0.75s linear infinite}`}</style>
+        <div className="sync-ring" />
+        <p style={{ margin: 0, fontSize: 13, color: '#9ca3af', fontWeight: 500 }}>Loading settings…</p>
+      </div>
+    );
+  }
 
   const formattedStores = stores.map((s) => ({
     id: s.id,
     domain: s.shopDomain,
     label: s.label || s.shopDomain,
-    status: s.isActive && hasValidShopifyAccessToken(s.accessToken) ? 'CONNECTED' : 'DISCONNECTED',
+    status: s.isActive ? 'CONNECTED' : 'DISCONNECTED',
     installedAt: new Date(s.installedAt).toLocaleDateString(),
   }));
 
@@ -32,7 +103,7 @@ export default async function SettingsPage({
             Settings
           </h1>
           <p style={{ marginTop: '4px', color: '#6b7280', fontSize: '0.875rem' }}>
-            Manage your stores, synchronization parameters, and system credentials
+            Manage store connections, threshold alerts, and synchronization rules
           </p>
         </div>
 
@@ -64,33 +135,88 @@ export default async function SettingsPage({
                   </div>
                 }
               />
-              <ConnectStoreForm />
             </BlockStack>
           </Layout.Section>
 
           {/* Sync Preferences & Parameters */}
           <Layout.Section variant="oneThird">
-            <Card>
-              <h2 className="text-lg font-bold mb-4">⚙️ Sync Rules</h2>
-              <div className="flex flex-col gap-4 text-sm text-gray-600">
-                <div className="flex justify-between border-b pb-2">
-                  <span>Inventory Matching</span>
-                  <strong className="text-gray-900">By SKU</strong>
+            <BlockStack gap="500">
+              <Card>
+                <h2 className="text-lg font-bold mb-4">⚙️ Store Configurations</h2>
+                
+                <BlockStack gap="400">
+                  <Checkbox
+                    label="Enable Real-Time Inventory Sync"
+                    checked={autoSync}
+                    onChange={(val) => setAutoSync(val)}
+                  />
+
+                  <div style={{ borderTop: '1px solid #e5e7eb', paddingTop: '16px' }}>
+                    <ChoiceList
+                      title="Low Stock Alert Threshold"
+                      choices={[
+                        { label: '5 units', value: '5' },
+                        { label: '10 units', value: '10' },
+                        { label: '20 units', value: '20' },
+                        { label: 'Custom Value', value: 'custom' },
+                      ]}
+                      selected={[threshold]}
+                      onChange={(selected) => setThreshold(selected[0])}
+                    />
+                  </div>
+
+                  {threshold === 'custom' && (
+                    <Input
+                      type="number"
+                      label="Custom Threshold Value"
+                      labelHidden
+                      value={customThreshold}
+                      onChange={(val) => setCustomThreshold(val)}
+                      autoComplete="off"
+                    />
+                  )}
+
+                  <div style={{ marginTop: '8px' }}>
+                    <InlineStack gap="300" align="space-between">
+                      <Button variant="primary" loading={saving} onClick={handleSave}>
+                        Save Settings
+                      </Button>
+                      {saveSuccess && (
+                        <span style={{ color: '#16a34a', fontSize: '13px', fontWeight: 500, alignSelf: 'center' }}>
+                          ✓ Settings saved!
+                        </span>
+                      )}
+                    </InlineStack>
+                  </div>
+                </BlockStack>
+              </Card>
+
+              <Card>
+                <h2 className="text-lg font-bold mb-4">⚙️ Sync Rules</h2>
+                <div className="flex flex-col gap-4 text-sm text-gray-600">
+                  <div className="flex justify-between border-b pb-2">
+                    <span>Inventory Matching</span>
+                    <strong className="text-gray-900">By SKU</strong>
+                  </div>
+                  <div className="flex justify-between border-b pb-2">
+                    <span>Low Stock Alert Limit</span>
+                    <strong className="text-gray-900">
+                      {threshold === 'custom' ? customThreshold : threshold} units
+                    </strong>
+                  </div>
+                  <div className="flex justify-between border-b pb-2">
+                    <span>Auto-sync Webhooks</span>
+                    <strong className={autoSync ? "text-green-600 font-semibold" : "text-red-500 font-semibold"}>
+                      {autoSync ? "Enabled" : "Disabled"}
+                    </strong>
+                  </div>
+                  <div className="flex justify-between pb-2">
+                    <span>Bidirectional Sync</span>
+                    <strong className="text-green-600 font-semibold">Enabled</strong>
+                  </div>
                 </div>
-                <div className="flex justify-between border-b pb-2">
-                  <span>Low Stock Alert Limit</span>
-                  <strong className="text-gray-900">15 units</strong>
-                </div>
-                <div className="flex justify-between border-b pb-2">
-                  <span>Auto-sync Webhooks</span>
-                  <strong className="text-green-600 font-semibold">Enabled</strong>
-                </div>
-                <div className="flex justify-between pb-2">
-                  <span>Bidirectional Sync</span>
-                  <strong className="text-green-600 font-semibold">Enabled</strong>
-                </div>
-              </div>
-            </Card>
+              </Card>
+            </BlockStack>
           </Layout.Section>
         </Layout>
       </BlockStack>

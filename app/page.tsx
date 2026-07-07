@@ -1,62 +1,51 @@
-import { prisma } from '@/lib/db/prisma';
+"use client";
+
+import React, { useState, useEffect } from 'react';
 import { BlockStack, Layout } from '@shopify/polaris';
 import { DashboardCards } from '@/components/dashboard/DashboardCards';
 import { DashboardCharts } from '@/components/dashboard/DashboardCharts';
 import { Table, ColumnConfig } from '@/components/common/Table';
-import { verifyStoreInstallation } from '@/services/shopify';
+import { shopifyFetch } from '@/lib/shopify/Client';
 
-export const dynamic = 'force-dynamic';
+export default function DashboardPage() {
+  const [data, setData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
 
-export default async function DashboardPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ shop?: string; host?: string }>;
-}) {
-  const params = await searchParams;
-  await verifyStoreInstallation(params.shop, params.host);
+  useEffect(() => {
+    async function loadDashboardData() {
+      try {
+        const res = await shopifyFetch('/api/dashboard');
+        if (res.ok) {
+          const json = await res.json();
+          setData(json);
+        }
+      } catch (err) {
+        console.error("Error loading dashboard data:", err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadDashboardData();
+  }, []);
 
-
-  const totalProducts = await prisma.productCache.count();
-  const invResult = await prisma.productCache.aggregate({ _sum: { inventoryQuantity: true } });
-  const totalInventory = invResult._sum.inventoryQuantity ?? 0;
-  const activeProducts = await prisma.productCache.count({ where: { inventoryQuantity: { gt: 0 } } });
-  const lowStockCount = await prisma.productCache.count({ where: { inventoryQuantity: { lte: 15 } } });
-
-  const latestSync = await prisma.syncLog.findFirst({ orderBy: { createdAt: 'desc' } });
-  let timeStr = 'Just now';
-  if (latestSync) {
-    const diffMins = Math.floor((Date.now() - latestSync.createdAt.getTime()) / 60000);
-    timeStr = diffMins < 1 ? 'Just now' : diffMins < 60 ? `${diffMins} mins ago` : `${Math.floor(diffMins / 60)} hrs ago`;
+  if (loading) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '50vh', gap: 14 }}>
+        <style>{`@keyframes sync-spin{to{transform:rotate(360deg)}}.sync-ring{width:44px;height:44px;border-radius:50%;border:4px solid #e5e7eb;border-top-color:#6366f1;animation:sync-spin 0.75s linear infinite}`}</style>
+        <div className="sync-ring" />
+        <p style={{ margin: 0, fontSize: 13, color: '#9ca3af', fontWeight: 500 }}>Loading dashboard…</p>
+      </div>
+    );
   }
 
-  const stats = { totalProducts, totalInventory, lowStock: lowStockCount, activeProducts, lastUpdated: timeStr };
-
-  // ── Chart data – one combined array per store ──
-  const stores = await prisma.store.findMany({ include: { productCaches: true } });
-
-  const combinedData = stores.map((s) => {
-    const products = s.productCaches.length;
-    const inventory = s.productCaches.reduce((acc, p) => acc + p.inventoryQuantity, 0);
-    // "Total Sales Value" = inventory × avg price proxy (₹500 per unit since no orders table)
-    const salesValue = inventory * 500;
-    return {
-      name: s.label || s.shopDomain,
-      'Total Products': products,
-      'Total Inventory': inventory,
-      'Total Sales Value': salesValue,
-    };
-  });
-
-  const chartData = { combinedData };
-
-  // ── Store Summary Table ──
-  const storeSummaryData = stores.map((store) => ({
+  const stats = data?.stats || { totalProducts: 0, totalInventory: 0, lowStock: 0, activeProducts: 0, lastUpdated: 'Never' };
+  const storeSummaryData = (data?.stores || []).map((store: any) => ({
     id: store.id,
     storeName: store.label || store.shopDomain,
-    totalProducts: store.productCaches.length,
-    totalInventory: store.productCaches.reduce((a, p) => a + p.inventoryQuantity, 0),
-    activeProducts: store.productCaches.filter((p) => p.inventoryQuantity > 0).length,
-    lastSynced: timeStr,
+    totalProducts: store.productCount,
+    totalInventory: store.inventoryTotal,
+    activeProducts: store.activeProductCount,
+    lastSynced: stats.lastUpdated,
   }));
 
   const storeSummaryColumns: ColumnConfig[] = [
@@ -67,22 +56,15 @@ export default async function DashboardPage({
     { title: 'Last Synced', key: 'lastSynced' },
   ];
 
-  // ── Low Stock Products Table ──
-  const lowStockRaw = await prisma.productCache.findMany({
-    where: { inventoryQuantity: { lte: 15 } },
-    orderBy: { inventoryQuantity: 'asc' },
-    take: 100,
-  });
-
-  const lowStockProducts = lowStockRaw.map((p) => ({
+  const lowStockProducts = (data?.lowStockProducts || []).map((p: any) => ({
     id: p.id,
     imageUrl: p.imageUrl,
     title: p.title,
     sku: p.sku || 'N/A',
     inventoryQuantity: p.inventoryQuantity,
     stockLevel: p.inventoryQuantity <= 5 ? 'Critical' : 'Low',
-    updatedDate: p.updatedAt.toLocaleDateString('en-US'),
-    updatedTime: p.updatedAt.toLocaleTimeString('en-US'),
+    updatedDate: new Date(p.updatedAt).toLocaleDateString('en-US'),
+    updatedTime: new Date(p.updatedAt).toLocaleTimeString('en-US'),
   }));
 
   const lowStockColumns: ColumnConfig[] = [
@@ -95,13 +77,7 @@ export default async function DashboardPage({
     { title: 'Updated Time', key: 'updatedTime' },
   ];
 
-  // ── Recently Added Products Table ──
-  const recentlyAddedRaw = await prisma.productCache.findMany({
-    orderBy: { updatedAt: 'desc' },
-    take: 100,
-  });
-
-  const recentlyAddedProducts = recentlyAddedRaw.map((p) => ({
+  const recentlyAddedProducts = (data?.recentlyAddedProducts || []).map((p: any) => ({
     id: p.id,
     imageUrl: p.imageUrl,
     title: p.title,
@@ -109,8 +85,8 @@ export default async function DashboardPage({
     sku: p.sku || 'N/A',
     inventoryQuantity: p.inventoryQuantity,
     status: 'Active',
-    addedDate: p.updatedAt.toLocaleDateString('en-US'),
-    addedTime: p.updatedAt.toLocaleTimeString('en-US'),
+    addedDate: new Date(p.updatedAt).toLocaleDateString('en-US'),
+    addedTime: new Date(p.updatedAt).toLocaleTimeString('en-US'),
   }));
 
   const recentlyAddedColumns: ColumnConfig[] = [
@@ -127,24 +103,24 @@ export default async function DashboardPage({
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
       <BlockStack gap="800">
-
-        {/* ── Page heading ── */}
         <div>
           <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: '#111827', margin: 0 }}>
             Inventory Dashboard
           </h1>
           <p style={{ marginTop: '4px', color: '#6b7280', fontSize: '0.875rem' }}>
-            Live overview of your connected Shopify stores
+            Live overview of your connected Shopify store
           </p>
         </div>
 
-        {/* ── Statistics Cards ── */}
         <DashboardCards stats={stats} />
 
-        {/* ── Charts ── */}
-        <DashboardCharts chartData={chartData} />
+        <DashboardCharts chartData={{ combinedData: data?.stores ? data.stores.map((s: any) => ({
+          name: s.label || s.shopDomain,
+          'Total Products': s.productCount,
+          'Total Inventory': s.inventoryTotal,
+          'Total Sales Value': s.salesValue,
+        })) : [] }} />
 
-        {/* ── Store Summary ── */}
         <Layout>
           <Layout.Section>
             <Table
@@ -163,7 +139,6 @@ export default async function DashboardPage({
             />
           </Layout.Section>
         </Layout>
-
 
         <Layout>
           <Layout.Section>
@@ -190,7 +165,6 @@ export default async function DashboardPage({
           </Layout.Section>
         </Layout>
 
-        {/* ── Recently Added Products ── */}
         <Layout>
           <Layout.Section>
             <Table
@@ -209,7 +183,6 @@ export default async function DashboardPage({
             />
           </Layout.Section>
         </Layout>
-
       </BlockStack>
     </div>
   );

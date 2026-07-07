@@ -502,6 +502,7 @@ export async function syncStoreProducts(shopDomain: string) {
   let hasNextPage = true;
   let cursor: string | null = null;
   const syncedVariantIds: string[] = [];
+  const syncedCollectionIds: string[] = [];
   let productCount = 0;
   let variantCount = 0;
 
@@ -516,6 +517,15 @@ export async function syncStoreProducts(shopDomain: string) {
               handle
               featuredImage {
                 url
+              }
+              collections(first: 20) {
+                edges {
+                  node {
+                    id
+                    title
+                    handle
+                  }
+                }
               }
               variants(first: 50) {
                 edges {
@@ -566,6 +576,35 @@ export async function syncStoreProducts(shopDomain: string) {
     for (const edge of productEdges) {
       const product = edge.node;
       productCount++;
+
+      // Upsert collections and collect their DB IDs
+      const productCollectionDbIds: string[] = [];
+      const collections = product.collections?.edges ?? [];
+      for (const colEdge of collections) {
+        const col = colEdge.node;
+        syncedCollectionIds.push(col.id);
+
+        const dbCol = await prisma.collection.upsert({
+          where: {
+            storeId_shopifyCollectionId: {
+              storeId: store.id,
+              shopifyCollectionId: col.id,
+            },
+          },
+          update: {
+            title: col.title,
+            handle: col.handle,
+          },
+          create: {
+            storeId: store.id,
+            shopifyCollectionId: col.id,
+            title: col.title,
+            handle: col.handle,
+          },
+        });
+        productCollectionDbIds.push(dbCol.id);
+      }
+
       const variants = product.variants?.edges ?? [];
 
       for (const variantEdge of variants) {
@@ -590,7 +629,7 @@ export async function syncStoreProducts(shopDomain: string) {
 
         console.log(`[SyncService] Upserting ProductCache for SKU: ${sku}, Variant ID: ${variant.id}, Qty: ${inventoryQuantity}`);
         // Perform clean atomic upserts to prevent duplicates while retaining existing database links/ids
-        await prisma.productCache.upsert({
+        const dbProduct = await prisma.productCache.upsert({
           where: {
             storeId_shopifyVariantId: {
               storeId: store.id,
@@ -612,6 +651,31 @@ export async function syncStoreProducts(shopDomain: string) {
             title: fullTitle,
             imageUrl,
             inventoryQuantity,
+          },
+        });
+
+        // Map product to its collections
+        for (const collectionDbId of productCollectionDbIds) {
+          await prisma.collectionProduct.upsert({
+            where: {
+              collectionId_productCacheId: {
+                collectionId: collectionDbId,
+                productCacheId: dbProduct.id,
+              },
+            },
+            update: {},
+            create: {
+              collectionId: collectionDbId,
+              productCacheId: dbProduct.id,
+            },
+          });
+        }
+
+        // Remove old collection associations for this variant
+        await prisma.collectionProduct.deleteMany({
+          where: {
+            productCacheId: dbProduct.id,
+            collectionId: { notIn: productCollectionDbIds },
           },
         });
 
@@ -660,9 +724,18 @@ export async function syncStoreProducts(shopDomain: string) {
     },
   });
 
+  // Delete stale collections that were deleted from Shopify
+  const deletedCollections = await prisma.collection.deleteMany({
+    where: {
+      storeId: store.id,
+      shopifyCollectionId: { notIn: syncedCollectionIds },
+    },
+  });
+
   console.log("[SyncService] Sync finished. Cleaned up stale records:", {
     deletedProducts: deletedCache.count,
     deletedVariantMaps: deletedMaps.count,
+    deletedCollections: deletedCollections.count,
     syncedProducts: productCount,
     syncedVariants: variantCount
   });
@@ -712,6 +785,17 @@ export async function processInventoryUpdate(
 
     const { sku, shopifyProductId, shopifyVariantId } = sourceVariantMap;
 
+    // Fetch the previous cached inventory quantity for the source store to calculate delta
+    const sourceCachedProduct = await prisma.productCache.findFirst({
+      where: {
+        storeId: sourceStore.id,
+        shopifyVariantId,
+      },
+    });
+
+    const previousQuantity = sourceCachedProduct ? sourceCachedProduct.inventoryQuantity : availableQuantity;
+    const delta = availableQuantity - previousQuantity;
+
     // Update local productCache inventory quantity for the source store variant
     await prisma.productCache.updateMany({
       where: {
@@ -722,6 +806,16 @@ export async function processInventoryUpdate(
         inventoryQuantity: availableQuantity,
       },
     });
+
+    if (!sourceStore.autoSyncEnabled) {
+      console.log(`[SyncService] Auto-sync is disabled for source store ${shopDomain}. Skipping target replication.`);
+      return;
+    }
+
+    if (delta === 0) {
+      console.log(`[SyncService] Delta is 0 for SKU ${sku} in store ${shopDomain}. Skipping target replication.`);
+      return;
+    }
 
     if (!sku) {
       console.log(`[SyncService] Variant ${shopifyVariantId} has no SKU. Skipping target replication.`);
@@ -747,8 +841,24 @@ export async function processInventoryUpdate(
     for (const target of targetVariantMaps) {
       if (!target.store.isActive) continue;
 
+      if (!target.store.autoSyncEnabled) {
+        console.log(`[SyncService] Auto-sync is disabled for target store ${target.store.shopDomain}. Skipping.`);
+        continue;
+      }
+
       let syncStatus: 'SUCCESS' | 'FAILED' = 'SUCCESS';
       let failureReason = '';
+
+      // Get target's current cached inventory quantity to calculate targetNewQuantity
+      const targetCachedProduct = await prisma.productCache.findFirst({
+        where: {
+          storeId: target.store.id,
+          shopifyVariantId: target.shopifyVariantId,
+        },
+      });
+
+      const targetPrevQuantity = targetCachedProduct ? targetCachedProduct.inventoryQuantity : 0;
+      const targetNewQuantity = Math.max(0, targetPrevQuantity + delta);
 
       try {
         if (!target.locationId) {
@@ -760,7 +870,7 @@ export async function processInventoryUpdate(
           target.store.shopDomain,
           target.inventoryItemId,
           target.locationId,
-          availableQuantity
+          targetNewQuantity
         );
 
         // Update local cache count for target store
@@ -770,11 +880,11 @@ export async function processInventoryUpdate(
             shopifyVariantId: target.shopifyVariantId,
           },
           data: {
-            inventoryQuantity: availableQuantity,
+            inventoryQuantity: targetNewQuantity,
           },
         });
 
-        console.log(`[SyncService] Synced SKU ${sku} to ${target.store.shopDomain} with qty ${availableQuantity}`);
+        console.log(`[SyncService] Delta-synced SKU ${sku} to ${target.store.shopDomain}: ${targetPrevQuantity} -> ${targetNewQuantity} (delta: ${delta})`);
       } catch (error: any) {
         syncStatus = 'FAILED';
         failureReason = error.message || 'Unknown error';
@@ -786,8 +896,8 @@ export async function processInventoryUpdate(
         sku,
         sourceStoreId: sourceStore.id,
         destinationStoreId: target.store.id,
-        previousQuantity: 0,
-        updatedQuantity: availableQuantity,
+        previousQuantity: targetPrevQuantity,
+        updatedQuantity: targetNewQuantity,
         status: syncStatus,
         failureReason: failureReason || undefined,
         webhookEventId: webhookId,
@@ -816,16 +926,11 @@ export async function verifyStoreInstallation(shop: string | null | undefined, h
   }
 }
 
-/**
- * Synchronizes Store A data (Milestone 1)
- * Fetches shop details, products, product variants, and inventory levels.
- * Stores in PostgreSQL using Prisma upsert.
- */
+
 export async function syncStoreA(shopDomain: string) {
   const normalizedShop = shopDomain.trim().toLowerCase();
   console.log(`[SyncStoreA] Starting sync for ${normalizedShop}`);
 
-  // 1. Initialize our reusable ShopifyGraphQLClient
   const client = new ShopifyGraphQLClient(normalizedShop);
 
   // 2. Fetch Shop details

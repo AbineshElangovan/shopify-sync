@@ -1,47 +1,43 @@
-import { prisma } from '@/lib/db/prisma';
+"use client";
+
+import React, { useState, useEffect } from 'react';
 import { Table, ColumnConfig } from '@/components/common/Table';
 import { BlockStack } from '@shopify/polaris';
-import { cleanupSeededData, hasValidShopifyAccessToken, syncStoreProducts, verifyStoreInstallation } from '@/services/shopify';
+import { shopifyFetch } from '@/lib/shopify/Client';
 
-export const dynamic = 'force-dynamic';
+export default function ProductsPage() {
+  const [data, setData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
 
-export default async function ProductsPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ shop?: string; host?: string }>;
-}) {
-  const params = await searchParams;
-  await verifyStoreInstallation(params.shop, params.host);
-  await cleanupSeededData();
+  useEffect(() => {
+    async function loadProducts() {
+      try {
+        const res = await shopifyFetch('/api/products');
+        if (res.ok) {
+          const json = await res.json();
+          setData(json);
+        }
+      } catch (err) {
+        console.error("Error loading products:", err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadProducts();
+  }, []);
 
-  const activeStores = await prisma.store.findMany({ where: { isActive: true } });
-  const validStores = activeStores.filter((store) => hasValidShopifyAccessToken(store.accessToken));
+  if (loading) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '50vh', gap: 14 }}>
+        <style>{`@keyframes sync-spin{to{transform:rotate(360deg)}}.sync-ring{width:44px;height:44px;border-radius:50%;border:4px solid #e5e7eb;border-top-color:#6366f1;animation:sync-spin 0.75s linear infinite}`}</style>
+        <div className="sync-ring" />
+        <p style={{ margin: 0, fontSize: 13, color: '#9ca3af', fontWeight: 500 }}>Loading products…</p>
+      </div>
+    );
+  }
 
-  await Promise.allSettled(
-    validStores.map((store) => syncStoreProducts(store.shopDomain))
-  );
-
-  const validStoreIds = validStores.map((store) => store.id);
-  const productCacheWhere = validStoreIds.length > 0 ? { storeId: { in: validStoreIds } } : { id: { in: [] } };
-
-  // Fetch all products with store info and collections
-  const products = await prisma.productCache.findMany({
-    where: productCacheWhere,
-    orderBy: { updatedAt: 'desc' },
-    include: {
-      store: true,
-      collections: {
-        include: {
-          collection: true,
-        },
-      },
-    },
-  });
-
-  const totalProducts  = products.length;
-  const totalInventory = products.reduce((sum, p) => sum + p.inventoryQuantity, 0);
-  const activeProducts = products.filter((p) => p.inventoryQuantity > 0).length;
-  const lowStock       = products.filter((p) => p.inventoryQuantity <= 15).length;
+  const stats = data?.stats || { totalProducts: 0, activeProducts: 0, totalInventory: 0, lowStock: 0 };
+  const groupedProducts = data?.groupedProducts || {};
 
   const columns: ColumnConfig[] = [
     { title: 'Image',        key: 'imageUrl',          type: 'image' },
@@ -70,71 +66,29 @@ export default async function ProductsPage({
     { title: 'Updated Time', key: 'updatedTime' },
   ];
 
-  // Group products by collection
-  const groupedProducts: { [collectionTitle: string]: any[] } = {};
-
-  products.forEach((p) => {
-    const item = {
-      id: p.id,
-      imageUrl: p.imageUrl,
-      title: p.title,
-      sku: p.sku || 'N/A',
-      store: p.store?.label || p.store?.shopDomain || 'Unknown',
-      inventoryQuantity: p.inventoryQuantity,
-      stockLevel:
-        p.inventoryQuantity === 0
-          ? 'Out of Stock'
-          : p.inventoryQuantity <= 5
-          ? 'Critical'
-          : p.inventoryQuantity <= 15
-          ? 'Low'
-          : 'Healthy',
-      status: p.inventoryQuantity > 0 ? 'Active' : 'Inactive',
-      updatedDate: p.updatedAt.toLocaleDateString('en-US'),
-      updatedTime: p.updatedAt.toLocaleTimeString('en-US'),
-    };
-
-    if (p.collections && p.collections.length > 0) {
-      p.collections.forEach((cp) => {
-        const title = cp.collection.title;
-        if (!groupedProducts[title]) {
-          groupedProducts[title] = [];
-        }
-        groupedProducts[title].push(item);
-      });
-    } else {
-      const title = 'Uncategorized';
-      if (!groupedProducts[title]) {
-        groupedProducts[title] = [];
-      }
-      groupedProducts[title].push(item);
-    }
-  });
-
   const STAT_CARDS = [
-    { label: 'Total Products',  value: totalProducts,  color: '#6366f1', bg: '#eef2ff' },
-    { label: 'Active Products', value: activeProducts, color: '#16a34a', bg: '#f0fdf4' },
-    { label: 'Total Inventory', value: totalInventory, color: '#0891b2', bg: '#ecfeff' },
-    { label: 'Low / Critical',  value: lowStock,       color: '#ea580c', bg: '#fff7ed' },
+    { label: 'Total Products',  value: stats.totalProducts,  color: '#6366f1' },
+    { label: 'Active Products', value: stats.activeProducts, color: '#16a34a' },
+    { label: 'Total Inventory', value: stats.totalInventory, color: '#0891b2' },
+    { label: 'Low / Critical',  value: stats.lowStock,       color: '#ea580c' },
   ];
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
       <BlockStack gap="800">
-
-        {/* ── Page Heading ── */}
+        {/* Page Heading */}
         <div>
           <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: '#111827', margin: 0 }}>
             Products
           </h1>
           <p style={{ marginTop: 4, color: '#6b7280', fontSize: '0.875rem' }}>
-            All products synced across your connected Shopify stores
+            Products and collections for your connected store
           </p>
         </div>
 
-        {/* ── Stat Cards ── */}
+        {/* Stat Cards */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 16 }}>
-          {STAT_CARDS.map(({ label, value, color, bg }) => (
+          {STAT_CARDS.map(({ label, value, color }) => (
             <div
               key={label}
               style={{
@@ -156,33 +110,38 @@ export default async function ProductsPage({
           ))}
         </div>
 
-        {/* ── Products Table ── */}
-        {Object.entries(groupedProducts).map(([collectionName, items]) => (
-          <Table
-            key={collectionName}
-            title={collectionName}
-            headerColor={collectionName === 'Uncategorized' ? '#475569' : '#6366f1'}
-            columns={columns}
-            items={items}
-            searchable
-            searchKey="title"
-            filterable
-            filterKey="stockLevel"
-            filterOptions={[
-              { label: 'All Stock Levels', value: 'ALL'          },
-              { label: 'Healthy',          value: 'Healthy'      },
-              { label: 'Low',              value: 'Low'          },
-              { label: 'Critical',         value: 'Critical'     },
-              { label: 'Out of Stock',     value: 'Out of Stock' },
-            ]}
-            emptyState={
-              <div style={{ padding: '40px', textAlign: 'center', color: '#6b7280' }}>
-                No products found in this collection.
-              </div>
-            }
-          />
-        ))}
-
+        {/* Products Table Grouped by Collection */}
+        {Object.keys(groupedProducts).length > 0 ? (
+          Object.entries(groupedProducts).map(([collectionName, items]) => (
+            <Table
+              key={collectionName}
+              title={collectionName}
+              headerColor={collectionName === 'Uncategorized' ? '#475569' : '#6366f1'}
+              columns={columns}
+              items={items as any[]}
+              searchable
+              searchKey="title"
+              filterable
+              filterKey="stockLevel"
+              filterOptions={[
+                { label: 'All Stock Levels', value: 'ALL'          },
+                { label: 'Healthy',          value: 'Healthy'      },
+                { label: 'Low',              value: 'Low'          },
+                { label: 'Critical',         value: 'Critical'     },
+                { label: 'Out of Stock',     value: 'Out of Stock' },
+              ]}
+              emptyState={
+                <div style={{ padding: '40px', textAlign: 'center', color: '#6b7280' }}>
+                  No products found in this collection.
+                </div>
+              }
+            />
+          ))
+        ) : (
+          <div style={{ backgroundColor: '#fff', padding: '60px', borderRadius: 12, border: '1px solid #e5e7eb', textAlign: 'center', color: '#6b7280' }}>
+            No products or collections synced for this store yet.
+          </div>
+        )}
       </BlockStack>
     </div>
   );
