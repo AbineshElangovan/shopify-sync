@@ -2,6 +2,7 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   allowedDevOrigins: ["dz50mdfc-3000.inc1.devtunnels.ms"],
+  serverExternalPackages: ["@prisma/client"],
   turbopack: {
     root: __dirname,
   },
