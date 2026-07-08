@@ -9,6 +9,7 @@ import { DashboardCards } from '@/components/dashboard/DashboardCards';
 export default function ProductsPage() {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
     async function loadProducts() {
@@ -40,6 +41,16 @@ export default function ProductsPage() {
   const stats = data?.stats || { totalProducts: 0, activeProducts: 0, totalInventory: 0, lowStock: 0 };
   const groupedProducts = data?.groupedProducts || {};
 
+  const filterProducts = (products: any[]) => {
+    return products.filter((p) => {
+      const q = searchQuery.toLowerCase().trim();
+      if (!q) return true;
+      const titleMatch = p.title?.toLowerCase().includes(q);
+      const skuMatch = p.sku?.toLowerCase().includes(q);
+      return titleMatch || skuMatch;
+    });
+  };
+
   const columns: ColumnConfig[] = [
     { title: 'Image', key: 'imageUrl', type: 'image' },
     { title: 'Product Name', key: 'title', type: 'bold' },
@@ -70,43 +81,63 @@ export default function ProductsPage() {
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
       <BlockStack gap="800">
-        <div>
-          <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: '#111827', margin: 0 }}>
-            Products
-          </h1>
-          <p style={{ marginTop: 4, color: '#6b7280', fontSize: '0.875rem' }}>
-            Products and collections for your connected store
-          </p>
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div>
+            <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: '#111827', margin: 0 }}>
+              Products
+            </h1>
+            <p style={{ marginTop: 4, color: '#6b7280', fontSize: '0.875rem' }}>
+              Products and collections for your connected store
+            </p>
+          </div>
+          
+          {/* Overall Search Bar */}
+          <div className="relative w-full md:w-80 shadow-sm rounded-lg">
+            <span className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-gray-400">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+            </span>
+            <input
+              type="text"
+              placeholder="Search by title or SKU..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 bg-white border border-gray-300 rounded-lg text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-colors"
+            />
+          </div>
         </div>
 
         <DashboardCards stats={{ ...stats, lastUpdated: 'Just now' }} />
         {Object.keys(groupedProducts).length > 0 ? (() => {
           const colors = ['#6366f1', '#0f766e', '#7c3aed', '#db2777', '#ea580c', '#0891b2'];
-          return Object.entries(groupedProducts).map(([collectionName, items], index) => (
-            <Table
-              key={collectionName}
-              title={collectionName}
-              headerColor={collectionName === 'Uncategorized' ? '#475569' : colors[index % colors.length]}
-              columns={columns}
-              items={items as any[]}
-              searchable
-              searchKey="title"
-              filterable
-              filterKey="stockLevel"
-              filterOptions={[
-                { label: 'All Stock Levels', value: 'ALL' },
-                { label: 'Healthy', value: 'Healthy' },
-                { label: 'Low', value: 'Low' },
-                { label: 'Critical', value: 'Critical' },
-                { label: 'Out of Stock', value: 'Out of Stock' },
-              ]}
-              emptyState={
-                <div style={{ padding: '40px', textAlign: 'center', color: '#6b7280' }}>
-                  No products found in this collection.
-                </div>
-              }
-            />
-          ));
+          return Object.entries(groupedProducts).map(([collectionName, items], index) => {
+            const filteredItems = filterProducts(items as any[]);
+            return (
+              <Table
+                key={collectionName}
+                title={collectionName}
+                headerColor={collectionName === 'Uncategorized' ? '#475569' : colors[index % colors.length]}
+                columns={columns}
+                items={filteredItems}
+                searchable={false}
+                filterable
+                filterKey="stockLevel"
+                filterOptions={[
+                  { label: 'All Stock Levels', value: 'ALL' },
+                  { label: 'Healthy', value: 'Healthy' },
+                  { label: 'Low', value: 'Low' },
+                  { label: 'Critical', value: 'Critical' },
+                  { label: 'Out of Stock', value: 'Out of Stock' },
+                ]}
+                emptyState={
+                  <div style={{ padding: '40px', textAlign: 'center', color: '#6b7280' }}>
+                    No products found in this collection.
+                  </div>
+                }
+              />
+            );
+          });
         })() : (
           <div style={{ backgroundColor: '#fff', padding: '60px', borderRadius: 12, border: '1px solid #e5e7eb', textAlign: 'center', color: '#6b7280' }}>
             No products or collections synced for this store yet.

@@ -17,29 +17,57 @@ export function StatCard({
   value,
   icon,
   gradient,
+
   iconBg = 'rgba(255,255,255,0.2)',
 }: StatCardProps) {
   return (
     <div
-      style={{ background: gradient }}
-      className="rounded-[14px] p-5.5 text-white shadow-lg transition-all duration-200 cursor-default h-full flex flex-col gap-4 hover:-translate-y-1 hover:shadow-2xl"
+      style={{
+        background: gradient,
+        borderRadius: '14px',
+        padding: '22px 20px',
+        boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
+        color: '#fff',
+        transition: 'transform 0.2s ease, box-shadow 0.2s ease',
+        cursor: 'default',
+        height: '100%',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '16px',
+      }}
+      className="stat-card"
     >
-      {/* Top row: label + icon */}
-      <div className="flex items-start justify-between">
+      <style>{`
+        .stat-card:hover {
+          transform: translateY(-4px);
+          box-shadow: 0 8px 24px rgba(0,0,0,0.2) !important;
+        }
+      `}</style>
+
+
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
         <div>
-          <p className="text-[11px] font-semibold opacity-85 m-0 uppercase tracking-wider">
+          <p style={{ fontSize: '0.78rem', fontWeight: 500, opacity: 0.85, margin: 0, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
             {label}
           </p>
           {description && (
-            <p className="text-[10px] opacity-65 mt-0.5 max-w-[160px] leading-tight">
+            <p style={{ fontSize: '0.72rem', opacity: 0.65, margin: '2px 0 0', maxWidth: '160px' }}>
               {description}
             </p>
           )}
         </div>
         {icon && (
           <div
-            style={{ backgroundColor: iconBg }}
-            className="w-11 h-11 rounded-full flex items-center justify-center shrink-0"
+            style={{
+              width: 46,
+              height: 46,
+              borderRadius: '50%',
+              backgroundColor: iconBg,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0,
+            }}
           >
             <Icon source={icon} />
           </div>
@@ -48,7 +76,7 @@ export function StatCard({
 
       {/* Value */}
       <div>
-        <p className="text-4xl md:text-5xl font-extrabold m-0 leading-none">
+        <p style={{ fontSize: '2rem', fontWeight: 800, margin: 0, lineHeight: 1 }}>
           {value}
         </p>
       </div>
