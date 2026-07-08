@@ -44,9 +44,17 @@ shopify.webhooks.addHandlers({
     deliveryMethod: DeliveryMethod.Http,
     callbackUrl: "/api/webhooks/inventory-levels-update",
   },
+  PRODUCTS_CREATE: {
+    deliveryMethod: DeliveryMethod.Http,
+    callbackUrl: "/api/webhooks/products-create",
+  },
   PRODUCTS_UPDATE: {
     deliveryMethod: DeliveryMethod.Http,
     callbackUrl: "/api/webhooks/products-update",
+  },
+  PRODUCTS_DELETE: {
+    deliveryMethod: DeliveryMethod.Http,
+    callbackUrl: "/api/webhooks/products-delete",
   },
   APP_UNINSTALLED: {
     deliveryMethod: DeliveryMethod.Http,
