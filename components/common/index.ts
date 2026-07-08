@@ -16,3 +16,4 @@ export * from './Toast';
 export * from './ConfirmationDialog';
 export * from './BarChart';
 export * from './PageLoader';
+export * from './StatCard';

@@ -10,7 +10,7 @@ export async function GET(req: NextRequest) {
 
   try {
     const shopInfo = await fetchShopInfo(shop);
-    const products = await fetchProducts(shop, 5); // Fetch first 5 products for testing
+    const products = await fetchProducts(shop, 5);
 
     return NextResponse.json({
       success: true,

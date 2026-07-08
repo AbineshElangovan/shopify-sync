@@ -19,14 +19,12 @@ export default function SettingsPage() {
   useEffect(() => {
     async function loadData() {
       try {
-        // Fetch stores list
         const storesRes = await shopifyFetch('/api/stores?active=false');
         if (storesRes.ok) {
           const storesJson = await storesRes.json();
           setStores(storesJson.stores || []);
         }
 
-        // Fetch settings
         const settingsRes = await shopifyFetch('/api/settings');
         if (settingsRes.ok) {
           const settingsJson = await settingsRes.json();
@@ -97,7 +95,6 @@ export default function SettingsPage() {
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
       <BlockStack gap="800">
-        {/* Page Heading */}
         <div>
           <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: '#111827', margin: 0 }}>
             Settings
@@ -108,12 +105,11 @@ export default function SettingsPage() {
         </div>
 
         <Layout>
-          {/* Store Connection Status Card */}
           <Layout.Section>
             <BlockStack gap="500">
               <Table
-                title="🔌 Connected Store Channels"
-                headerColor="#4338ca"
+                title="Connected Store Channels"
+                headerColor="#2563eb"
                 columns={[
                   { title: 'Store Label', key: 'label', type: 'bold' },
                   { title: 'Shopify Domain', key: 'domain' },
@@ -137,12 +133,10 @@ export default function SettingsPage() {
               />
             </BlockStack>
           </Layout.Section>
-
-          {/* Sync Preferences & Parameters */}
           <Layout.Section variant="oneThird">
             <BlockStack gap="500">
               <Card>
-                <h2 className="text-lg font-bold mb-4">⚙️ Store Configurations</h2>
+                <h2 className="text-lg font-bold mb-4">Store Configurations</h2>
                 
                 <BlockStack gap="400">
                   <Checkbox
@@ -155,7 +149,6 @@ export default function SettingsPage() {
                     <ChoiceList
                       title="Low Stock Alert Threshold"
                       choices={[
-                        { label: '5 units', value: '5' },
                         { label: '10 units', value: '10' },
                         { label: '20 units', value: '20' },
                         { label: 'Custom Value', value: 'custom' },
@@ -189,32 +182,6 @@ export default function SettingsPage() {
                     </InlineStack>
                   </div>
                 </BlockStack>
-              </Card>
-
-              <Card>
-                <h2 className="text-lg font-bold mb-4">⚙️ Sync Rules</h2>
-                <div className="flex flex-col gap-4 text-sm text-gray-600">
-                  <div className="flex justify-between border-b pb-2">
-                    <span>Inventory Matching</span>
-                    <strong className="text-gray-900">By SKU</strong>
-                  </div>
-                  <div className="flex justify-between border-b pb-2">
-                    <span>Low Stock Alert Limit</span>
-                    <strong className="text-gray-900">
-                      {threshold === 'custom' ? customThreshold : threshold} units
-                    </strong>
-                  </div>
-                  <div className="flex justify-between border-b pb-2">
-                    <span>Auto-sync Webhooks</span>
-                    <strong className={autoSync ? "text-green-600 font-semibold" : "text-red-500 font-semibold"}>
-                      {autoSync ? "Enabled" : "Disabled"}
-                    </strong>
-                  </div>
-                  <div className="flex justify-between pb-2">
-                    <span>Bidirectional Sync</span>
-                    <strong className="text-green-600 font-semibold">Enabled</strong>
-                  </div>
-                </div>
               </Card>
             </BlockStack>
           </Layout.Section>

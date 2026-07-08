@@ -1,18 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db/prisma';
 
-/**
- * GET /api/stores
- *
- * Returns all registered stores with their product and sync statistics.
- * Used by the dashboard and settings pages to display connected stores.
- */
+import { hasValidShopifyAccessToken } from '@/services/shopify';
+
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = req.nextUrl;
-    const activeOnly = searchParams.get('active') !== 'false'; // default: only active stores
+    const activeOnly = searchParams.get('active') !== 'false';
 
     const stores = await prisma.store.findMany({
       where: activeOnly ? { isActive: true } : undefined,
@@ -32,14 +28,14 @@ export async function GET(req: NextRequest) {
       id: s.id,
       shopDomain: s.shopDomain,
       label: s.label,
-      isActive: s.isActive,
+      isActive: s.isActive && hasValidShopifyAccessToken(s.accessToken),
       scope: s.scope,
       installedAt: s.installedAt,
       updatedAt: s.updatedAt,
       productCount: s._count.productCaches,
       variantCount: s._count.variantMaps,
       syncCount: s._count.sourceLogs,
-      // Never expose accessToken in API responses
+
     }));
 
     return NextResponse.json({
@@ -52,13 +48,6 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }
-
-/**
- * DELETE /api/stores?shop=<domain>
- *
- * Marks a store as inactive and clears its product cache and variant maps.
- * Does NOT delete the store record itself (keeps audit history).
- */
 export async function DELETE(req: NextRequest) {
   try {
     const shop = req.nextUrl.searchParams.get('shop');

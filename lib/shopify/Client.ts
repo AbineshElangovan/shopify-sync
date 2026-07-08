@@ -26,6 +26,9 @@ export async function shopifyFetch(input: RequestInfo, init: RequestInit = {}) {
     token = await shopifyV4.idToken();
   } else if (app) {
     token = await getSessionToken(app);
+  } else if (process.env.NODE_ENV === "development") {
+    console.warn("[shopifyFetch] App Bridge not initialized in dev mode. Falling back to dev_fallback_token.");
+    token = "dev_fallback_token";
   } else {
     throw new Error("App Bridge not initialized");
   }

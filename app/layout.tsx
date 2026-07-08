@@ -7,6 +7,7 @@ import ShopifyProvider from '@/components/providers/AppBridgeProvider';
 import { Suspense } from 'react';
 import NavBar from './NavBar';
 import Script from 'next/script';
+import { prisma } from '@/lib/db/prisma';
 
 const inter = Inter({ subsets: ['latin'] });
 
@@ -28,7 +29,17 @@ const BUSINESS_HOURS = [
   { day: 'Sunday', hours: 'Holiday', closed: true },
 ];
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const activeStores = await prisma.store.findMany({ where: { isActive: true } });
+  const connectedCount = activeStores.filter(s => {
+    const token = s.accessToken;
+    if (!token) return false;
+    const normalized = token.trim();
+    if (!normalized) return false;
+    if (/mock|placeholder|your[_-]?token|seed/i.test(normalized)) return false;
+    return normalized.startsWith('shp');
+  }).length;
+
   return (
     <html lang="en">
       <body className={inter.className}>
@@ -140,7 +151,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                       Production
                     </span>
                     <span>v2.1.0</span>
-                    <span>Connected: <strong className="text-gray-300">2 Stores</strong></span>
+                    <span>Connected: <strong className="text-gray-300">{connectedCount} {connectedCount === 1 ? 'Store' : 'Stores'}</strong></span>
                   </div>
                 </div>
 

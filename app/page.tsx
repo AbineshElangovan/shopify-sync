@@ -125,7 +125,7 @@ export default function DashboardPage() {
           <Layout.Section>
             <Table
               title="Store Summary"
-              headerColor="#4338ca"
+              headerColor="#0f766e"
               columns={storeSummaryColumns}
               items={storeSummaryData}
               searchable={false}

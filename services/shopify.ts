@@ -1,4 +1,5 @@
 import { shopify } from "@/lib/shopify";
+import crypto from "crypto";
 import { prisma } from "@/lib/db/prisma";
 import { Session, GraphqlQueryError } from "@shopify/shopify-api";
 import { registerWebhooks } from "@/lib/shopify/webhooks";
@@ -386,8 +387,8 @@ export async function setInventoryQuantity(
   const client = await getAdminClient(shopDomain);
   try {
     const response = await client.request(`
-      mutation inventorySetQuantities($input: InventorySetQuantitiesInput!) {
-        inventorySetQuantities(input: $input) {
+      mutation inventorySetQuantities($input: InventorySetQuantitiesInput!, $idempotencyKey: String!) {
+        inventorySetQuantities(input: $input) @idempotent(key: $idempotencyKey) {
           inventoryAdjustmentGroup {
             createdAt
             reason
@@ -408,15 +409,16 @@ export async function setInventoryQuantity(
         input: {
           name: "available",
           reason: "correction",
-          ignoreCompareQuantity: true,
           quantities: [
             {
               inventoryItemId,
               locationId,
-              quantity
+              quantity,
+              changeFromQuantity: null
             }
           ]
-        }
+        },
+        idempotencyKey: crypto.randomUUID()
       }
     });
 

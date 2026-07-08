@@ -1,4 +1,5 @@
 import { getAdminClient } from './admin';
+import crypto from 'crypto';
 
 export async function setInventoryQuantity(
   shopDomain: string,
@@ -10,8 +11,8 @@ export async function setInventoryQuantity(
   
   try {
     const response = await client.request(`
-      mutation inventorySetQuantities($input: InventorySetQuantitiesInput!) {
-        inventorySetQuantities(input: $input) {
+      mutation inventorySetQuantities($input: InventorySetQuantitiesInput!, $idempotencyKey: String!) {
+        inventorySetQuantities(input: $input) @idempotent(key: $idempotencyKey) {
           inventoryAdjustmentGroup {
             createdAt
             reason
@@ -32,15 +33,16 @@ export async function setInventoryQuantity(
         input: {
           name: "available",
           reason: "correction",
-          ignoreCompareQuantity: true,
           quantities: [
             {
               inventoryItemId: inventoryItemId,
               locationId: locationId,
-              quantity: quantity
+              quantity: quantity,
+              changeFromQuantity: null
             }
           ]
-        }
+        },
+        idempotencyKey: crypto.randomUUID()
       }
     });
 

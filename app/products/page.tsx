@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { Table, ColumnConfig } from '@/components/common/Table';
 import { BlockStack } from '@shopify/polaris';
 import { shopifyFetch } from '@/lib/shopify/Client';
+import { DashboardCards } from '@/components/dashboard/DashboardCards';
 
 export default function ProductsPage() {
   const [data, setData] = useState<any>(null);
@@ -40,20 +41,20 @@ export default function ProductsPage() {
   const groupedProducts = data?.groupedProducts || {};
 
   const columns: ColumnConfig[] = [
-    { title: 'Image',        key: 'imageUrl',          type: 'image' },
-    { title: 'Product Name', key: 'title',             type: 'bold'  },
-    { title: 'SKU',          key: 'sku'                               },
-    { title: 'Store',        key: 'store'                             },
-    { title: 'Stock Qty',    key: 'inventoryQuantity', type: 'bold'  },
+    { title: 'Image', key: 'imageUrl', type: 'image' },
+    { title: 'Product Name', key: 'title', type: 'bold' },
+    { title: 'SKU', key: 'sku' },
+    { title: 'Store', key: 'store' },
+    { title: 'Stock Qty', key: 'inventoryQuantity', type: 'bold' },
     {
       title: 'Stock Level',
       key: 'stockLevel',
       type: 'badge',
       badgeRules: {
-        Healthy:       'success',
-        Low:           'warning',
-        Critical:      'critical',
-        'Out of Stock':'critical',
+        Healthy: 'success',
+        Low: 'warning',
+        Critical: 'critical',
+        'Out of Stock': 'critical',
       },
     },
     {
@@ -66,17 +67,9 @@ export default function ProductsPage() {
     { title: 'Updated Time', key: 'updatedTime' },
   ];
 
-  const STAT_CARDS = [
-    { label: 'Total Products',  value: stats.totalProducts,  color: '#6366f1' },
-    { label: 'Active Products', value: stats.activeProducts, color: '#16a34a' },
-    { label: 'Total Inventory', value: stats.totalInventory, color: '#0891b2' },
-    { label: 'Low / Critical',  value: stats.lowStock,       color: '#ea580c' },
-  ];
-
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
       <BlockStack gap="800">
-        {/* Page Heading */}
         <div>
           <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: '#111827', margin: 0 }}>
             Products
@@ -86,37 +79,14 @@ export default function ProductsPage() {
           </p>
         </div>
 
-        {/* Stat Cards */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 16 }}>
-          {STAT_CARDS.map(({ label, value, color }) => (
-            <div
-              key={label}
-              style={{
-                backgroundColor: '#fff',
-                border: '1px solid #e5e7eb',
-                borderRadius: 12,
-                padding: '20px 24px',
-                borderLeft: `4px solid ${color}`,
-                boxShadow: '0 1px 4px rgba(0,0,0,0.05)',
-              }}
-            >
-              <p style={{ margin: 0, fontSize: 12, color: '#6b7280', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                {label}
-              </p>
-              <p style={{ margin: '8px 0 0', fontSize: 28, fontWeight: 700, color }}>
-                {value.toLocaleString('en-US')}
-              </p>
-            </div>
-          ))}
-        </div>
-
-        {/* Products Table Grouped by Collection */}
-        {Object.keys(groupedProducts).length > 0 ? (
-          Object.entries(groupedProducts).map(([collectionName, items]) => (
+        <DashboardCards stats={{ ...stats, lastUpdated: 'Just now' }} />
+        {Object.keys(groupedProducts).length > 0 ? (() => {
+          const colors = ['#6366f1', '#0f766e', '#7c3aed', '#db2777', '#ea580c', '#0891b2'];
+          return Object.entries(groupedProducts).map(([collectionName, items], index) => (
             <Table
               key={collectionName}
               title={collectionName}
-              headerColor={collectionName === 'Uncategorized' ? '#475569' : '#6366f1'}
+              headerColor={collectionName === 'Uncategorized' ? '#475569' : colors[index % colors.length]}
               columns={columns}
               items={items as any[]}
               searchable
@@ -124,11 +94,11 @@ export default function ProductsPage() {
               filterable
               filterKey="stockLevel"
               filterOptions={[
-                { label: 'All Stock Levels', value: 'ALL'          },
-                { label: 'Healthy',          value: 'Healthy'      },
-                { label: 'Low',              value: 'Low'          },
-                { label: 'Critical',         value: 'Critical'     },
-                { label: 'Out of Stock',     value: 'Out of Stock' },
+                { label: 'All Stock Levels', value: 'ALL' },
+                { label: 'Healthy', value: 'Healthy' },
+                { label: 'Low', value: 'Low' },
+                { label: 'Critical', value: 'Critical' },
+                { label: 'Out of Stock', value: 'Out of Stock' },
               ]}
               emptyState={
                 <div style={{ padding: '40px', textAlign: 'center', color: '#6b7280' }}>
@@ -136,8 +106,8 @@ export default function ProductsPage() {
                 </div>
               }
             />
-          ))
-        ) : (
+          ));
+        })() : (
           <div style={{ backgroundColor: '#fff', padding: '60px', borderRadius: 12, border: '1px solid #e5e7eb', textAlign: 'center', color: '#6b7280' }}>
             No products or collections synced for this store yet.
           </div>
