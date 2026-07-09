@@ -44,6 +44,8 @@ export async function GET(req: NextRequest) {
         title: p.title,
         sku: p.sku || 'N/A',
         store: store.label || store.shopDomain,
+        price: p.price * 83,
+        priceText: `₹${(p.price * 83).toFixed(2)}`,
         inventoryQuantity: p.inventoryQuantity,
         stockLevel:
           p.inventoryQuantity === 0
@@ -83,6 +85,7 @@ export async function GET(req: NextRequest) {
         activeProducts,
         lowStock,
       },
+      lowStockThreshold: store.lowStockThreshold,
       groupedProducts,
     });
   } catch (err: any) {

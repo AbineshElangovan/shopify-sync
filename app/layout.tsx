@@ -42,11 +42,14 @@ export default async function RootLayout({ children }: { children: React.ReactNo
 
   return (
     <html lang="en">
-      <body className={inter.className}>
+      <head>
+        <meta name="shopify-api-key" content={process.env.NEXT_PUBLIC_SHOPIFY_API_KEY} />
         <Script
-          src="https://cdn.shopify.com/shopify-app-bridge/actions/app-bridge.js"
+          src="https://cdn.shopify.com/shopifycloud/app-bridge.js"
           strategy="beforeInteractive"
         />
+      </head>
+      <body className={inter.className}>
         <main className="min-h-screen bg-gray-50">
           <ShopifyProvider>
 

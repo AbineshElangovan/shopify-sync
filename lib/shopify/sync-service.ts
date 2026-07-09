@@ -3,6 +3,11 @@ import { createSyncLog } from './sync-log';
 import { setInventoryQuantity } from './inventory';
 import { shopify } from '@/lib/shopify';
 import { Session } from '@shopify/shopify-api';
+import {
+  GET_PRODUCTS_SYNC_QUERY,
+  GET_COLLECTIONS_QUERY,
+  GET_COLLECTION_PRODUCTS_QUERY,
+} from '@/services/shopify/graphql';
 
 export function hasValidShopifyAccessToken(token: string | null | undefined): boolean {
   if (!token) return false;
@@ -122,45 +127,7 @@ export async function syncStoreProducts(shopDomain: string) {
 
   const client = new shopify.clients.Graphql({ session });
 
-  const response = await client.request(`
-    query getProducts($first: Int!) {
-      products(first: $first) {
-        edges {
-          node {
-            id
-            title
-            handle
-            variants(first: 10) {
-              edges {
-                node {
-                  id
-                  title
-                  sku
-                  inventoryItem {
-                    id
-                    inventoryLevels(first: 5) {
-                      edges {
-                        node {
-                          quantities(names: ["available"]) {
-                            name
-                            quantity
-                          }
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-        pageInfo {
-          hasNextPage
-          endCursor
-        }
-      }
-    }
-  `, { variables: { first: 250 } });
+  const response = await client.request(GET_PRODUCTS_SYNC_QUERY, { variables: { first: 250 } });
 
   const products = response?.data?.products?.edges ?? [];
   console.log(`[SyncService] Fetched ${products.length} products to sync.`);
@@ -196,6 +163,7 @@ export async function syncStoreProducts(shopDomain: string) {
           title: `${product.title}${variant.title && variant.title !== 'Default Title' ? ` - ${variant.title}` : ''}`,
           imageUrl: null,
           inventoryQuantity,
+          price: parseFloat(variant.price || "0"),
         },
       });
 
@@ -219,19 +187,7 @@ export async function syncStoreProducts(shopDomain: string) {
   }
 
   // Fetch Collections
-  const collectionsResponse: any = await client.request(`
-    query getCollections($first: Int!) {
-      collections(first: $first) {
-        edges {
-          node {
-            id
-            title
-            handle
-          }
-        }
-      }
-    }
-  `, { variables: { first: 250 } });
+  const collectionsResponse: any = await client.request(GET_COLLECTIONS_QUERY, { variables: { first: 250 } });
 
   const collections = collectionsResponse?.data?.collections?.edges ?? [];
   console.log(`[SyncService] Fetched ${collections.length} collections for store ${shopDomain}`);
@@ -250,19 +206,7 @@ export async function syncStoreProducts(shopDomain: string) {
     });
 
     // Fetch Products for each Collection
-    const collectionProductsResponse: any = await client.request(`
-      query getCollectionProducts($id: ID!, $first: Int!) {
-        collection(id: $id) {
-          products(first: $first) {
-            edges {
-              node {
-                id
-              }
-            }
-          }
-        }
-      }
-    `, { variables: { id: colNode.id, first: 250 } });
+    const collectionProductsResponse: any = await client.request(GET_COLLECTION_PRODUCTS_QUERY, { variables: { id: colNode.id, first: 250 } });
 
     const colProducts = collectionProductsResponse?.data?.collection?.products?.edges ?? [];
     

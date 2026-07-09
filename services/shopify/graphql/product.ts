@@ -1,6 +1,3 @@
-// ============================================================
-// Product GraphQL Queries & Mutations
-// ============================================================
 
 /**
  * Fetches products with full variant, inventory, and collection data.
@@ -32,6 +29,7 @@ export const GET_PRODUCTS_QUERY = `
                 id
                 title
                 sku
+                price
                 inventoryItem {
                   id
                   inventoryLevels(first: 10) {
@@ -112,6 +110,7 @@ export const GET_PRODUCTS_SYNC_QUERY = `
                 id
                 title
                 sku
+                price
                 inventoryItem {
                   id
                   inventoryLevels(first: 5) {
@@ -227,6 +226,7 @@ export const GET_VARIANT_BY_SKU_QUERY = `
         node {
           id
           sku
+          price
           product {
             id
             title
@@ -283,6 +283,7 @@ export const PRODUCT_SET_MUTATION = `
               id
               title
               sku
+              price
               inventoryItem {
                 id
               }

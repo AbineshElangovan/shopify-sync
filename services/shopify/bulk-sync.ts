@@ -116,6 +116,7 @@ export async function syncStoreProducts(shopDomain: string) {
             imageUrl,
             inventoryQuantity,
             shopifyProductId: product.id,
+            price: parseFloat(variant.price || "0"),
           },
           create: {
             storeId: store.id,
@@ -125,6 +126,7 @@ export async function syncStoreProducts(shopDomain: string) {
             title: fullTitle,
             imageUrl,
             inventoryQuantity,
+            price: parseFloat(variant.price || "0"),
           },
         });
 
@@ -302,6 +304,7 @@ export async function syncStoreA(shopDomain: string) {
           imageUrl,
           inventoryQuantity: variantInventoryQuantity,
           shopifyProductId: product.id,
+          price: parseFloat(variant.price || "0"),
         },
         create: {
           storeId: store.id,
@@ -311,6 +314,7 @@ export async function syncStoreA(shopDomain: string) {
           title: fullTitle,
           imageUrl,
           inventoryQuantity: variantInventoryQuantity,
+          price: parseFloat(variant.price || "0"),
         },
       });
 

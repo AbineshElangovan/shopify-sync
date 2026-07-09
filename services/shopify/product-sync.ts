@@ -1,29 +1,56 @@
 import { prisma } from '@/lib/db/prisma';
 import { getAdminClient } from '@/lib/shopify/admin';
-import { createSyncLog } from '@/lib/shopify/sync-log';
-import {
-  PRODUCT_SET_MUTATION,
-  PRODUCT_DELETE_MUTATION,
-  PRODUCT_VARIANTS_DELETE_MUTATION,
-  GET_VARIANT_BY_SKU_QUERY,
-  GET_PRODUCT_BY_ID_QUERY,
-  LOCATIONS_QUERY,
-} from './graphql';
-
+import { PRODUCT_SET_MUTATION, PRODUCT_DELETE_MUTATION, PRODUCT_VARIANTS_DELETE_MUTATION, GET_VARIANT_BY_SKU_QUERY, GET_PRODUCT_BY_ID_QUERY, LOCATIONS_QUERY, } from './graphql';
 const globalShared: any = global;
 globalShared.syncLocks = globalShared.syncLocks || new Set<string>();
+
+function calculateAdjustedPrice(sourcePriceStr: string, sourceStore: any, targetStore: any): string {
+  const sourcePrice = parseFloat(sourcePriceStr || "0");
+  if (isNaN(sourcePrice)) return sourcePriceStr;
+
+  // Reverse source adjustment to get base price
+  let basePrice = sourcePrice;
+  if (sourceStore && sourceStore.isPriceAdjustmentEnabled) {
+    const value = sourceStore.priceAdjustmentValue || 0;
+    if (sourceStore.priceAdjustmentType === 'PERCENTAGE' && value !== -100) {
+      basePrice = sourcePrice / (1 + value / 100);
+    } else if (sourceStore.priceAdjustmentType === 'FIXED') {
+      basePrice = sourcePrice - value;
+    }
+  }
+
+  // Apply target adjustment on base price
+  if (targetStore && targetStore.isPriceAdjustmentEnabled) {
+    let adjusted = basePrice;
+    const value = targetStore.priceAdjustmentValue || 0;
+
+    if (targetStore.priceAdjustmentType === 'PERCENTAGE') {
+      adjusted = basePrice * (1 + value / 100);
+    } else if (targetStore.priceAdjustmentType === 'FIXED') {
+      adjusted = basePrice + value;
+    }
+
+    if (adjusted < 0) {
+      adjusted = 0;
+    }
+
+    return adjusted.toFixed(2);
+  }
+
+  return basePrice.toFixed(2);
+}
 
 export function acquireSyncLock(shop: string, id: string, identifier: string): boolean {
   const normalizedShop = shop.replace(/^https?:\/\//, '').trim();
   const cleanId = id.replace('gid://shopify/Product/', '').trim();
   const key = `${normalizedShop}:${cleanId}:${identifier}`;
-  
+
   if (globalShared.syncLocks.has(key)) {
-    return false; 
+    return false;
   }
   globalShared.syncLocks.add(key);
   console.log(`[SyncLock] Acquired lock for key: ${key}`);
-  
+
   setTimeout(() => {
     if (globalShared.syncLocks.has(key)) {
       globalShared.syncLocks.delete(key);
@@ -75,6 +102,7 @@ async function findTargetProductBySku(shopDomain: string, sku: string) {
           productId: node.product?.id,
           variantId: node.id,
           inventoryItemId: node.inventoryItem?.id,
+          price: node.price,
         };
       }
     }
@@ -129,6 +157,7 @@ export async function updateLocalProductCache(shopDomain: string, payload: any) 
           title: fullTitle,
           imageUrl: payload.images?.[0]?.src || null,
           shopifyProductId,
+          price: parseFloat(variant.price || "0"),
         },
         create: {
           storeId: store.id,
@@ -138,6 +167,7 @@ export async function updateLocalProductCache(shopDomain: string, payload: any) 
           title: fullTitle,
           imageUrl: payload.images?.[0]?.src || null,
           inventoryQuantity: variant.inventory_quantity ?? 0,
+          price: parseFloat(variant.price || "0"),
         },
       });
 
@@ -212,7 +242,7 @@ export async function processProductCreate(shopDomain: string, payload: any, web
       if (!targetStore.autoSyncEnabled) continue;
 
       const skus = variantsWithSkus.map((v: any) => v.sku.trim());
-      
+
       let existingMapping = await prisma.variantMap.findFirst({
         where: {
           storeId: targetStore.id,
@@ -226,7 +256,7 @@ export async function processProductCreate(shopDomain: string, payload: any, web
         if (found) {
           console.log(`[ProductSync:Create] Found existing product ${found.productId} on Shopify for ${targetStore.shopDomain}. Creating local mapping.`);
           const targetLocationId = await fetchDefaultLocation(targetStore.shopDomain);
-          
+
           existingMapping = await prisma.variantMap.create({
             data: {
               storeId: targetStore.id,
@@ -246,6 +276,7 @@ export async function processProductCreate(shopDomain: string, payload: any, web
               sku: skus[0],
               title: payload.title,
               inventoryQuantity: 0,
+              price: parseFloat(found.price || "0"),
             },
           });
         }
@@ -283,7 +314,7 @@ export async function processProductCreate(shopDomain: string, payload: any, web
       if (payload.variants && payload.variants.length > 0) {
         productInput.variants = payload.variants.map((v: any) => {
           const variantInput: any = {
-            price: v.price,
+            price: calculateAdjustedPrice(v.price, sourceStore, targetStore),
             sku: v.sku?.trim() || "",
           };
           const options: string[] = [];
@@ -315,7 +346,7 @@ export async function processProductCreate(shopDomain: string, payload: any, web
       try {
         const response: any = await client.request(PRODUCT_SET_MUTATION, { variables: { input: productInput } });
         const userErrors = response?.data?.productSet?.userErrors || [];
-        
+
         if (userErrors.length > 0) {
           throw new Error(userErrors.map((e: any) => `${e.field}: ${e.message}`).join(', '));
         }
@@ -341,6 +372,7 @@ export async function processProductCreate(shopDomain: string, payload: any, web
               sku,
               title: `${createdProduct.title}${variant.title && variant.title !== 'Default Title' ? ` - ${variant.title}` : ''}`,
               shopifyProductId: createdProduct.id,
+              price: parseFloat(variant.price || "0"),
             },
             create: {
               storeId: targetStore.id,
@@ -349,6 +381,7 @@ export async function processProductCreate(shopDomain: string, payload: any, web
               sku,
               title: `${createdProduct.title}${variant.title && variant.title !== 'Default Title' ? ` - ${variant.title}` : ''}`,
               inventoryQuantity: 0,
+              price: parseFloat(variant.price || "0"),
             },
           });
 
@@ -382,17 +415,6 @@ export async function processProductCreate(shopDomain: string, payload: any, web
         failureReason = err.message || 'Unknown error during creation';
         console.error(`[ProductSync:Create] Failed to create product in ${targetStore.shopDomain}:`, failureReason);
       }
-
-      await createSyncLog({
-        sku: skus[0] || "UNKNOWN",
-        sourceStoreId: sourceStore.id,
-        destinationStoreId: targetStore.id,
-        previousQuantity: 0,
-        updatedQuantity: 0,
-        status: syncStatus,
-        failureReason: failureReason ? `CREATE_FAILED | ${payload.title} | ${failureReason}` : `CREATE | ${payload.title}`,
-        webhookEventId: webhookId,
-      });
     }
 
   } catch (error: any) {
@@ -425,7 +447,7 @@ export async function processProductUpdate(shopDomain: string, payload: any, web
       if (!targetStore.autoSyncEnabled) continue;
 
       const skus = variantsWithSkus.map((v: any) => v.sku.trim());
-      
+
       let matchingVariantMap = await prisma.variantMap.findFirst({
         where: {
           storeId: targetStore.id,
@@ -456,6 +478,7 @@ export async function processProductUpdate(shopDomain: string, payload: any, web
               sku: skus[0],
               title: payload.title,
               inventoryQuantity: 0,
+              price: parseFloat(found.price || "0"),
             },
           });
         }
@@ -537,7 +560,7 @@ export async function processProductUpdate(shopDomain: string, payload: any, web
         const matchingTargetVar = targetVariants.find((tv: any) => tv.sku?.trim().toLowerCase() === sku.toLowerCase());
 
         const variantInput: any = {
-          price: sourceVar.price,
+          price: calculateAdjustedPrice(sourceVar.price, sourceStore, targetStore),
           sku: sku,
         };
 
@@ -620,7 +643,7 @@ export async function processProductUpdate(shopDomain: string, payload: any, web
       console.log(`- Type: merged="${mergedType}" vs target="${targetProduct.productType || ""}" (Match: ${mergedType === (targetProduct.productType || "")})`);
       console.log(`- Status: merged="${mergedStatus}" vs target="${targetProduct.status?.toUpperCase() || "ACTIVE"}" (Match: ${mergedStatus === (targetProduct.status?.toUpperCase() || "ACTIVE")})`);
 
-      let hasProductChanges = 
+      let hasProductChanges =
         mergedTitle !== targetProduct.title ||
         mergedDescription !== (targetProduct.descriptionHtml || "") ||
         mergedVendor !== (targetProduct.vendor || "") ||
@@ -689,6 +712,7 @@ export async function processProductUpdate(shopDomain: string, payload: any, web
             update: {
               sku,
               title: `${updatedProduct.title}${variant.title && variant.title !== 'Default Title' ? ` - ${variant.title}` : ''}`,
+              price: parseFloat(variant.price || "0"),
             },
             create: {
               storeId: targetStore.id,
@@ -697,6 +721,7 @@ export async function processProductUpdate(shopDomain: string, payload: any, web
               sku,
               title: `${updatedProduct.title}${variant.title && variant.title !== 'Default Title' ? ` - ${variant.title}` : ''}`,
               inventoryQuantity: 0,
+              price: parseFloat(variant.price || "0"),
             },
           });
 
@@ -726,20 +751,9 @@ export async function processProductUpdate(shopDomain: string, payload: any, web
         syncStatus = 'FAILED';
         failureReason = err.message || 'Unknown error during update';
         console.error(`[ProductSync:Update] Failed to update product in ${targetStore.shopDomain}:`, failureReason);
-        
+
         releaseSyncLock(targetStore.shopDomain, targetProductId, mergedTitle);
       }
-
-      await createSyncLog({
-        sku: skus[0] || "UNKNOWN",
-        sourceStoreId: sourceStore.id,
-        destinationStoreId: targetStore.id,
-        previousQuantity: 0,
-        updatedQuantity: 0,
-        status: syncStatus,
-        failureReason: failureReason ? `UPDATE_FAILED | ${payload.title} | ${failureReason}` : `UPDATE | ${payload.title}`,
-        webhookEventId: webhookId,
-      });
     }
 
   } catch (error: any) {
@@ -849,20 +863,9 @@ export async function processProductDelete(shopDomain: string, payload: any, web
         syncStatus = 'FAILED';
         failureReason = err.message || 'Unknown error during deletion';
         console.error(`[ProductSync:Delete] Failed to delete product in ${targetStore.shopDomain}:`, failureReason);
-        
+
         releaseSyncLock(targetStore.shopDomain, targetProductId, "DELETE");
       }
-
-      await createSyncLog({
-        sku: skus[0] || "UNKNOWN",
-        sourceStoreId: sourceStore.id,
-        destinationStoreId: targetStore.id,
-        previousQuantity: 0,
-        updatedQuantity: 0,
-        status: syncStatus,
-        failureReason: failureReason ? `DELETE_FAILED | ${payload.id} | ${failureReason}` : `DELETE | ${payload.id}`,
-        webhookEventId: webhookId,
-      });
     }
 
     await prisma.variantMap.deleteMany({
@@ -882,5 +885,160 @@ export async function processProductDelete(shopDomain: string, payload: any, web
   } catch (error: any) {
     console.error(`[ProductSync:Delete] Fatal error:`, error.message);
   }
+}
+
+export async function applyPriceAdjustmentToStore(storeId: string) {
+  console.log(`[PriceAdjustment] Starting bulk price adjustment for store ${storeId}`);
+
+  const targetStore = await prisma.store.findUnique({
+    where: { id: storeId }
+  });
+
+  if (!targetStore || !targetStore.isActive) {
+    console.error(`[PriceAdjustment] Store ${storeId} not found or inactive.`);
+    return;
+  }
+
+  // Find the other active store to treat as the source store
+  const sourceStore = await prisma.store.findFirst({
+    where: {
+      id: { not: storeId },
+      isActive: true
+    }
+  });
+
+  if (!sourceStore) {
+    console.error(`[PriceAdjustment] Source store not found for target ${targetStore.shopDomain}`);
+    return;
+  }
+
+  console.log(`[PriceAdjustment] Target store: ${targetStore.shopDomain}, Source store: ${sourceStore.shopDomain}`);
+
+  // Get all variant maps for this target store
+  const variantMaps = await prisma.variantMap.findMany({
+    where: { storeId }
+  });
+
+  console.log(`[PriceAdjustment] Found ${variantMaps.length} mapped variants to process.`);
+
+  const client = await getAdminClient(targetStore.shopDomain);
+
+  // Group variant maps by shopifyProductId to perform batch updates per product
+  const mapsByProduct: { [productId: string]: typeof variantMaps } = {};
+  variantMaps.forEach(map => {
+    if (map.shopifyProductId) {
+      if (!mapsByProduct[map.shopifyProductId]) {
+        mapsByProduct[map.shopifyProductId] = [];
+      }
+      mapsByProduct[map.shopifyProductId].push(map);
+    }
+  });
+
+  for (const [productId, maps] of Object.entries(mapsByProduct)) {
+    const variantsUpdateInput: any[] = [];
+    const cacheUpdates: { variantId: string; price: number }[] = [];
+
+    for (const map of maps) {
+      if (!map.sku) continue;
+
+      // Find the corresponding cached product in the source store
+      const sourceCache = await prisma.productCache.findFirst({
+        where: {
+          storeId: sourceStore.id,
+          sku: map.sku
+        }
+      });
+
+      if (!sourceCache) {
+        console.log(`[PriceAdjustment] SKU ${map.sku} not found in source store cache. Skipping.`);
+        continue;
+      }
+
+      // Calculate the true base price by reversing the source store's adjustment
+      const sourcePrice = sourceCache.price;
+      let basePrice = sourcePrice;
+      if (sourceStore.isPriceAdjustmentEnabled) {
+        const sourceVal = sourceStore.priceAdjustmentValue || 0;
+        if (sourceStore.priceAdjustmentType === 'PERCENTAGE' && sourceVal !== -100) {
+          basePrice = sourcePrice / (1 + sourceVal / 100);
+        } else if (sourceStore.priceAdjustmentType === 'FIXED') {
+          basePrice = sourcePrice - sourceVal;
+        }
+      }
+
+      // Calculate the new target price based on the true base price
+      let newPrice = basePrice;
+      if (targetStore.isPriceAdjustmentEnabled) {
+        const targetVal = targetStore.priceAdjustmentValue || 0;
+        if (targetStore.priceAdjustmentType === 'PERCENTAGE') {
+          newPrice = basePrice * (1 + targetVal / 100);
+        } else if (targetStore.priceAdjustmentType === 'FIXED') {
+          newPrice = basePrice + targetVal;
+        }
+        if (newPrice < 0) newPrice = 0;
+      }
+
+      variantsUpdateInput.push({
+        id: map.shopifyVariantId,
+        price: newPrice.toFixed(2)
+      });
+
+      cacheUpdates.push({
+        variantId: map.shopifyVariantId,
+        price: newPrice
+      });
+    }
+
+    if (variantsUpdateInput.length === 0) continue;
+
+    console.log(`[PriceAdjustment] Updating ${variantsUpdateInput.length} variants for product ${productId} in Shopify...`);
+
+    try {
+      // Use Shopify's productVariantsBulkUpdate mutation to update variant prices
+      const response: any = await client.request(`
+        mutation productVariantsBulkUpdate($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {
+          productVariantsBulkUpdate(productId: $productId, variants: $variants) {
+            productVariants {
+              id
+              price
+            }
+            userErrors {
+              field
+              message
+            }
+          }
+        }
+      `, {
+        variables: {
+          productId,
+          variants: variantsUpdateInput
+        }
+      });
+
+      const userErrors = response?.data?.productVariantsBulkUpdate?.userErrors || [];
+      if (userErrors.length > 0) {
+        console.error(`[PriceAdjustment] Shopify returned errors for product ${productId}:`, userErrors.map((e: any) => e.message).join(', '));
+      }
+
+      // Update local productCache database records
+      for (const update of cacheUpdates) {
+        await prisma.productCache.updateMany({
+          where: {
+            storeId,
+            shopifyVariantId: update.variantId
+          },
+          data: {
+            price: update.price
+          }
+        });
+      }
+
+      console.log(`[PriceAdjustment] Successfully updated prices for product ${productId} on Shopify and local cache.`);
+    } catch (err: any) {
+      console.error(`[PriceAdjustment] Failed to update variants for product ${productId}:`, err.message);
+    }
+  }
+
+  console.log(`[PriceAdjustment] Bulk price adjustment completed for store ${storeId}`);
 }
 

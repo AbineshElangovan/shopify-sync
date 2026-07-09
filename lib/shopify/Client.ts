@@ -33,7 +33,20 @@ export async function shopifyFetch(input: RequestInfo, init: RequestInit = {}) {
     throw new Error("App Bridge not initialized");
   }
 
-  return fetch(input, {
+  let requestInput = input;
+  if (typeof window !== "undefined" && window.location) {
+    const windowParams = new URLSearchParams(window.location.search);
+    const shop = windowParams.get("shop");
+    if (shop && typeof requestInput === "string" && requestInput.startsWith("/")) {
+      const targetUrl = new URL(requestInput, window.location.origin);
+      if (!targetUrl.searchParams.has("shop")) {
+        targetUrl.searchParams.set("shop", shop);
+        requestInput = targetUrl.pathname + targetUrl.search;
+      }
+    }
+  }
+
+  return fetch(requestInput, {
     ...init,
     headers: {
       ...(init.headers || {}),

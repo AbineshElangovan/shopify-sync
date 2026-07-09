@@ -1,5 +1,6 @@
 import { getAdminClient } from './admin';
 import crypto from 'crypto';
+import { INVENTORY_SET_MUTATION, GET_INVENTORY_ITEM_QUERY } from '@/services/shopify/graphql';
 
 export async function setInventoryQuantity(
   shopDomain: string,
@@ -10,25 +11,7 @@ export async function setInventoryQuantity(
   const client = await getAdminClient(shopDomain);
   
   try {
-    const response = await client.request(`
-      mutation inventorySetQuantities($input: InventorySetQuantitiesInput!, $idempotencyKey: String!) {
-        inventorySetQuantities(input: $input) @idempotent(key: $idempotencyKey) {
-          inventoryAdjustmentGroup {
-            createdAt
-            reason
-            changes {
-              name
-              delta
-              quantityAfterChange
-            }
-          }
-          userErrors {
-            field
-            message
-          }
-        }
-      }
-    `, {
+    const response = await client.request(INVENTORY_SET_MUTATION, {
       variables: {
         input: {
           name: "available",
@@ -62,29 +45,7 @@ export async function getInventoryItem(shopDomain: string, inventoryItemId: stri
   const client = await getAdminClient(shopDomain);
 
   try {
-    const response = await client.request(`
-      query getInventoryItem($id: ID!) {
-        inventoryItem(id: $id) {
-          id
-          sku
-          inventoryLevels(first: 5) {
-            edges {
-              node {
-                id
-                quantities(names: ["available"]) {
-                  name
-                  quantity
-                }
-                location {
-                  id
-                  name
-                }
-              }
-            }
-          }
-        }
-      }
-    `, { variables: { id: inventoryItemId } });
+    const response = await client.request(GET_INVENTORY_ITEM_QUERY, { variables: { id: inventoryItemId } });
 
     return response.data?.inventoryItem;
   } catch (error) {

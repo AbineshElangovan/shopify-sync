@@ -15,9 +15,12 @@ model Store {
   label             String?
   isActive          Boolean  @default(true)
   lowStockThreshold Int      @default(15)
-  autoSyncEnabled   Boolean  @default(true)
-  installedAt       DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  autoSyncEnabled          Boolean  @default(true)
+  priceAdjustmentValue     Float    @default(0.0)
+  priceAdjustmentType      String   @default("PERCENTAGE") // "PERCENTAGE" or "FIXED"
+  isPriceAdjustmentEnabled Boolean  @default(false)
+  installedAt              DateTime @default(now())
+  updatedAt                DateTime @updatedAt
 
   variantMaps  VariantMap[]
   productCaches ProductCache[]
@@ -74,6 +77,7 @@ model ProductCache {
   sku               String?
   title             String
   imageUrl          String?
+  price             Float    @default(0.0)
   inventoryQuantity Int      @default(0)
   updatedAt         DateTime @updatedAt
 

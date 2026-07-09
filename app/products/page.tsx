@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Table, ColumnConfig } from '@/components/common/Table';
 import { BlockStack } from '@shopify/polaris';
 import { shopifyFetch } from '@/lib/shopify/Client';
@@ -10,6 +10,19 @@ export default function ProductsPage() {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+
+  const groupedProducts = data?.groupedProducts || {};
+
+  const allProducts = useMemo(() => {
+    if (!groupedProducts) return [];
+    const flatMap = new Map<string, any>();
+    Object.values(groupedProducts).forEach((items: any) => {
+      items.forEach((item: any) => {
+        flatMap.set(item.id, item);
+      });
+    });
+    return Array.from(flatMap.values());
+  }, [groupedProducts]);
 
   useEffect(() => {
     async function loadProducts() {
@@ -39,7 +52,6 @@ export default function ProductsPage() {
   }
 
   const stats = data?.stats || { totalProducts: 0, activeProducts: 0, totalInventory: 0, lowStock: 0 };
-  const groupedProducts = data?.groupedProducts || {};
 
   const filterProducts = (products: any[]) => {
     return products.filter((p) => {
@@ -56,6 +68,7 @@ export default function ProductsPage() {
     { title: 'Product Name', key: 'title', type: 'bold' },
     { title: 'SKU', key: 'sku' },
     { title: 'Store', key: 'store' },
+    { title: 'Price', key: 'priceText', type: 'bold' },
     { title: 'Stock Qty', key: 'inventoryQuantity', type: 'bold' },
     {
       title: 'Stock Level',
@@ -108,8 +121,31 @@ export default function ProductsPage() {
           </div>
         </div>
 
-        <DashboardCards stats={{ ...stats, lastUpdated: 'Just now' }} />
-        {Object.keys(groupedProducts).length > 0 ? (() => {
+        <DashboardCards stats={{ ...stats, lastUpdated: 'Just now' }} lowStockThreshold={data?.lowStockThreshold ?? 15} />
+        {searchQuery.trim() !== '' ? (
+          <Table
+            key="search-results"
+            title="Search Results"
+            headerColor="#6366f1"
+            columns={columns}
+            items={filterProducts(allProducts)}
+            searchable={false}
+            filterable
+            filterKey="stockLevel"
+            filterOptions={[
+              { label: 'All Stock Levels', value: 'ALL' },
+              { label: 'Healthy', value: 'Healthy' },
+              { label: 'Low', value: 'Low' },
+              { label: 'Critical', value: 'Critical' },
+              { label: 'Out of Stock', value: 'Out of Stock' },
+            ]}
+            emptyState={
+              <div style={{ padding: '40px', textAlign: 'center', color: '#6b7280' }}>
+                No products found matching your search.
+              </div>
+            }
+          />
+        ) : Object.keys(groupedProducts).length > 0 ? (() => {
           const colors = ['#6366f1', '#0f766e', '#7c3aed', '#db2777', '#ea580c', '#0891b2'];
           return Object.entries(groupedProducts).map(([collectionName, items], index) => {
             const filteredItems = filterProducts(items as any[]);
