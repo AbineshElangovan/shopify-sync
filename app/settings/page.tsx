@@ -90,8 +90,7 @@ export default function SettingsPage() {
     label: s.label || s.shopDomain,
     status: s.isActive ? 'CONNECTED' : 'DISCONNECTED',
     installedAt: new Date(s.installedAt).toLocaleDateString(),
-  }));
-
+  }))
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
       <BlockStack gap="800">

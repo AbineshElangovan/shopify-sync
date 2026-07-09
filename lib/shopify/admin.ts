@@ -1,6 +1,12 @@
 import { shopify } from "@/lib/shopify";
 import { prisma } from "@/lib/db/prisma";
 import { Session, GraphqlQueryError } from "@shopify/shopify-api";
+import {
+  SHOP_INFO_QUERY,
+  GET_PRODUCTS_BASIC_QUERY,
+  GET_PRODUCT_VARIANTS_QUERY,
+  GET_INVENTORY_LEVELS_QUERY,
+} from "@/services/shopify/graphql";
 
 export async function getAdminClient(shopDomain: string) {
   console.log("[AdminClient] Initializing getAdminClient for shop:", shopDomain);
@@ -59,16 +65,7 @@ export async function fetchShopInfo(shopDomain: string) {
   const client = await getAdminClient(shopDomain);
 
   try {
-    const response = await client.request(`
-      query {
-        shop {
-          id
-          name
-          email
-          myshopifyDomain
-        }
-      }
-    `);
+    const response = await client.request(SHOP_INFO_QUERY);
     
     return response.data?.shop;
   } catch (error) {
@@ -80,34 +77,7 @@ export async function fetchProducts(shopDomain: string, first = 10) {
   const client = await getAdminClient(shopDomain);
 
   try {
-    const response = await client.request(`
-      query getProducts($first: Int!) {
-        products(first: $first) {
-          edges {
-            node {
-              id
-              title
-              handle
-              updatedAt
-              variants(first: 5) {
-                edges {
-                  node {
-                    id
-                    title
-                    sku
-                    price
-                  }
-                }
-              }
-            }
-          }
-          pageInfo {
-            hasNextPage
-            endCursor
-          }
-        }
-      }
-    `, { variables: { first } });
+    const response = await client.request(GET_PRODUCTS_BASIC_QUERY, { variables: { first } });
 
     return response.data?.products;
   } catch (error) {
@@ -119,28 +89,7 @@ export async function fetchProductVariants(shopDomain: string, productId: string
   const client = await getAdminClient(shopDomain);
 
   try {
-    const response = await client.request(`
-      query getVariants($id: ID!, $first: Int!) {
-        product(id: $id) {
-          variants(first: $first) {
-            edges {
-              node {
-                id
-                title
-                sku
-                inventoryItem {
-                  id
-                }
-              }
-            }
-            pageInfo {
-              hasNextPage
-              endCursor
-            }
-          }
-        }
-      }
-    `, { variables: { id: productId, first } });
+    const response = await client.request(GET_PRODUCT_VARIANTS_QUERY, { variables: { id: productId, first } });
 
     return response.data?.product?.variants;
   } catch (error) {
@@ -152,27 +101,7 @@ export async function fetchInventoryLevels(shopDomain: string, inventoryItemId: 
   const client = await getAdminClient(shopDomain);
 
   try {
-    const response = await client.request(`
-      query getInventory($id: ID!) {
-        inventoryItem(id: $id) {
-          inventoryLevels(first: 10) {
-            edges {
-              node {
-                id
-                quantities(names: ["available"]) {
-                  name
-                  quantity
-                }
-                location {
-                  id
-                  name
-                }
-              }
-            }
-          }
-        }
-      }
-    `, { variables: { id: inventoryItemId } });
+    const response = await client.request(GET_INVENTORY_LEVELS_QUERY, { variables: { id: inventoryItemId } });
 
     return response.data?.inventoryItem?.inventoryLevels;
   } catch (error) {

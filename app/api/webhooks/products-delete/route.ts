@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyWebhook } from "@/lib/shopify/webhooks";
 import { prisma } from "@/lib/db/prisma";
-import { processProductDelete } from "@/services/product-sync";
+import { processProductDelete, hasSyncLock, releaseSyncLock } from "@/services/product-sync";
 
 export async function POST(req: NextRequest) {
   try {
@@ -24,6 +24,14 @@ export async function POST(req: NextRequest) {
 
     const payload = JSON.parse(rawBody);
     console.log(`[Webhook:products/delete] shop=${shop} productId=${payload?.id}`);
+
+    // Loop prevention: check if this is an internally triggered sync deletion
+    const productGid = `gid://shopify/Product/${payload.id}`;
+    if (hasSyncLock(shop, productGid, "DELETE")) {
+      console.log(`[Webhook:products/delete] Ignored internally triggered deletion to prevent loop for ${shop} (Product ID: ${payload.id})`);
+      releaseSyncLock(shop, productGid, "DELETE");
+      return new NextResponse("Ignored sync loop", { status: 200 });
+    }
 
     // Replicate deletion to target stores
     processProductDelete(shop, payload, webhookId).then(() => {

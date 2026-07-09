@@ -4,7 +4,7 @@ import { Session } from "@shopify/shopify-api";
 import { shopify } from "@/lib/shopify";
 import { ShopifyGraphQLClient } from "@/lib/shopify/GraphQLClient";
 import { hasValidShopifyAccessToken } from "./utils";
-import { GET_PRODUCTS_QUERY } from "./graphql-queries";
+import { GET_PRODUCTS_QUERY, GET_PRODUCTS_WITH_INVENTORY_QUERY, SHOP_INFO_QUERY } from "./graphql";
 
 export async function syncStoreProducts(shopDomain: string) {
   console.log("[SyncService] Starting sync for shop:", shopDomain);
@@ -222,16 +222,7 @@ export async function syncStoreA(shopDomain: string) {
 
   const client = new ShopifyGraphQLClient(normalizedShop);
 
-  const shopQuery = `
-    query {
-      shop {
-        id
-        name
-        email
-        myshopifyDomain
-      }
-    }
-  `;
+  const shopQuery = SHOP_INFO_QUERY;
   const shopResult = await client.request<{ data: { shop: any } }>(shopQuery);
   const shopInfo = shopResult.data?.shop;
 
@@ -256,48 +247,7 @@ export async function syncStoreA(shopDomain: string) {
     },
   });
 
-  const productsQuery = `
-    query getProducts($first: Int!) {
-      products(first: $first) {
-        edges {
-          node {
-            id
-            title
-            handle
-            featuredImage {
-              url
-            }
-            variants(first: 50) {
-              edges {
-                node {
-                  id
-                  title
-                  sku
-                  price
-                  inventoryItem {
-                    id
-                    inventoryLevels(first: 10) {
-                      edges {
-                        node {
-                          quantities(names: ["available"]) {
-                            name
-                            quantity
-                          }
-                          location {
-                            id
-                          }
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-  `;
+  const productsQuery = GET_PRODUCTS_WITH_INVENTORY_QUERY;
 
   const productsResult = await client.request<{ data: { products: { edges: any[] } } }>(
     productsQuery,

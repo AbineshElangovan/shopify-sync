@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyWebhook } from "@/lib/shopify/webhooks";
 import { prisma } from "@/lib/db/prisma";
-import { syncStoreProducts } from "@/services/shopify";
-import { processProductUpdate, hasSyncLock, releaseSyncLock } from "@/services/product-sync";
+import { processProductUpdate, hasSyncLock, releaseSyncLock, updateLocalProductCache } from "@/services/product-sync";
 
 export async function POST(req: NextRequest) {
   try {
@@ -34,8 +33,8 @@ export async function POST(req: NextRequest) {
       return new NextResponse("Ignored sync loop", { status: 200 });
     }
 
-    // First update the local database cache for this store
-    syncStoreProducts(shop).then(() => {
+    // First update the local database cache for this store (single product)
+    updateLocalProductCache(shop, payload).then(() => {
       // Replicate the updates to all other connected stores
       return processProductUpdate(shop, payload, webhookId);
     }).then(() => {
