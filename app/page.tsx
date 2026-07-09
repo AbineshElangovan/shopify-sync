@@ -39,6 +39,7 @@ export default function DashboardPage() {
   }
 
   const stats = data?.stats || { totalProducts: 0, totalInventory: 0, lowStock: 0, activeProducts: 0, lastUpdated: 'Never' };
+  const lowStockThreshold = data?.lowStockThreshold ?? 10;
   const storeSummaryData = (data?.stores || []).map((store: any) => ({
     id: store.id,
     storeName: store.label || store.shopDomain,
@@ -112,7 +113,7 @@ export default function DashboardPage() {
           </p>
         </div>
 
-        <DashboardCards stats={stats} />
+        <DashboardCards stats={stats} lowStockThreshold={lowStockThreshold} />
 
         <DashboardCharts chartData={{ combinedData: data?.stores ? data.stores.map((s: any) => ({
           name: s.label || s.shopDomain,

@@ -68,6 +68,7 @@ export async function GET(req: NextRequest) {
       syncStats,
       lowStockProducts,
       recentlyAddedProducts,
+      lowStockThreshold: store.lowStockThreshold,
     });
   } catch (error: any) {
     console.error('[Dashboard API] Error:', error);

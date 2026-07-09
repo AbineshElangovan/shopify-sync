@@ -1,20 +1,8 @@
 'use client';
 import React from 'react';
-import {
-  BarChart as RechartsBarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
-  PieChart as RechartsPieChart,
-  Pie,
-  Cell,
-} from 'recharts';
+import { BarChart as RechartsBarChart, Bar, LineChart as RechartsLineChart, Line, AreaChart as RechartsAreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart as RechartsPieChart, Pie, Cell, } from 'recharts';
 
-/* ── Shared card shell ── */
+
 function ChartCard({ title, subtitle, children }: { title: string; subtitle?: string; children: React.ReactNode }) {
   return (
     <div style={{ backgroundColor: '#fff', borderRadius: 12, border: '1px solid #e5e7eb', boxShadow: '0 2px 8px rgba(0,0,0,0.07)', overflow: 'hidden' }}>
@@ -27,7 +15,6 @@ function ChartCard({ title, subtitle, children }: { title: string; subtitle?: st
   );
 }
 
-/* ── No data placeholder ── */
 function NoData({ message = 'No data available yet' }: { message?: string }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: 220, gap: 12, color: '#9ca3af' }}>
@@ -43,32 +30,58 @@ function NoData({ message = 'No data available yet' }: { message?: string }) {
   );
 }
 
-/* ── Bar Chart ── */
+
+export function formatYTick(value: number): string {
+  if (value >= 10_00_000) return `${(value / 10_00_000).toFixed(1)}Cr`;
+  if (value >= 1_00_000) return `${(value / 1_00_000).toFixed(1)}L`;
+  if (value >= 1_000) return `${(value / 1_000).toFixed(1)}K`;
+  return String(value);
+}
+
+const tooltipStyle = {
+  borderRadius: 8,
+  border: '1px solid #e5e7eb',
+  boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+  fontSize: 13,
+};
+
+
+export interface SeriesConfig {
+  key: string;
+  color: string;
+  name: string;
+}
+
 export interface BarChartProps {
   title: string;
   subtitle?: string;
   data: any[];
   xKey: string;
-  bars: { key: string; color: string; name: string }[];
+  bars: SeriesConfig[];
+
+  yTickFormatter?: (v: number) => string;
+  yWidth?: number;
+  height?: number;
 }
 
-export function BarChart({ title, subtitle, data, xKey, bars }: BarChartProps) {
+export function BarChart({
+  title, subtitle, data, xKey, bars,
+  yTickFormatter = formatYTick, yWidth = 70, height = 280,
+}: BarChartProps) {
   const hasData = data && data.length > 0;
-
   return (
     <ChartCard title={title} subtitle={subtitle}>
-      {!hasData ? (
-        <NoData />
-      ) : (
-        <div style={{ width: '100%', height: 280 }}>
+      {!hasData ? <NoData /> : (
+        <div style={{ width: '100%', height }}>
           <ResponsiveContainer width="100%" height="100%">
-            <RechartsBarChart data={data} margin={{ top: 10, right: 20, left: 0, bottom: 5 }}>
+            <RechartsBarChart data={data} margin={{ top: 10, right: 20, left: 10, bottom: 5 }}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
               <XAxis dataKey={xKey} axisLine={false} tickLine={false} tick={{ fill: '#6b7280', fontSize: 12 }} />
-              <YAxis axisLine={false} tickLine={false} tick={{ fill: '#6b7280', fontSize: 12 }} width={50} />
+              <YAxis axisLine={false} tickLine={false} tick={{ fill: '#6b7280', fontSize: 12 }} width={yWidth} tickFormatter={yTickFormatter} />
               <Tooltip
                 cursor={{ fill: 'rgba(0,0,0,0.04)' }}
-                contentStyle={{ borderRadius: 8, border: '1px solid #e5e7eb', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', fontSize: 13 }}
+                contentStyle={tooltipStyle}
+                formatter={(value: any) => [Number(value).toLocaleString('en-IN'), '']}
               />
               <Legend iconType="circle" iconSize={8} wrapperStyle={{ paddingTop: 16, fontSize: 13 }} />
               {bars.map((bar) => (
@@ -82,18 +95,128 @@ export function BarChart({ title, subtitle, data, xKey, bars }: BarChartProps) {
   );
 }
 
-/* ── Pie / Donut Chart ── */
+export interface LineChartProps {
+  title: string;
+  subtitle?: string;
+  data: any[];
+  xKey: string;
+  lines: SeriesConfig[];
+  yTickFormatter?: (v: number) => string;
+  yWidth?: number;
+  height?: number;
+}
+
+export function LineChart({
+  title, subtitle, data, xKey, lines,
+  yTickFormatter = formatYTick, yWidth = 70, height = 280,
+}: LineChartProps) {
+  const hasData = data && data.length > 0;
+  return (
+    <ChartCard title={title} subtitle={subtitle}>
+      {!hasData ? <NoData /> : (
+        <div style={{ width: '100%', height }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <RechartsLineChart data={data} margin={{ top: 10, right: 20, left: 10, bottom: 5 }}>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+              <XAxis dataKey={xKey} axisLine={false} tickLine={false} tick={{ fill: '#6b7280', fontSize: 12 }} />
+              <YAxis axisLine={false} tickLine={false} tick={{ fill: '#6b7280', fontSize: 12 }} width={yWidth} tickFormatter={yTickFormatter} />
+              <Tooltip
+                contentStyle={tooltipStyle}
+                formatter={(value: any) => [Number(value).toLocaleString('en-IN'), '']}
+              />
+              <Legend iconType="circle" iconSize={8} wrapperStyle={{ paddingTop: 16, fontSize: 13 }} />
+              {lines.map((line) => (
+                <Line
+                  key={line.key}
+                  dataKey={line.key}
+                  name={line.name}
+                  stroke={line.color}
+                  strokeWidth={2.5}
+                  dot={{ r: 4, fill: line.color, strokeWidth: 0 }}
+                  activeDot={{ r: 6 }}
+                />
+              ))}
+            </RechartsLineChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+    </ChartCard>
+  );
+}
+
+export interface AreaChartProps {
+  title: string;
+  subtitle?: string;
+  data: any[];
+  xKey: string;
+  areas: SeriesConfig[];
+  yTickFormatter?: (v: number) => string;
+  yWidth?: number;
+  height?: number;
+}
+
+export function AreaChart({
+  title, subtitle, data, xKey, areas,
+  yTickFormatter = formatYTick, yWidth = 70, height = 280,
+}: AreaChartProps) {
+  const hasData = data && data.length > 0;
+  return (
+    <ChartCard title={title} subtitle={subtitle}>
+      {!hasData ? <NoData /> : (
+        <div style={{ width: '100%', height }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <RechartsAreaChart data={data} margin={{ top: 10, right: 20, left: 10, bottom: 5 }}>
+              <defs>
+                {areas.map((area) => (
+                  <linearGradient key={area.key} id={`grad-${area.key}`} x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor={area.color} stopOpacity={0.3} />
+                    <stop offset="95%" stopColor={area.color} stopOpacity={0.02} />
+                  </linearGradient>
+                ))}
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+              <XAxis dataKey={xKey} axisLine={false} tickLine={false} tick={{ fill: '#6b7280', fontSize: 12 }} />
+              <YAxis axisLine={false} tickLine={false} tick={{ fill: '#6b7280', fontSize: 12 }} width={yWidth} tickFormatter={yTickFormatter} />
+              <Tooltip
+                contentStyle={tooltipStyle}
+                formatter={(value: any) => [Number(value).toLocaleString('en-IN'), '']}
+              />
+              <Legend iconType="circle" iconSize={8} wrapperStyle={{ paddingTop: 16, fontSize: 13 }} />
+              {areas.map((area) => (
+                <Area
+                  key={area.key}
+                  dataKey={area.key}
+                  name={area.name}
+                  stroke={area.color}
+                  strokeWidth={2.5}
+                  fill={`url(#grad-${area.key})`}
+                  dot={{ r: 3, fill: area.color, strokeWidth: 0 }}
+                  activeDot={{ r: 5 }}
+                />
+              ))}
+            </RechartsAreaChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+    </ChartCard>
+  );
+}
 export interface PieChartProps {
   title: string;
   subtitle?: string;
   data: { name: string; value: number; color: string }[];
+
   unit?: string;
+
+  innerRadius?: number;
+
+  outerRadius?: number;
 }
 
 const RADIAN = Math.PI / 180;
 
 function renderCustomLabel({ cx, cy, midAngle, innerRadius, outerRadius, percent }: any) {
-  if (percent < 0.05) return null; // skip tiny slices
+  if (percent < 0.05) return null;
   const radius = innerRadius + (outerRadius - innerRadius) * 0.55;
   const x = cx + radius * Math.cos(-midAngle * RADIAN);
   const y = cy + radius * Math.sin(-midAngle * RADIAN);
@@ -104,15 +227,13 @@ function renderCustomLabel({ cx, cy, midAngle, innerRadius, outerRadius, percent
   );
 }
 
-export function PieChart({ title, subtitle, data, unit = '' }: PieChartProps) {
+export function PieChart({ title, subtitle, data, unit = '', innerRadius = 55, outerRadius = 88 }: PieChartProps) {
   const total = data.reduce((s, d) => s + d.value, 0);
   const hasData = data.length > 0 && total > 0;
 
   return (
     <ChartCard title={title} subtitle={subtitle}>
-      {!hasData ? (
-        <NoData message="No data to display" />
-      ) : (
+      {!hasData ? <NoData message="No data to display" /> : (
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
           <div style={{ width: '100%', height: 220 }}>
             <ResponsiveContainer width="100%" height="100%">
@@ -121,8 +242,8 @@ export function PieChart({ title, subtitle, data, unit = '' }: PieChartProps) {
                   data={data}
                   cx="50%"
                   cy="50%"
-                  innerRadius={55}
-                  outerRadius={88}
+                  innerRadius={innerRadius}
+                  outerRadius={outerRadius}
                   dataKey="value"
                   labelLine={false}
                   label={renderCustomLabel}
@@ -134,8 +255,8 @@ export function PieChart({ title, subtitle, data, unit = '' }: PieChartProps) {
                   ))}
                 </Pie>
                 <Tooltip
-                  formatter={(value) => [`${unit}${Number(value).toLocaleString('en-US')}`, '']}
-                  contentStyle={{ borderRadius: 8, border: '1px solid #e5e7eb', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', fontSize: 13 }}
+                  formatter={(value) => [`${unit}${Number(value).toLocaleString('en-IN')}`, '']}
+                  contentStyle={tooltipStyle}
                 />
               </RechartsPieChart>
             </ResponsiveContainer>
@@ -152,7 +273,7 @@ export function PieChart({ title, subtitle, data, unit = '' }: PieChartProps) {
                     <span style={{ fontSize: 13, color: '#374151', fontWeight: 500 }}>{entry.name}</span>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <span style={{ fontSize: 13, color: '#6b7280' }}>{unit}{entry.value.toLocaleString('en-US')}</span>
+                    <span style={{ fontSize: 13, color: '#6b7280' }}>{unit}{entry.value.toLocaleString('en-IN')}</span>
                     <span style={{ fontSize: 11, fontWeight: 700, color: entry.color, backgroundColor: `${entry.color}1a`, borderRadius: 20, padding: '1px 7px' }}>
                       {pct}%
                     </span>

@@ -8,12 +8,15 @@ export const dynamic = 'force-dynamic';
 
 export default async function DashboardPage() {
 
+  // Read threshold from store settings so it updates when changed in Settings
+  const primaryStore = await prisma.store.findFirst({ where: { isActive: true } });
+  const lowStockThreshold = primaryStore?.lowStockThreshold ?? 10;
 
   const totalProducts = await prisma.productCache.count();
   const invResult = await prisma.productCache.aggregate({ _sum: { inventoryQuantity: true } });
   const totalInventory = invResult._sum.inventoryQuantity ?? 0;
   const activeProducts = await prisma.productCache.count({ where: { inventoryQuantity: { gt: 0 } } });
-  const lowStockCount = await prisma.productCache.count({ where: { inventoryQuantity: { lte: 15 } } });
+  const lowStockCount = await prisma.productCache.count({ where: { inventoryQuantity: { lte: lowStockThreshold } } });
 
   const latestSync = await prisma.syncLog.findFirst({ orderBy: { createdAt: 'desc' } });
   let timeStr = 'Just now';
@@ -62,7 +65,7 @@ export default async function DashboardPage() {
 
   // ── Low Stock Products Table ──
   const lowStockRaw = await prisma.productCache.findMany({
-    where: { inventoryQuantity: { lte: 15 } },
+    where: { inventoryQuantity: { lte: lowStockThreshold } },
     orderBy: { inventoryQuantity: 'asc' },
     take: 100,
   });
@@ -132,7 +135,7 @@ export default async function DashboardPage() {
         </div>
 
         {/* ── Statistics Cards ── */}
-        <DashboardCards stats={stats} />
+        <DashboardCards stats={stats} lowStockThreshold={lowStockThreshold} />
 
         {/* ── Charts ── */}
         <DashboardCharts chartData={chartData} />

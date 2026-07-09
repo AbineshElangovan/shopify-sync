@@ -1,25 +1,12 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db/prisma';
 import { shopify } from '@/lib/shopify/index';
-
-/**
- * GET /api/health
- *
- * System health check. Returns:
- *  - Database connectivity status for every table
- *  - Environment variable presence check
- *  - Store/Session/ProductCache row counts
- *  - Shopify API config sanity check
- *
- * Safe to call without authentication.
- * Use this to verify the app is working after installation.
- */
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
   const checks: Record<string, { ok: boolean; detail?: string | number }> = {};
 
-  // ── Environment variables ─────────────────────────────────────────────────
+
   const requiredEnvVars = [
     'SHOPIFY_API_KEY',
     'SHOPIFY_API_SECRET',
