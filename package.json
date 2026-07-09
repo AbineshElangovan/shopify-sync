@@ -6,7 +6,6 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
     "prisma:studio": "prisma studio",
     "prisma:migrate": "prisma migrate dev",
     "prisma:generate": "prisma generate"
@@ -18,14 +17,8 @@
     "@shopify/polaris-icons": "^9.3.1",
     "@shopify/shopify-api": "^13.1.0",
     "@shopify/shopify-app-session-storage-prisma": "^9.0.1",
-    "@tanstack/react-query": "^5.101.2",
-    "crypto": "^1.0.1",
-    "crypto-js": "^4.2.0",
-    "dotenv": "^17.4.2",
     "graphql": "^16.14.2",
     "graphql-request": "^7.4.0",
-    "jose": "^6.2.3",
-    "jsonwebtoken": "^9.0.3",
     "next": "16.2.9",
     "prisma": "^6.19.0",
     "react": "^18.3.1",
@@ -35,13 +28,9 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
-    "@types/crypto-js": "^4.2.2",
-    "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^20",
     "@types/react": "^18.3.1",
     "@types/react-dom": "^18.3.1",
-    "eslint": "^9.39.4",
-    "eslint-config-next": "^16.2.10",
     "tailwindcss": "^4",
     "typescript": "^5"
   }
