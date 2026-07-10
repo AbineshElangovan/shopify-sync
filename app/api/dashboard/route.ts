@@ -71,13 +71,31 @@ export async function GET(req: NextRequest) {
     const failedSyncs = totalSyncs - successSyncs;
     const syncStats = { totalSyncs, successSyncs, failedSyncs };
 
+    // Also compute cross-store deduplicated products for the "Recently Added" table
+    const deduplicatedAllProducts = Array.from(
+      productCaches.reduce((map, p) => {
+        const key = p.sku ? p.sku : p.id;
+        const existing = map.get(key);
+        if (!existing) {
+          map.set(key, { ...p });
+        } else {
+          existing.inventoryQuantity += p.inventoryQuantity;
+          if (!existing.imageUrl && p.imageUrl) {
+            existing.imageUrl = p.imageUrl;
+          }
+          map.set(key, existing);
+        }
+        return map;
+      }, new Map()).values()
+    ) as typeof productCaches;
+
     // Filter low stock using current store's threshold settings
     const lowStockProducts = deduplicatedCurrentStoreProducts
       .filter((p) => p.inventoryQuantity <= store.lowStockThreshold)
       .sort((a, b) => a.inventoryQuantity - b.inventoryQuantity)
       .slice(0, 50);
 
-    const recentlyAddedProducts = deduplicatedCurrentStoreProducts.slice(0, 50);
+    const recentlyAddedProducts = deduplicatedAllProducts.slice(0, 50);
 
     return NextResponse.json({
       success: true,
