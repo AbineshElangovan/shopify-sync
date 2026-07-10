@@ -21,23 +21,23 @@ export interface DashboardCardsProps {
 }
 
 export function DashboardCards({ stats, lowStockThreshold }: DashboardCardsProps) {
-  const statsConfig = [
-    {
-      key: 'totalProducts' as const,
-      label: 'Total Products',
-      description: 'All synced products across stores',
-      icon: ProductIcon,
-      gradient: 'linear-gradient(135deg, #7c3aed 0%, #a855f7 100%)',
-      iconBg: 'rgba(255,255,255,0.2)',
-    },
-    {
-      key: 'totalInventory' as const,
-      label: 'Total Inventory',
-      description: 'Combined stock across all stores',
-      icon: ChartVerticalIcon,
-      gradient: 'linear-gradient(135deg, #1d4ed8 0%, #3b82f6 100%)',
-      iconBg: 'rgba(255,255,255,0.2)',
-    },
+    const statsConfig = [
+      {
+        key: 'totalProducts' as const,
+        label: 'Total Products',
+        description: 'Products in this store',
+        icon: ProductIcon,
+        gradient: 'linear-gradient(135deg, #7c3aed 0%, #a855f7 100%)',
+        iconBg: 'rgba(255,255,255,0.2)',
+      },
+      {
+        key: 'totalInventory' as const,
+        label: 'Total Inventory',
+        description: 'Total stock in this store',
+        icon: ChartVerticalIcon,
+        gradient: 'linear-gradient(135deg, #1d4ed8 0%, #3b82f6 100%)',
+        iconBg: 'rgba(255,255,255,0.2)',
+      },
     {
       key: 'lowStock' as const,
       label: 'Low Stock',

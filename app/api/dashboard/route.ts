@@ -26,16 +26,17 @@ export async function GET(req: NextRequest) {
         diffMins < 1 ? 'Just now' : diffMins < 60 ? `${diffMins} mins ago` : `${Math.floor(diffMins / 60)} hrs ago`;
     }
 
-    const deduplicatedProducts = Array.from(
-      productCaches.reduce((map, p) => {
-        const key = p.sku ? p.sku : p.id; // Fallback to id if sku is empty
+    const currentStoreProducts = productCaches.filter(p => p.storeId === store.id);
+
+    // Group current store products by SKU to prevent null-SKU products from merging
+    const deduplicatedCurrentStoreProducts = Array.from(
+      currentStoreProducts.reduce((map, p) => {
+        const key = p.sku ? p.sku : p.id; 
         const existing = map.get(key);
         if (!existing) {
           map.set(key, { ...p });
         } else {
-          // Sum inventory across stores
           existing.inventoryQuantity += p.inventoryQuantity;
-          // Prefer the one with an image
           if (!existing.imageUrl && p.imageUrl) {
             existing.imageUrl = p.imageUrl;
           }
@@ -45,25 +46,25 @@ export async function GET(req: NextRequest) {
       }, new Map()).values()
     ) as typeof productCaches;
 
-    const totalProducts = deduplicatedProducts.length;
-    const totalInventory = deduplicatedProducts.reduce((a, p) => a + p.inventoryQuantity, 0);
-    const activeProducts = deduplicatedProducts.filter((p) => p.inventoryQuantity > 0).length;
-    const lowStockCount = deduplicatedProducts.filter((p) => p.inventoryQuantity <= store.lowStockThreshold).length;
+    const totalProducts = deduplicatedCurrentStoreProducts.length;
+    const totalInventory = deduplicatedCurrentStoreProducts.reduce((a, p) => a + p.inventoryQuantity, 0);
+    const activeProducts = deduplicatedCurrentStoreProducts.filter((p) => p.inventoryQuantity > 0).length;
+    const lowStockCount = deduplicatedCurrentStoreProducts.filter((p) => p.inventoryQuantity <= store.lowStockThreshold).length;
 
     const stats = { totalProducts, totalInventory, activeProducts, lowStock: lowStockCount, lastUpdated };
 
     const storesWithProducts = allStores.map(s => {
-      const storeProducts = productCaches.filter(p => p.storeId === s.id);
+      const storeSpecificProducts = productCaches.filter(p => p.storeId === s.id);
       return {
         id: s.id,
         shopDomain: s.shopDomain,
         label: s.label || s.shopDomain,
         isActive: s.isActive,
         installedAt: s.installedAt,
-        productCount: storeProducts.length,
-        inventoryTotal: storeProducts.reduce((acc, p) => acc + p.inventoryQuantity, 0),
-        salesValue: storeProducts.reduce((acc, p) => acc + (p.price * p.inventoryQuantity), 0),
-        activeProductCount: storeProducts.filter(p => p.inventoryQuantity > 0).length,
+        productCount: storeSpecificProducts.length,
+        inventoryTotal: storeSpecificProducts.reduce((acc, p) => acc + p.inventoryQuantity, 0),
+        salesValue: storeSpecificProducts.reduce((acc, p) => acc + (p.price * p.inventoryQuantity), 0),
+        activeProductCount: storeSpecificProducts.filter(p => p.inventoryQuantity > 0).length,
       };
     });
 
@@ -71,12 +72,12 @@ export async function GET(req: NextRequest) {
     const syncStats = { totalSyncs, successSyncs, failedSyncs };
 
     // Filter low stock using current store's threshold settings
-    const lowStockProducts = deduplicatedProducts
+    const lowStockProducts = deduplicatedCurrentStoreProducts
       .filter((p) => p.inventoryQuantity <= store.lowStockThreshold)
       .sort((a, b) => a.inventoryQuantity - b.inventoryQuantity)
       .slice(0, 50);
 
-    const recentlyAddedProducts = deduplicatedProducts.slice(0, 50);
+    const recentlyAddedProducts = deduplicatedCurrentStoreProducts.slice(0, 50);
 
     return NextResponse.json({
       success: true,
