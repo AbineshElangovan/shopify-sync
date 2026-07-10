@@ -8,15 +8,15 @@ export async function GET(req: NextRequest) {
   try {
     const { store } = await authenticate(req);
 
-    // Fetch store-specific data
-    const [productCaches, totalSyncs, successSyncs, latestSync] = await Promise.all([
-      prisma.productCache.findMany({ where: { storeId: store.id }, orderBy: { updatedAt: 'desc' } }),
-      prisma.syncLog.count({ where: { OR: [{ sourceStoreId: store.id }, { destinationStoreId: store.id }] } }),
-      prisma.syncLog.count({ where: { OR: [{ sourceStoreId: store.id }, { destinationStoreId: store.id }], status: 'SUCCESS' } }),
+    // Fetch data for all stores to combine inventory
+    const [productCaches, totalSyncs, successSyncs, latestSync, allStores] = await Promise.all([
+      prisma.productCache.findMany({ orderBy: { updatedAt: 'desc' } }),
+      prisma.syncLog.count(),
+      prisma.syncLog.count({ where: { status: 'SUCCESS' } }),
       prisma.syncLog.findFirst({
-        where: { OR: [{ sourceStoreId: store.id }, { destinationStoreId: store.id }] },
         orderBy: { createdAt: 'desc' }
       }),
+      prisma.store.findMany({ where: { isActive: true } }),
     ]);
 
     let lastUpdated = 'Never';
@@ -26,51 +26,49 @@ export async function GET(req: NextRequest) {
         diffMins < 1 ? 'Just now' : diffMins < 60 ? `${diffMins} mins ago` : `${Math.floor(diffMins / 60)} hrs ago`;
     }
 
-    const totalProducts = productCaches.length;
-    const totalInventory = productCaches.reduce((a, p) => a + p.inventoryQuantity, 0);
-    const activeProducts = productCaches.filter((p) => p.inventoryQuantity > 0).length;
-    const lowStockCount = productCaches.filter((p) => p.inventoryQuantity <= store.lowStockThreshold).length;
-
-    const stats = { totalProducts, totalInventory, activeProducts, lowStock: lowStockCount, lastUpdated };
-
-    const storesWithProducts = [
-      {
-        id: store.id,
-        shopDomain: store.shopDomain,
-        label: store.label || store.shopDomain,
-        isActive: store.isActive,
-        installedAt: store.installedAt,
-        productCount: totalProducts,
-        inventoryTotal: totalInventory,
-        salesValue: productCaches.reduce((acc, p) => acc + (p.price * p.inventoryQuantity), 0),
-        activeProductCount: activeProducts,
-        totalSyncs,
-        successSyncs,
-        syncRate: totalSyncs > 0 ? Math.round((successSyncs / totalSyncs) * 100) : null,
-      }
-    ];
-
-    const failedSyncs = totalSyncs - successSyncs;
-    const syncStats = { totalSyncs, successSyncs, failedSyncs };
-
     const deduplicatedProducts = Array.from(
       productCaches.reduce((map, p) => {
-        const existing = map.get(p.sku);
+        const key = p.sku ? p.sku : p.id; // Fallback to id if sku is empty
+        const existing = map.get(key);
         if (!existing) {
-          map.set(p.sku, { ...p });
+          map.set(key, { ...p });
         } else {
-          // Sum inventory
+          // Sum inventory across stores
           existing.inventoryQuantity += p.inventoryQuantity;
           // Prefer the one with an image
           if (!existing.imageUrl && p.imageUrl) {
             existing.imageUrl = p.imageUrl;
           }
-          // Update the map
-          map.set(p.sku, existing);
+          map.set(key, existing);
         }
         return map;
       }, new Map()).values()
     ) as typeof productCaches;
+
+    const totalProducts = deduplicatedProducts.length;
+    const totalInventory = deduplicatedProducts.reduce((a, p) => a + p.inventoryQuantity, 0);
+    const activeProducts = deduplicatedProducts.filter((p) => p.inventoryQuantity > 0).length;
+    const lowStockCount = deduplicatedProducts.filter((p) => p.inventoryQuantity <= store.lowStockThreshold).length;
+
+    const stats = { totalProducts, totalInventory, activeProducts, lowStock: lowStockCount, lastUpdated };
+
+    const storesWithProducts = allStores.map(s => {
+      const storeProducts = productCaches.filter(p => p.storeId === s.id);
+      return {
+        id: s.id,
+        shopDomain: s.shopDomain,
+        label: s.label || s.shopDomain,
+        isActive: s.isActive,
+        installedAt: s.installedAt,
+        productCount: storeProducts.length,
+        inventoryTotal: storeProducts.reduce((acc, p) => acc + p.inventoryQuantity, 0),
+        salesValue: storeProducts.reduce((acc, p) => acc + (p.price * p.inventoryQuantity), 0),
+        activeProductCount: storeProducts.filter(p => p.inventoryQuantity > 0).length,
+      };
+    });
+
+    const failedSyncs = totalSyncs - successSyncs;
+    const syncStats = { totalSyncs, successSyncs, failedSyncs };
 
     // Filter low stock using current store's threshold settings
     const lowStockProducts = deduplicatedProducts
