@@ -12,22 +12,23 @@ export interface StoreChartEntry {
 export interface DashboardChartsProps {
   chartData: {
     combinedData: StoreChartEntry[];
+    currentStoreData: StoreChartEntry[];
   };
 }
 
 const STORE_COLORS = ['#7c3aed', '#0891b2', '#ea580c', '#16a34a', '#dc2626'];
 
 export function DashboardCharts({ chartData }: DashboardChartsProps) {
-  const { combinedData } = chartData;
+  const { combinedData, currentStoreData } = chartData;
 
-  // Build pie data for store sales %
-  const salesPieData = combinedData.map((s, i) => ({
+  // Build pie data for store sales % using ONLY current store data
+  const salesPieData = currentStoreData.map((s, i) => ({
     name: s.name,
     value: s['Total Sales Value'],
     color: STORE_COLORS[i % STORE_COLORS.length],
   }));
 
-  const productsPieData = combinedData.map((s, i) => ({
+  const productsPieData = currentStoreData.map((s, i) => ({
     name: s.name,
     value: s['Total Products'],
     color: STORE_COLORS[i % STORE_COLORS.length],
@@ -52,9 +53,9 @@ export function DashboardCharts({ chartData }: DashboardChartsProps) {
       <Grid>
         <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 6, lg: 6, xl: 6 }}>
           <BarChart
-            title="Total Sales Value — Store Comparison"
-            subtitle="Estimated revenue by store (₹500 per unit)"
-            data={combinedData}
+            title="Sales Value — Current Store"
+            subtitle="Estimated revenue for this store (₹500 per unit)"
+            data={currentStoreData}
             xKey="name"
             bars={[
               { key: 'Total Sales Value', color: '#10b981', name: 'Sales Value (₹)' },
@@ -64,7 +65,7 @@ export function DashboardCharts({ chartData }: DashboardChartsProps) {
         <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 3, lg: 3, xl: 3 }}>
           <PieChart
             title="Sales Share %"
-            subtitle="Store-wise contribution to total sales"
+            subtitle="Current store sales"
             data={salesPieData}
             unit="₹"
           />
@@ -72,7 +73,7 @@ export function DashboardCharts({ chartData }: DashboardChartsProps) {
         <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 3, lg: 3, xl: 3 }}>
           <PieChart
             title="Products Share %"
-            subtitle="Store-wise product distribution"
+            subtitle="Current store products"
             data={productsPieData}
           />
         </Grid.Cell>

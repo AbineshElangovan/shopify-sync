@@ -77,20 +77,22 @@ export async function GET(req: NextRequest) {
         const key = p.sku ? p.sku : p.id;
         const existing = map.get(key);
         if (!existing) {
-          map.set(key, { ...p });
+          map.set(key, { ...p, imageUrls: p.imageUrl ? [p.imageUrl] : [] });
         } else {
           existing.inventoryQuantity += p.inventoryQuantity;
-          if (!existing.imageUrl && p.imageUrl) {
-            existing.imageUrl = p.imageUrl;
+          if (p.imageUrl && !existing.imageUrls.includes(p.imageUrl)) {
+            existing.imageUrls.push(p.imageUrl);
           }
+          // Set the primary imageUrl to the first one just for backward compatibility
+          existing.imageUrl = existing.imageUrls[0] || null;
           map.set(key, existing);
         }
         return map;
       }, new Map()).values()
-    ) as typeof productCaches;
+    ) as typeof productCaches & { imageUrls: string[] }[];
 
-    // Filter low stock using current store's threshold settings
-    const lowStockProducts = deduplicatedCurrentStoreProducts
+    // Filter low stock using current store's threshold settings (combined inventory)
+    const lowStockProducts = deduplicatedAllProducts
       .filter((p) => p.inventoryQuantity <= store.lowStockThreshold)
       .sort((a, b) => a.inventoryQuantity - b.inventoryQuantity)
       .slice(0, 50);
@@ -99,8 +101,9 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      stats,
+      currentStoreId: store.id,
       stores: storesWithProducts,
+      stats,
       syncStats,
       lowStockProducts,
       recentlyAddedProducts,

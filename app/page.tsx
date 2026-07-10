@@ -68,7 +68,7 @@ export default function DashboardPage() {
 
   const lowStockProducts = (data?.lowStockProducts || []).map((p: any) => ({
     id: p.id,
-    imageUrl: p.imageUrl,
+    imageUrls: p.imageUrls || (p.imageUrl ? [p.imageUrl] : []),
     title: p.title,
     sku: p.sku || 'N/A',
     inventoryQuantity: p.inventoryQuantity,
@@ -78,7 +78,7 @@ export default function DashboardPage() {
   }));
 
   const lowStockColumns: ColumnConfig[] = [
-    { title: 'Image', key: 'imageUrl', type: 'image' },
+    { title: 'Image', key: 'imageUrls', type: 'image' },
     { title: 'Product Name', key: 'title', type: 'bold' },
     { title: 'SKU', key: 'sku' },
     { title: 'Quantity', key: 'inventoryQuantity', type: 'bold' },
@@ -89,7 +89,7 @@ export default function DashboardPage() {
 
   const recentlyAddedProducts = (data?.recentlyAddedProducts || []).map((p: any) => ({
     id: p.id,
-    imageUrl: p.imageUrl,
+    imageUrls: p.imageUrls || (p.imageUrl ? [p.imageUrl] : []),
     title: p.title,
     vendor: 'ESHAN',
     sku: p.sku || 'N/A',
@@ -100,7 +100,7 @@ export default function DashboardPage() {
   }));
 
   const recentlyAddedColumns: ColumnConfig[] = [
-    { title: 'Image', key: 'imageUrl', type: 'image' },
+    { title: 'Image', key: 'imageUrls', type: 'image' },
     { title: 'Product Name', key: 'title', type: 'bold' },
     { title: 'Vendor', key: 'vendor' },
     { title: 'SKU', key: 'sku' },
@@ -124,12 +124,20 @@ export default function DashboardPage() {
 
         <DashboardCards stats={stats} lowStockThreshold={lowStockThreshold} />
 
-        <DashboardCharts chartData={{ combinedData: data?.stores ? data.stores.map((s: any) => ({
-          name: s.label || s.shopDomain,
-          'Total Products': s.productCount,
-          'Total Inventory': s.inventoryTotal,
-          'Total Sales Value': s.salesValue,
-        })) : [] }} />
+        <DashboardCharts chartData={{ 
+          combinedData: data?.stores ? data.stores.map((s: any) => ({
+            name: s.label || s.shopDomain,
+            'Total Products': s.productCount,
+            'Total Inventory': s.inventoryTotal,
+            'Total Sales Value': s.salesValue,
+          })) : [],
+          currentStoreData: data?.stores ? data.stores.filter((s: any) => s.id === data.currentStoreId).map((s: any) => ({
+            name: s.label || s.shopDomain,
+            'Total Products': s.productCount,
+            'Total Inventory': s.inventoryTotal,
+            'Total Sales Value': s.salesValue,
+          })) : []
+        }} />
 
         <Layout>
           <Layout.Section>

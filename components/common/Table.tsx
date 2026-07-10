@@ -88,9 +88,12 @@ function SearchInput({ value, onChange, placeholder }: { value: string; onChange
   );
 }
 
-const ImageCell = ({ src }: { src: string }) => {
-  const [error, setError] = useState(false);
-  if (error || !src) {
+const ImageCell = ({ src }: { src: string | string[] }) => {
+  const [errorIndex, setErrorIndex] = useState(0);
+  const srcArray = Array.isArray(src) ? src : [src];
+  const currentSrc = srcArray[errorIndex];
+
+  if (errorIndex >= srcArray.length || !currentSrc) {
     return (
       <div style={{ width: 40, height: 40, borderRadius: 6, backgroundColor: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px dashed #cbd5e1' }}>
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -101,7 +104,14 @@ const ImageCell = ({ src }: { src: string }) => {
       </div>
     );
   }
-  return <img src={src} alt="Product" onError={() => setError(true)} style={{ width: 40, height: 40, borderRadius: 6, objectFit: 'cover', border: '1px solid #e5e7eb', display: 'block' }} />;
+  return (
+    <img 
+      src={currentSrc} 
+      alt="Product" 
+      onError={() => setErrorIndex(prev => prev + 1)} 
+      style={{ width: 40, height: 40, borderRadius: 6, objectFit: 'cover', border: '1px solid #e5e7eb', display: 'block' }} 
+    />
+  );
 };
 
 export function Table({
