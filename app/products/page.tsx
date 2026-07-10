@@ -147,7 +147,9 @@ export default function ProductsPage() {
           />
         ) : Object.keys(groupedProducts).length > 0 ? (() => {
           const colors = ['#6366f1', '#0f766e', '#7c3aed', '#db2777', '#ea580c', '#0891b2'];
-          return Object.entries(groupedProducts).map(([collectionName, items], index) => {
+          return Object.entries(groupedProducts)
+            .filter(([collectionName]) => collectionName !== 'Uncategorized')
+            .map(([collectionName, items], index) => {
             const filteredItems = filterProducts(items as any[]);
             return (
               <Table

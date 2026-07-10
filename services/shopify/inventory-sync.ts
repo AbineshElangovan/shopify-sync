@@ -19,9 +19,10 @@ export async function processInventoryUpdate(
       return;
     }
 
-    const gidInventoryItemId = inventoryItemId.includes('gid://')
-      ? inventoryItemId
-      : `gid://shopify/InventoryItem/${inventoryItemId}`;
+    const inventoryItemIdStr = String(inventoryItemId);
+    const gidInventoryItemId = inventoryItemIdStr.includes('gid://')
+      ? inventoryItemIdStr
+      : `gid://shopify/InventoryItem/${inventoryItemIdStr}`;
 
     const sourceVariantMap = await prisma.variantMap.findFirst({
       where: {

@@ -88,6 +88,22 @@ function SearchInput({ value, onChange, placeholder }: { value: string; onChange
   );
 }
 
+const ImageCell = ({ src }: { src: string }) => {
+  const [error, setError] = useState(false);
+  if (error || !src) {
+    return (
+      <div style={{ width: 40, height: 40, borderRadius: 6, backgroundColor: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px dashed #cbd5e1' }}>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+          <circle cx="8.5" cy="8.5" r="1.5" />
+          <polyline points="21 15 16 10 5 21" />
+        </svg>
+      </div>
+    );
+  }
+  return <img src={src} alt="Product" onError={() => setError(true)} style={{ width: 40, height: 40, borderRadius: 6, objectFit: 'cover', border: '1px solid #e5e7eb', display: 'block' }} />;
+};
+
 export function Table({
   title,
   headerColor = '#4f46e5',
@@ -182,13 +198,7 @@ export function Table({
     const val = item[col.key];
     switch (col.type) {
       case 'image':
-        return val ? (
-          <img src={val} alt="Product" style={{ width: 40, height: 40, borderRadius: 6, objectFit: 'cover', border: '1px solid #e5e7eb', display: 'block' }} />
-        ) : (
-          <div style={{ width: 40, height: 40, borderRadius: 6, backgroundColor: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 600, color: '#94a3b8', border: '1px solid #e5e7eb' }}>
-            IMG
-          </div>
-        );
+        return <ImageCell src={val} />;
       case 'bold':
         return <strong style={{ fontWeight: 600, color: '#111827' }}>{val ?? '—'}</strong>;
       case 'badge':

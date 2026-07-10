@@ -12,6 +12,8 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let intervalId: NodeJS.Timeout;
+
     async function loadDashboardData() {
       try {
         const res = await shopifyFetch('/api/dashboard');
@@ -25,7 +27,14 @@ export default function DashboardPage() {
         setLoading(false);
       }
     }
+
+    // Initial load
     loadDashboardData();
+
+    // Poll every 10 seconds for dynamic updates
+    intervalId = setInterval(loadDashboardData, 10000);
+
+    return () => clearInterval(intervalId);
   }, []);
 
   if (loading) {

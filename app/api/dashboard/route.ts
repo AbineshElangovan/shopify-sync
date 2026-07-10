@@ -42,7 +42,7 @@ export async function GET(req: NextRequest) {
         installedAt: store.installedAt,
         productCount: totalProducts,
         inventoryTotal: totalInventory,
-        salesValue: totalInventory * 500,
+        salesValue: productCaches.reduce((acc, p) => acc + (p.price * p.inventoryQuantity), 0),
         activeProductCount: activeProducts,
         totalSyncs,
         successSyncs,
@@ -53,13 +53,32 @@ export async function GET(req: NextRequest) {
     const failedSyncs = totalSyncs - successSyncs;
     const syncStats = { totalSyncs, successSyncs, failedSyncs };
 
+    const deduplicatedProducts = Array.from(
+      productCaches.reduce((map, p) => {
+        const existing = map.get(p.sku);
+        if (!existing) {
+          map.set(p.sku, { ...p });
+        } else {
+          // Sum inventory
+          existing.inventoryQuantity += p.inventoryQuantity;
+          // Prefer the one with an image
+          if (!existing.imageUrl && p.imageUrl) {
+            existing.imageUrl = p.imageUrl;
+          }
+          // Update the map
+          map.set(p.sku, existing);
+        }
+        return map;
+      }, new Map()).values()
+    ) as typeof productCaches;
+
     // Filter low stock using current store's threshold settings
-    const lowStockProducts = productCaches
+    const lowStockProducts = deduplicatedProducts
       .filter((p) => p.inventoryQuantity <= store.lowStockThreshold)
       .sort((a, b) => a.inventoryQuantity - b.inventoryQuantity)
       .slice(0, 50);
 
-    const recentlyAddedProducts = productCaches.slice(0, 50);
+    const recentlyAddedProducts = deduplicatedProducts.slice(0, 50);
 
     return NextResponse.json({
       success: true,

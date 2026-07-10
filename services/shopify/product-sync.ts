@@ -1,5 +1,7 @@
 import { prisma } from '@/lib/db/prisma';
 import { getAdminClient } from '@/lib/shopify/admin';
+import { setInventoryQuantity } from '@/lib/shopify/inventory';
+import { createSyncLog } from '@/lib/shopify/sync-log';
 import { PRODUCT_SET_MUTATION, PRODUCT_DELETE_MUTATION, PRODUCT_VARIANTS_DELETE_MUTATION, GET_VARIANT_BY_SKU_QUERY, GET_PRODUCT_BY_ID_QUERY, LOCATIONS_QUERY, } from './graphql';
 const globalShared: any = global;
 globalShared.syncLocks = globalShared.syncLocks || new Set<string>();
@@ -145,27 +147,29 @@ export async function updateLocalProductCache(shopDomain: string, payload: any) 
         },
       });
 
-      await prisma.productCache.upsert({
-        where: {
-          storeId_shopifyVariantId: {
-            storeId: store.id,
-            shopifyVariantId,
+        const newImageUrl = payload.image?.src || payload.images?.[0]?.src;
+        
+        await prisma.productCache.upsert({
+          where: {
+            storeId_shopifyVariantId: {
+              storeId: store.id,
+              shopifyVariantId,
+            },
           },
-        },
-        update: {
-          sku,
-          title: fullTitle,
-          imageUrl: payload.images?.[0]?.src || null,
-          shopifyProductId,
-          price: parseFloat(variant.price || "0"),
-        },
+          update: {
+            sku,
+            title: fullTitle,
+            ...(newImageUrl ? { imageUrl: newImageUrl } : {}),
+            shopifyProductId,
+            price: parseFloat(variant.price || "0"),
+          },
         create: {
           storeId: store.id,
           shopifyProductId,
           shopifyVariantId,
           sku,
           title: fullTitle,
-          imageUrl: payload.images?.[0]?.src || null,
+          imageUrl: payload.image?.src || payload.images?.[0]?.src || null,
           inventoryQuantity: variant.inventory_quantity ?? 0,
           price: parseFloat(variant.price || "0"),
         },
@@ -309,6 +313,8 @@ export async function processProductCreate(shopDomain: string, payload: any, web
           name: opt.name,
           values: opt.values ? opt.values.map((v: string) => ({ name: v })) : []
         }));
+      } else {
+        productInput.productOptions = [{ name: "Title", values: [{ name: "Default Title" }] }];
       }
 
       if (payload.variants && payload.variants.length > 0) {
@@ -324,16 +330,19 @@ export async function processProductCreate(shopDomain: string, payload: any, web
 
           if (options.length > 0) {
             variantInput.optionValues = options.map((val, idx) => ({
-              optionName: payload.options[idx]?.name || `Option ${idx + 1}`,
+              optionName: payload.options?.[idx]?.name || `Option ${idx + 1}`,
               name: val
             }));
+          } else {
+            variantInput.optionValues = [{ optionName: "Title", name: "Default Title" }];
           }
           return variantInput;
         });
       }
 
-      if (payload.images && payload.images.length > 0) {
-        productInput.files = payload.images.map((img: any) => ({
+      const imagesToSync = (payload.images && payload.images.length > 0) ? payload.images : (payload.image ? [payload.image] : []);
+      if (imagesToSync.length > 0) {
+        productInput.files = imagesToSync.map((img: any) => ({
           contentType: "IMAGE",
           originalSource: img.src,
           alt: img.alt || ""
@@ -361,6 +370,38 @@ export async function processProductCreate(shopDomain: string, payload: any, web
           const sku = variant.sku?.trim() || "";
           if (!sku) continue;
 
+          const sourceVariant = payload.variants?.find((v: any) => v.sku?.trim() === sku);
+          const initialQuantity = sourceVariant?.inventory_quantity ?? 0;
+
+          if (initialQuantity > 0 && variant.inventoryItem?.id) {
+            try {
+              await setInventoryQuantity(targetStore.shopDomain, variant.inventoryItem.id, targetLocationId, initialQuantity);
+              console.log(`[ProductSync:Create] Set initial inventory of ${initialQuantity} for SKU ${sku} in ${targetStore.shopDomain}`);
+              
+              await createSyncLog({
+                sku,
+                sourceStoreId: sourceStore.id,
+                destinationStoreId: targetStore.id,
+                previousQuantity: 0,
+                updatedQuantity: initialQuantity,
+                status: 'SUCCESS',
+                webhookEventId: webhookId,
+              });
+            } catch (invErr: any) {
+              console.error(`[ProductSync:Create] Failed to set initial inventory for SKU ${sku}:`, invErr.message);
+              await createSyncLog({
+                sku,
+                sourceStoreId: sourceStore.id,
+                destinationStoreId: targetStore.id,
+                previousQuantity: 0,
+                updatedQuantity: 0,
+                status: 'FAILED',
+                failureReason: invErr.message,
+                webhookEventId: webhookId,
+              });
+            }
+          }
+
           await prisma.productCache.upsert({
             where: {
               storeId_shopifyVariantId: {
@@ -380,7 +421,7 @@ export async function processProductCreate(shopDomain: string, payload: any, web
               shopifyVariantId: variant.id,
               sku,
               title: `${createdProduct.title}${variant.title && variant.title !== 'Default Title' ? ` - ${variant.title}` : ''}`,
-              inventoryQuantity: 0,
+              inventoryQuantity: initialQuantity,
               price: parseFloat(variant.price || "0"),
             },
           });
@@ -564,16 +605,18 @@ export async function processProductUpdate(shopDomain: string, payload: any, web
           sku: sku,
         };
 
-        if (sourceVar.option1) {
-          const options: string[] = [];
-          if (sourceVar.option1) options.push(sourceVar.option1);
-          if (sourceVar.option2) options.push(sourceVar.option2);
-          if (sourceVar.option3) options.push(sourceVar.option3);
+        const options: string[] = [];
+        if (sourceVar.option1) options.push(sourceVar.option1);
+        if (sourceVar.option2) options.push(sourceVar.option2);
+        if (sourceVar.option3) options.push(sourceVar.option3);
 
+        if (options.length > 0) {
           variantInput.optionValues = options.map((val, idx) => ({
-            optionName: payload.options[idx]?.name || `Option ${idx + 1}`,
+            optionName: payload.options?.[idx]?.name || `Option ${idx + 1}`,
             name: val
           }));
+        } else {
+          variantInput.optionValues = [{ optionName: "Title", name: "Default Title" }];
         }
 
         if (matchingTargetVar) {
@@ -634,6 +677,17 @@ export async function processProductUpdate(shopDomain: string, payload: any, web
           name: opt.name,
           values: opt.values ? opt.values.map((v: string) => ({ name: v })) : []
         }));
+      } else {
+        productInput.productOptions = [{ name: "Title", values: [{ name: "Default Title" }] }];
+      }
+
+      const imagesToSync = (payload.images && payload.images.length > 0) ? payload.images : (payload.image ? [payload.image] : []);
+      if (imagesToSync.length > 0) {
+        productInput.files = imagesToSync.map((img: any) => ({
+          contentType: "IMAGE",
+          originalSource: img.src,
+          alt: img.alt || ""
+        }));
       }
 
       console.log(`[ProductSync:UpdateDiag] Comparing fields for product "${mergedTitle}":`);
@@ -648,7 +702,8 @@ export async function processProductUpdate(shopDomain: string, payload: any, web
         mergedDescription !== (targetProduct.descriptionHtml || "") ||
         mergedVendor !== (targetProduct.vendor || "") ||
         mergedType !== (targetProduct.productType || "") ||
-        mergedStatus !== (targetProduct.status?.toUpperCase() || "ACTIVE");
+        mergedStatus !== (targetProduct.status?.toUpperCase() || "ACTIVE") ||
+        (payload.images && payload.images.length > 0);
 
       if (!hasProductChanges) {
         if (variantsInput.length !== targetVariants.length) {
@@ -697,10 +752,64 @@ export async function processProductUpdate(shopDomain: string, payload: any, web
         const updatedProduct = response?.data?.productSet?.product;
         const updatedVariants = updatedProduct?.variants?.edges || [];
 
+        let targetLocationId: string | null = null;
+
         for (const variantEdge of updatedVariants) {
           const variant = variantEdge.node;
           const sku = variant.sku?.trim() || "";
           if (!sku) continue;
+
+          const existingCache = await prisma.productCache.findUnique({
+            where: {
+              storeId_shopifyVariantId: {
+                storeId: targetStore.id,
+                shopifyVariantId: variant.id,
+              },
+            }
+          });
+
+          const isNewVariant = !existingCache;
+          let inventoryQuantity = existingCache?.inventoryQuantity || 0;
+
+          if (isNewVariant) {
+            const sourceVariant = payload.variants?.find((v: any) => v.sku?.trim() === sku);
+            const initialQuantity = sourceVariant?.inventory_quantity ?? 0;
+
+            if (initialQuantity > 0 && variant.inventoryItem?.id) {
+              if (!targetLocationId) {
+                targetLocationId = await fetchDefaultLocation(targetStore.shopDomain);
+              }
+              if (targetLocationId) {
+                try {
+                  await setInventoryQuantity(targetStore.shopDomain, variant.inventoryItem.id, targetLocationId, initialQuantity);
+                  console.log(`[ProductSync:Update] Set initial inventory of ${initialQuantity} for new SKU ${sku} in ${targetStore.shopDomain}`);
+                  inventoryQuantity = initialQuantity;
+
+                  await createSyncLog({
+                    sku,
+                    sourceStoreId: sourceStore.id,
+                    destinationStoreId: targetStore.id,
+                    previousQuantity: 0,
+                    updatedQuantity: initialQuantity,
+                    status: 'SUCCESS',
+                    webhookEventId: webhookId,
+                  });
+                } catch (invErr: any) {
+                  console.error(`[ProductSync:Update] Failed to set initial inventory for new SKU ${sku}:`, invErr.message);
+                  await createSyncLog({
+                    sku,
+                    sourceStoreId: sourceStore.id,
+                    destinationStoreId: targetStore.id,
+                    previousQuantity: 0,
+                    updatedQuantity: 0,
+                    status: 'FAILED',
+                    failureReason: invErr.message,
+                    webhookEventId: webhookId,
+                  });
+                }
+              }
+            }
+          }
 
           await prisma.productCache.upsert({
             where: {
@@ -720,7 +829,7 @@ export async function processProductUpdate(shopDomain: string, payload: any, web
               shopifyVariantId: variant.id,
               sku,
               title: `${updatedProduct.title}${variant.title && variant.title !== 'Default Title' ? ` - ${variant.title}` : ''}`,
-              inventoryQuantity: 0,
+              inventoryQuantity,
               price: parseFloat(variant.price || "0"),
             },
           });
@@ -858,11 +967,36 @@ export async function processProductDelete(shopDomain: string, payload: any, web
           },
         });
 
+        for (const sku of skus) {
+          await createSyncLog({
+            sku,
+            sourceStoreId: sourceStore.id,
+            destinationStoreId: targetStore.id,
+            previousQuantity: 0,
+            updatedQuantity: 0,
+            status: 'SUCCESS',
+            webhookEventId: webhookId,
+          });
+        }
+
         console.log(`[ProductSync:Delete] Successfully deleted matching product ${targetProductId} in target store ${targetStore.shopDomain}`);
       } catch (err: any) {
         syncStatus = 'FAILED';
         failureReason = err.message || 'Unknown error during deletion';
         console.error(`[ProductSync:Delete] Failed to delete product in ${targetStore.shopDomain}:`, failureReason);
+
+        for (const sku of skus) {
+          await createSyncLog({
+            sku,
+            sourceStoreId: sourceStore.id,
+            destinationStoreId: targetStore.id,
+            previousQuantity: 0,
+            updatedQuantity: 0,
+            status: 'FAILED',
+            failureReason,
+            webhookEventId: webhookId,
+          });
+        }
 
         releaseSyncLock(targetStore.shopDomain, targetProductId, "DELETE");
       }

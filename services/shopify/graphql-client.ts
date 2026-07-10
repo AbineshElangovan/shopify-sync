@@ -1,8 +1,3 @@
-// ============================================================
-// Centralized GraphQL Client
-// ============================================================
-// Reusable helper for executing Shopify GraphQL operations
-// with consistent error handling and logging.
 
 import { getAdminClient } from '@/lib/shopify/admin';
 import { GraphqlQueryError } from '@shopify/shopify-api';
