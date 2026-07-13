@@ -73,14 +73,15 @@ export async function PUT(req: NextRequest) {
 
     await prisma.$transaction(updates);
 
-    // Apply the price adjustments to the Shopify stores and local cache
-    for (const s of stores) {
+    // Apply the price adjustments to the Shopify stores in the background
+    // We don't await this so the UI returns immediately.
+    Promise.all(stores.map(async (s: any) => {
       try {
         await applyPriceAdjustmentToStore(s.id);
       } catch (adjustErr: any) {
         console.error(`[Stores API] Failed to apply bulk price adjustments for store ${s.id}:`, adjustErr.message);
       }
-    }
+    })).catch(console.error);
 
     return NextResponse.json({ success: true });
   } catch (error: any) {

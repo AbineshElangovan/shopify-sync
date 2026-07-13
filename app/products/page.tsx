@@ -39,6 +39,21 @@ export default function ProductsPage() {
       }
     }
     loadProducts();
+
+    const handleFocus = () => loadProducts();
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        loadProducts();
+      }
+    };
+
+    window.addEventListener('focus', handleFocus);
+    window.addEventListener('visibilitychange', handleVisibility);
+
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+      window.removeEventListener('visibilitychange', handleVisibility);
+    };
   }, []);
 
   if (loading) {

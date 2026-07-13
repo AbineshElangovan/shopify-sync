@@ -21,48 +21,64 @@ export default function SettingsPage() {
   const [storeSuccessText, setStoreSuccessText] = useState<{ [storeId: string]: string }>({});
   const [toastMessage, setToastMessage] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
-  useEffect(() => {
-    async function loadData() {
-      try {
-        const storesRes = await shopifyFetch('/api/stores?active=false');
-        if (storesRes.ok) {
-          const storesJson = await storesRes.json();
-          const loadedStores = storesJson.stores || [];
-          setStores(loadedStores);
+  const loadData = React.useCallback(async () => {
+    try {
+      const storesRes = await shopifyFetch('/api/stores?active=false');
+      if (storesRes.ok) {
+        const storesJson = await storesRes.json();
+        const loadedStores = storesJson.stores || [];
+        setStores(loadedStores);
 
-          // Initialize store price adjustments
-          const initialAdjustments: { [storeId: string]: string } = {};
-          loadedStores.forEach((store: any) => {
-            let initialVal = '0';
-            if (store.priceAdjustmentValue !== undefined && store.priceAdjustmentValue !== null) {
-              const sign = store.priceAdjustmentValue > 0 ? '+' : '';
-              initialVal = `${sign}${store.priceAdjustmentValue}`;
-            }
-            initialAdjustments[store.id] = initialVal;
-          });
-          setStoreAdjustments(initialAdjustments);
-        }
-
-        const settingsRes = await shopifyFetch('/api/settings');
-        if (settingsRes.ok) {
-          const settingsJson = await settingsRes.json();
-          const threshVal = settingsJson.settings.lowStockThreshold;
-          setAutoSync(settingsJson.settings.autoSyncEnabled);
-
-          if ([5, 10, 20].includes(threshVal)) {
-            setThreshold(threshVal.toString());
-          } else {
-            setThreshold('custom');
-            setCustomThreshold(threshVal.toString());
+        // Initialize store price adjustments
+        const initialAdjustments: { [storeId: string]: string } = {};
+        loadedStores.forEach((store: any) => {
+          let initialVal = '0';
+          if (store.priceAdjustmentValue !== undefined && store.priceAdjustmentValue !== null) {
+            const sign = store.priceAdjustmentValue > 0 ? '+' : '';
+            initialVal = `${sign}${store.priceAdjustmentValue}`;
           }
-        }
-      } catch (err) {
-        console.error("Error loading settings data:", err);
-      } finally {
-        setLoading(false);
+          initialAdjustments[store.id] = initialVal;
+        });
+        setStoreAdjustments(initialAdjustments);
       }
+
+      const settingsRes = await shopifyFetch('/api/settings');
+      if (settingsRes.ok) {
+        const settingsJson = await settingsRes.json();
+        const threshVal = settingsJson.settings.lowStockThreshold;
+        setAutoSync(settingsJson.settings.autoSyncEnabled);
+
+        if ([5, 10, 20].includes(threshVal)) {
+          setThreshold(threshVal.toString());
+        } else {
+          setThreshold('custom');
+          setCustomThreshold(threshVal.toString());
+        }
+      }
+    } catch (err) {
+      console.error("Error loading settings data:", err);
+    } finally {
+      setLoading(false);
     }
+  }, []);
+
+  useEffect(() => {
     loadData();
+
+    const handleFocus = () => loadData();
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        loadData();
+      }
+    };
+
+    window.addEventListener('focus', handleFocus);
+    window.addEventListener('visibilitychange', handleVisibility);
+
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+      window.removeEventListener('visibilitychange', handleVisibility);
+    };
   }, []);
 
   const handleStoreAdjustmentChange = (storeId: string, val: string) => {
@@ -107,18 +123,8 @@ export default function SettingsPage() {
           setToastMessage(prev => prev?.message === '✅ Price adjustment updated successfully.' ? null : prev);
         }, 3000);
 
-        setStores(prev => prev.map(s => s.id === storeId ? {
-          ...s,
-          priceAdjustmentValue: val,
-          priceAdjustmentType: 'PERCENTAGE',
-          isPriceAdjustmentEnabled: val !== 0,
-        } : s));
-
-        const sign = val > 0 ? '+' : '';
-        setStoreAdjustments(prev => ({
-          ...prev,
-          [storeId]: `${sign}${val}`
-        }));
+        // Fetch fresh data from the server so the entire UI updates synchronously 
+        await loadData();
       } else {
         setStoreSuccessText(prev => ({ ...prev, [storeId]: '✕ Failed to update price adjustment.' }));
         setToastMessage({ message: '❌ Failed to update price adjustment. Please try again.', type: 'error' });

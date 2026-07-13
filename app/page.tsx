@@ -34,7 +34,21 @@ export default function DashboardPage() {
     // Poll every 10 seconds for dynamic updates
     intervalId = setInterval(loadDashboardData, 10000);
 
-    return () => clearInterval(intervalId);
+    const handleFocus = () => loadDashboardData();
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        loadDashboardData();
+      }
+    };
+
+    window.addEventListener('focus', handleFocus);
+    window.addEventListener('visibilitychange', handleVisibility);
+
+    return () => {
+      clearInterval(intervalId);
+      window.removeEventListener('focus', handleFocus);
+      window.removeEventListener('visibilitychange', handleVisibility);
+    };
   }, []);
 
   if (loading) {
