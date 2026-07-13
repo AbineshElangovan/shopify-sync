@@ -17,15 +17,16 @@ export interface DashboardCardsProps {
     activeProducts: number;
     lastUpdated: string;
   };
-  lowStockThreshold: number;
+  lowStockThreshold?: number;
+  crossStore?: boolean;
 }
 
-export function DashboardCards({ stats, lowStockThreshold }: DashboardCardsProps) {
-    const statsConfig = [
+export function DashboardCards({ stats, lowStockThreshold = 15, crossStore = false }: DashboardCardsProps) {
+  const statsConfig = [
       {
         key: 'totalProducts' as const,
         label: 'Total Products',
-        description: 'Products in this store',
+        description: crossStore ? 'Products across all stores' : 'Products in this store',
         icon: ProductIcon,
         gradient: 'linear-gradient(135deg, #7c3aed 0%, #a855f7 100%)',
         iconBg: 'rgba(255,255,255,0.2)',
@@ -33,7 +34,7 @@ export function DashboardCards({ stats, lowStockThreshold }: DashboardCardsProps
       {
         key: 'totalInventory' as const,
         label: 'Total Inventory',
-        description: 'Total stock in this store',
+        description: crossStore ? 'Total stock across all stores' : 'Total stock in this store',
         icon: ChartVerticalIcon,
         gradient: 'linear-gradient(135deg, #1d4ed8 0%, #3b82f6 100%)',
         iconBg: 'rgba(255,255,255,0.2)',

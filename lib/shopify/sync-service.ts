@@ -280,15 +280,17 @@ export async function processInventoryUpdate(
     const delta = availableQuantity - previousQuantity;
 
     // Update local productCache inventory quantity for the source store variant
-    await prisma.productCache.updateMany({
-      where: {
-        storeId: sourceStore.id,
-        shopifyVariantId,
-      },
-      data: {
-        inventoryQuantity: availableQuantity,
-      },
-    });
+    if (delta !== 0) {
+      await prisma.productCache.updateMany({
+        where: {
+          storeId: sourceStore.id,
+          shopifyVariantId,
+        },
+        data: {
+          inventoryQuantity: availableQuantity,
+        },
+      });
+    }
 
     if (!sourceStore.autoSyncEnabled) {
       console.log(`[SyncService] Auto-sync is disabled for source store ${shopDomain}. Skipping target replication.`);

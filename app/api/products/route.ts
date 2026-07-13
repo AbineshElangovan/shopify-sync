@@ -21,6 +21,7 @@ export async function GET(req: NextRequest) {
       where: { storeId: store.id },
       orderBy: { updatedAt: 'desc' },
       include: {
+        store: true,
         collections: {
           include: {
             collection: true,
@@ -37,13 +38,42 @@ export async function GET(req: NextRequest) {
     // Group products by collection
     const groupedProducts: { [collectionTitle: string]: any[] } = {};
 
+    const skuImages: { [sku: string]: string[] } = {};
+    products.forEach((p) => {
+      if (p.sku && p.imageUrl) {
+        if (!skuImages[p.sku]) skuImages[p.sku] = [];
+        if (!skuImages[p.sku].includes(p.imageUrl)) {
+          skuImages[p.sku].push(p.imageUrl);
+        }
+      }
+    });
+
+    // Cross-store collection fallback logic
+    const currentSkus = products.map(p => p.sku).filter(Boolean) as string[];
+    const crossStoreProducts = await prisma.productCache.findMany({
+      where: { sku: { in: currentSkus }, collections: { some: {} } },
+      include: { collections: { include: { collection: true } } }
+    });
+
+    const skuCategories: { [sku: string]: string[] } = {};
+    crossStoreProducts.forEach(p => {
+      if (p.sku && p.collections) {
+        if (!skuCategories[p.sku]) skuCategories[p.sku] = [];
+        p.collections.forEach(cp => {
+           if (!skuCategories[p.sku!].includes(cp.collection.title)) {
+             skuCategories[p.sku!].push(cp.collection.title);
+           }
+        });
+      }
+    });
+
     products.forEach((p) => {
       const item = {
         id: p.id,
-        imageUrl: p.imageUrl,
+        imageUrls: (p.sku && skuImages[p.sku]?.length > 0) ? skuImages[p.sku] : (p.imageUrl ? [p.imageUrl] : []),
         title: p.title,
         sku: p.sku || 'N/A',
-        store: store.label || store.shopDomain,
+        store: p.store.label || p.store.shopDomain,
         price: p.price,
         priceText: `₹${(p.price).toFixed(2)}`,
         inventoryQuantity: p.inventoryQuantity,
@@ -60,21 +90,44 @@ export async function GET(req: NextRequest) {
         updatedTime: p.updatedAt.toLocaleTimeString('en-US'),
       };
 
+      let categoryTitles: string[] = [];
+      
       if (p.collections && p.collections.length > 0) {
-        p.collections.forEach((cp) => {
-          const title = cp.collection.title;
-          if (!groupedProducts[title]) {
-            groupedProducts[title] = [];
-          }
-          groupedProducts[title].push(item);
-        });
+        categoryTitles = p.collections.map(cp => cp.collection.title);
+      } else if (p.sku && skuCategories[p.sku] && skuCategories[p.sku].length > 0) {
+        categoryTitles = skuCategories[p.sku];
       } else {
-        const title = 'Uncategorized';
+        categoryTitles = ['Uncategorized'];
+      }
+
+      // Deduplicate category titles to prevent pushing the same item multiple times
+      categoryTitles = Array.from(new Set(categoryTitles));
+
+      categoryTitles.forEach((title) => {
         if (!groupedProducts[title]) {
           groupedProducts[title] = [];
         }
-        groupedProducts[title].push(item);
-      }
+        
+        const existingItem = groupedProducts[title].find(i => i.sku === item.sku && item.sku !== 'N/A');
+        
+        if (existingItem) {
+          // Aggregate inventory quantity
+          existingItem.inventoryQuantity += item.inventoryQuantity;
+          
+          // Re-evaluate stock level and status
+          existingItem.stockLevel =
+            existingItem.inventoryQuantity === 0
+              ? 'Out of Stock'
+              : existingItem.inventoryQuantity <= 5
+              ? 'Critical'
+              : existingItem.inventoryQuantity <= store.lowStockThreshold
+              ? 'Low'
+              : 'Healthy';
+          existingItem.status = existingItem.inventoryQuantity > 0 ? 'Active' : 'Inactive';
+        } else {
+          groupedProducts[title].push(item);
+        }
+      });
     });
 
     return NextResponse.json({

@@ -2,9 +2,33 @@ import { prisma } from '@/lib/db/prisma';
 import { getAdminClient } from '@/lib/shopify/admin';
 import { setInventoryQuantity } from '@/lib/shopify/inventory';
 import { createSyncLog } from '@/lib/shopify/sync-log';
-import { PRODUCT_SET_MUTATION, PRODUCT_DELETE_MUTATION, PRODUCT_VARIANTS_DELETE_MUTATION, GET_VARIANT_BY_SKU_QUERY, GET_PRODUCT_BY_ID_QUERY, LOCATIONS_QUERY, } from './graphql';
+import {
+  PRODUCT_SET_MUTATION, PRODUCT_DELETE_MUTATION, PRODUCT_VARIANTS_DELETE_MUTATION,
+  GET_VARIANT_BY_SKU_QUERY, GET_PRODUCT_BY_ID_QUERY, LOCATIONS_QUERY,
+  GET_PRODUCT_COLLECTIONS_QUERY, GET_COLLECTIONS_BY_TITLE_QUERY, CREATE_COLLECTION_MUTATION,
+  ADD_PRODUCT_TO_COLLECTION_MUTATION
+} from './graphql';
+
 const globalShared: any = global;
 globalShared.syncLocks = globalShared.syncLocks || new Set<string>();
+
+// Helper for async locks to prevent race conditions during concurrent execution (e.g. collection creation)
+globalShared.asyncLocks = globalShared.asyncLocks || new Map<string, Promise<void>>();
+async function withLock<T>(key: string, task: () => Promise<T>): Promise<T> {
+  const previousLock = globalShared.asyncLocks.get(key);
+  let releaseLock: () => void;
+  const newLock = new Promise<void>((resolve) => { releaseLock = resolve; });
+  const taskPromise = (async () => {
+    if (previousLock) await previousLock;
+    try { return await task(); }
+    finally {
+      releaseLock!();
+      if (globalShared.asyncLocks.get(key) === newLock) globalShared.asyncLocks.delete(key);
+    }
+  })();
+  globalShared.asyncLocks.set(key, newLock);
+  return taskPromise;
+}
 
 function calculateAdjustedPrice(sourcePriceStr: string, sourceStore: any, targetStore: any): string {
   const sourcePrice = parseFloat(sourcePriceStr || "0");
@@ -22,8 +46,8 @@ function calculateAdjustedPrice(sourcePriceStr: string, sourceStore: any, target
   }
 
   // Apply target adjustment on base price
+  let adjusted = basePrice;
   if (targetStore && targetStore.isPriceAdjustmentEnabled) {
-    let adjusted = basePrice;
     const value = targetStore.priceAdjustmentValue || 0;
 
     if (targetStore.priceAdjustmentType === 'PERCENTAGE') {
@@ -31,15 +55,13 @@ function calculateAdjustedPrice(sourcePriceStr: string, sourceStore: any, target
     } else if (targetStore.priceAdjustmentType === 'FIXED') {
       adjusted = basePrice + value;
     }
-
-    if (adjusted < 0) {
-      adjusted = 0;
-    }
-
-    return adjusted.toFixed(2);
   }
 
-  return basePrice.toFixed(2);
+  if (adjusted < 0) {
+    adjusted = 0;
+  }
+
+  return adjusted.toFixed(2);
 }
 
 export function acquireSyncLock(shop: string, id: string, identifier: string): boolean {
@@ -124,6 +146,35 @@ export async function updateLocalProductCache(shopDomain: string, payload: any) 
       console.log(`[ProductSync:Cache] Store ${shopDomain} not found or inactive. Skipping cache update.`);
       return;
     }
+    try {
+      const { getAdminClient } = require('@/lib/shopify/admin');
+      const adminClient = await getAdminClient(shopDomain);
+      const query = `
+        query getProductInventory($id: ID!) {
+          product(id: $id) {
+            variants(first: 50) {
+              edges {
+                node {
+                  id
+                  inventoryQuantity
+                }
+              }
+            }
+          }
+        }
+      `;
+      const res: any = await adminClient.request(query, { variables: { id: `gid://shopify/Product/${payload.id}` } });
+      const gqlVariants = res?.data?.product?.variants?.edges?.map((e: any) => e.node) || [];
+
+      for (const variant of payload.variants || []) {
+        const gqlVar = gqlVariants.find((gv: any) => gv.id === `gid://shopify/ProductVariant/${variant.id}`);
+        if (gqlVar && typeof gqlVar.inventoryQuantity === 'number') {
+          variant.inventory_quantity = gqlVar.inventoryQuantity;
+        }
+      }
+    } catch (err: any) {
+      console.error(`[ProductSync:Cache] Failed to fetch true inventory for ${payload.id}:`, err.message);
+    }
 
     const shopifyProductId = `gid://shopify/Product/${payload.id}`;
     const variants = payload.variants || [];
@@ -147,33 +198,53 @@ export async function updateLocalProductCache(shopDomain: string, payload: any) 
         },
       });
 
-        const newImageUrl = payload.image?.src || payload.images?.[0]?.src;
-        
-        await prisma.productCache.upsert({
-          where: {
-            storeId_shopifyVariantId: {
-              storeId: store.id,
-              shopifyVariantId,
-            },
+      const newImageUrl = payload.image?.src || payload.images?.[0]?.src;
+
+      const existingCache = await prisma.productCache.findUnique({
+        where: {
+          storeId_shopifyVariantId: {
+            storeId: store.id,
+            shopifyVariantId,
           },
-          update: {
-            sku,
-            title: fullTitle,
-            ...(newImageUrl ? { imageUrl: newImageUrl } : {}),
-            shopifyProductId,
-            price: parseFloat(variant.price || "0"),
-          },
-        create: {
-          storeId: store.id,
-          shopifyProductId,
-          shopifyVariantId,
-          sku,
-          title: fullTitle,
-          imageUrl: payload.image?.src || payload.images?.[0]?.src || null,
-          inventoryQuantity: variant.inventory_quantity ?? 0,
-          price: parseFloat(variant.price || "0"),
         },
       });
+
+      const parsedPrice = parseFloat(variant.price || "0");
+      
+      if (!existingCache) {
+        await prisma.productCache.create({
+          data: {
+            storeId: store.id,
+            shopifyProductId,
+            shopifyVariantId,
+            sku,
+            title: fullTitle,
+            imageUrl: newImageUrl || null,
+            inventoryQuantity: variant.inventory_quantity ?? 0,
+            price: parsedPrice,
+          }
+        });
+      } else {
+        const needsUpdate = existingCache.sku !== sku || 
+                            existingCache.title !== fullTitle || 
+                            existingCache.price !== parsedPrice || 
+                            (newImageUrl && existingCache.imageUrl !== newImageUrl) ||
+                            (variant.inventory_quantity !== undefined && existingCache.inventoryQuantity !== variant.inventory_quantity);
+                            
+        if (needsUpdate) {
+          await prisma.productCache.update({
+            where: { id: existingCache.id },
+            data: {
+              sku,
+              title: fullTitle,
+              ...(newImageUrl ? { imageUrl: newImageUrl } : {}),
+              shopifyProductId,
+              price: parsedPrice,
+              ...(variant.inventory_quantity !== undefined ? { inventoryQuantity: variant.inventory_quantity } : {})
+            },
+          });
+        }
+      }
 
       await prisma.variantMap.upsert({
         where: {
@@ -377,7 +448,7 @@ export async function processProductCreate(shopDomain: string, payload: any, web
             try {
               await setInventoryQuantity(targetStore.shopDomain, variant.inventoryItem.id, targetLocationId, initialQuantity);
               console.log(`[ProductSync:Create] Set initial inventory of ${initialQuantity} for SKU ${sku} in ${targetStore.shopDomain}`);
-              
+
               await createSyncLog({
                 sku,
                 sourceStoreId: sourceStore.id,
@@ -449,6 +520,11 @@ export async function processProductCreate(shopDomain: string, payload: any, web
             },
           });
         }
+
+        // Sync Collections across stores
+        // if (payload.admin_graphql_api_id && createdProduct?.id) {
+        //   await syncProductCollections(shopDomain, payload.admin_graphql_api_id, targetStore.shopDomain, createdProduct.id, targetStore.id);
+        // }
 
         console.log(`[ProductSync:Create] Successfully created product "${payload.title}" in target store ${targetStore.shopDomain}`);
       } catch (err: any) {
@@ -702,8 +778,7 @@ export async function processProductUpdate(shopDomain: string, payload: any, web
         mergedDescription !== (targetProduct.descriptionHtml || "") ||
         mergedVendor !== (targetProduct.vendor || "") ||
         mergedType !== (targetProduct.productType || "") ||
-        mergedStatus !== (targetProduct.status?.toUpperCase() || "ACTIVE") ||
-        (payload.images && payload.images.length > 0);
+        mergedStatus !== (targetProduct.status?.toUpperCase() || "ACTIVE");
 
       if (!hasProductChanges) {
         if (variantsInput.length !== targetVariants.length) {
@@ -730,6 +805,11 @@ export async function processProductUpdate(shopDomain: string, payload: any, web
           }
         }
       }
+
+      // Sync Collections across stores (Even if product details didn't change, collections might have)
+      // if (payload.admin_graphql_api_id && targetProductId) {
+      //   await syncProductCollections(shopDomain, payload.admin_graphql_api_id, targetStore.shopDomain, targetProductId, targetStore.id);
+      // }
 
       if (!hasProductChanges) {
         console.log(`[ProductSync:Update] Product "${mergedTitle}" details are already identical in target store ${targetStore.shopDomain}. Skipping update.`);
@@ -1174,5 +1254,118 @@ export async function applyPriceAdjustmentToStore(storeId: string) {
   }
 
   console.log(`[PriceAdjustment] Bulk price adjustment completed for store ${storeId}`);
+}
+
+
+/**
+ * Synchronizes custom collections for a specific product across stores.
+ */
+async function syncProductCollections(sourceStoreDomain: string, sourceProductId: string, targetStoreDomain: string, targetProductId: string, targetStoreId: string) {
+  try {
+    const sourceClient = await getAdminClient(sourceStoreDomain);
+    const sourceResponse: any = await sourceClient.request(GET_PRODUCT_COLLECTIONS_QUERY, { variables: { id: sourceProductId } });
+    const sourceCollections = sourceResponse?.data?.product?.collections?.edges?.map((e: any) => e.node) || [];
+
+    if (sourceCollections.length === 0) {
+      return;
+    }
+
+    // Deduplicate source collections by title to prevent redundant syncs
+    // if the source store accidentally has duplicate collections
+    const uniqueSourceCollections = [];
+    const seenTitles = new Set();
+    for (const col of sourceCollections) {
+      if (!seenTitles.has(col.title)) {
+        seenTitles.add(col.title);
+        uniqueSourceCollections.push(col);
+      }
+    }
+
+    const targetClient = await getAdminClient(targetStoreDomain);
+
+    for (const sourceCol of uniqueSourceCollections) {
+      const lockKey = `colSync:${targetStoreId}:${sourceCol.title}`;
+
+      await withLock(lockKey, async () => {
+        let targetCollectionId = '';
+        let targetCollectionHandle = '';
+
+        // 1. Check local DB first to avoid race conditions and Shopify Search API delays
+        const localCollection = await prisma.collection.findFirst({
+          where: { storeId: targetStoreId, title: sourceCol.title }
+        });
+
+        if (localCollection) {
+          targetCollectionId = localCollection.shopifyCollectionId;
+          targetCollectionHandle = localCollection.handle;
+        } else {
+          // 2. Search for collection by title in target store
+          const safeTitle = sourceCol.title.replace(/"/g, '\\"');
+          const searchRes: any = await targetClient.request(GET_COLLECTIONS_BY_TITLE_QUERY, {
+            variables: { query: `title:"${safeTitle}"`, first: 1 }
+          });
+          const foundCollections = searchRes?.data?.collections?.edges || [];
+
+          if (foundCollections.length > 0) {
+            targetCollectionId = foundCollections[0].node.id;
+            targetCollectionHandle = foundCollections[0].node.handle;
+          } else {
+            // 3. Create the custom collection if not found
+            console.log(`[ProductSync:Collection] Collection '${sourceCol.title}' not found in ${targetStoreDomain}. Creating it...`);
+            const createRes: any = await targetClient.request(CREATE_COLLECTION_MUTATION, {
+              variables: { input: { title: sourceCol.title } }
+            });
+
+            const errors = createRes?.data?.collectionCreate?.userErrors || [];
+            if (errors.length > 0) {
+              console.error(`[ProductSync:Collection] Failed to create collection '${sourceCol.title}':`, errors);
+              return; // return instead of continue since we are inside a callback
+            }
+
+            targetCollectionId = createRes?.data?.collectionCreate?.collection?.id;
+            targetCollectionHandle = createRes?.data?.collectionCreate?.collection?.handle;
+          }
+        }
+
+        if (!targetCollectionId) return;
+
+        // 3. Add product to the target collection
+        console.log(`[ProductSync:Collection] Adding product ${targetProductId} to collection ${targetCollectionId} in ${targetStoreDomain}`);
+        const addRes: any = await targetClient.request(ADD_PRODUCT_TO_COLLECTION_MUTATION, {
+          variables: { id: targetCollectionId, productIds: [targetProductId] }
+        });
+
+        const addErrors = addRes?.data?.collectionAddProducts?.userErrors || [];
+        if (addErrors.length > 0) {
+          console.error(`[ProductSync:Collection] Failed to add product to collection '${sourceCol.title}':`, addErrors);
+        } else {
+          // 4. Update the local DB cache for the collection mapping
+          try {
+            const dbCol = await prisma.collection.upsert({
+              where: { storeId_shopifyCollectionId: { storeId: targetStoreId, shopifyCollectionId: targetCollectionId } },
+              update: { title: sourceCol.title, handle: targetCollectionHandle },
+              create: { storeId: targetStoreId, shopifyCollectionId: targetCollectionId, title: sourceCol.title, handle: targetCollectionHandle }
+            });
+
+            const dbProduct = await prisma.productCache.findFirst({
+              where: { storeId: targetStoreId, shopifyProductId: targetProductId }
+            });
+
+            if (dbProduct) {
+              await prisma.collectionProduct.upsert({
+                where: { collectionId_productCacheId: { collectionId: dbCol.id, productCacheId: dbProduct.id } },
+                update: {},
+                create: { collectionId: dbCol.id, productCacheId: dbProduct.id }
+              });
+            }
+          } catch (dbErr: any) {
+            console.error(`[ProductSync:Collection] Failed to update local DB for collection ${targetCollectionId}:`, dbErr.message);
+          }
+        }
+      });
+    }
+  } catch (err: any) {
+    console.error(`[ProductSync:Collection] Failed to sync collections for product ${sourceProductId} to ${targetStoreDomain}:`, err.message);
+  }
 }
 

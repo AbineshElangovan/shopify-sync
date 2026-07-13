@@ -64,7 +64,7 @@ export default function ProductsPage() {
   };
 
   const columns: ColumnConfig[] = [
-    { title: 'Image', key: 'imageUrl', type: 'image' },
+    { title: 'Image', key: 'imageUrls', type: 'image' },
     { title: 'Product Name', key: 'title', type: 'bold' },
     { title: 'SKU', key: 'sku' },
     { title: 'Store', key: 'store' },
@@ -148,7 +148,11 @@ export default function ProductsPage() {
         ) : Object.keys(groupedProducts).length > 0 ? (() => {
           const colors = ['#6366f1', '#0f766e', '#7c3aed', '#db2777', '#ea580c', '#0891b2'];
           return Object.entries(groupedProducts)
-            .filter(([collectionName]) => collectionName !== 'Uncategorized')
+            .sort((a, b) => {
+              if (a[0] === 'Uncategorized') return 1;
+              if (b[0] === 'Uncategorized') return -1;
+              return a[0].localeCompare(b[0]);
+            })
             .map(([collectionName, items], index) => {
             const filteredItems = filterProducts(items as any[]);
             return (

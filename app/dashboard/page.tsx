@@ -43,7 +43,7 @@ export default async function DashboardPage() {
     };
   });
 
-  const chartData = { combinedData };
+  const chartData = { combinedData, currentStoreData: combinedData };
 
   // ── Store Summary Table ──
   const storeSummaryData = stores.map((store) => ({

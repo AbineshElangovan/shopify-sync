@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { shopify } from "@/lib/shopify";
 import { prisma } from "@/lib/db/prisma";
 
-export class AuthError extends Error {}
+export class AuthError extends Error { }
 
 export async function authenticate(req: NextRequest) {
   const authHeader = req.headers.get("authorization");
@@ -19,6 +19,7 @@ export async function authenticate(req: NextRequest) {
         return { shop: store.shopDomain, store };
       }
     }
+
     throw new AuthError("Missing session token");
   }
 

@@ -10,7 +10,7 @@ export async function GET(req: NextRequest) {
 
     // Fetch data for all stores to combine inventory
     const [productCaches, totalSyncs, successSyncs, latestSync, allStores] = await Promise.all([
-      prisma.productCache.findMany({ orderBy: { updatedAt: 'desc' } }),
+      prisma.productCache.findMany({ orderBy: [{ updatedAt: 'desc' }, { id: 'asc' }] }),
       prisma.syncLog.count(),
       prisma.syncLog.count({ where: { status: 'SUCCESS' } }),
       prisma.syncLog.findFirst({
