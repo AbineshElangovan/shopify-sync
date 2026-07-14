@@ -21,13 +21,13 @@ export function PageLoader({
           0%, 100% { opacity: 1; }
           50%       { opacity: 0.4; }
         }
-        .sk-box {
+        .ys-sk-box {
           border-radius: 6px;
           background: #e5e7eb;
           animation: sk-pulse 1.5s ease-in-out infinite;
         }
         @keyframes sk-spin { to { transform: rotate(360deg); } }
-        .sk-spinner {
+        .ys-sk-spinner {
           width: 52px; height: 52px;
           border: 5px solid #e5e7eb;
           border-top-color: #6366f1;
@@ -38,7 +38,7 @@ export function PageLoader({
           0%   { transform: scale(1);   opacity: 0.6; }
           100% { transform: scale(1.9); opacity: 0;   }
         }
-        .sk-ping {
+        .ys-sk-ping {
           position: absolute;
           width: 52px; height: 52px;
           border: 3px solid #6366f1;
@@ -60,8 +60,8 @@ export function PageLoader({
       }}>
         {/* Spinner with ping ring */}
         <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div className="sk-ping" />
-          <div className="sk-spinner" />
+          <div className="ys-sk-ping" />
+          <div className="ys-sk-spinner" />
         </div>
 
         {/* Text */}
@@ -94,9 +94,9 @@ export function PageLoader({
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 16, marginBottom: 32 }}>
             {[1, 2, 3, 4].map((i) => (
               <div key={i} style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: 20 }}>
-                <div className="sk-box" style={{ height: 12, width: '55%', marginBottom: 14 }} />
-                <div className="sk-box" style={{ height: 28, width: '40%', marginBottom: 10 }} />
-                <div className="sk-box" style={{ height: 10, width: '70%' }} />
+                <div className="ys-sk-box" style={{ height: 12, width: '55%', marginBottom: 14 }} />
+                <div className="ys-sk-box" style={{ height: 28, width: '40%', marginBottom: 10 }} />
+                <div className="ys-sk-box" style={{ height: 10, width: '70%' }} />
               </div>
             ))}
           </div>
@@ -107,8 +107,8 @@ export function PageLoader({
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 32 }}>
             {[1, 2].map((i) => (
               <div key={i} style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: 20 }}>
-                <div className="sk-box" style={{ height: 14, width: '40%', marginBottom: 20 }} />
-                <div className="sk-box" style={{ height: 180 }} />
+                <div className="ys-sk-box" style={{ height: 14, width: '40%', marginBottom: 20 }} />
+                <div className="ys-sk-box" style={{ height: 180 }} />
               </div>
             ))}
           </div>
@@ -120,7 +120,7 @@ export function PageLoader({
             <div style={{ display: 'flex' }}>
               {Array.from({ length: cols }).map((_, j) => (
                 <div key={j} style={{ flex: j === 0 ? '0 0 60px' : 1, padding: '12px 16px', background: '#ede9fe', borderRight: j < cols - 1 ? '1px solid #ddd6fe' : 'none' }}>
-                  <div className="sk-box" style={{ height: 11, width: '70%', background: '#c4b5fd' }} />
+                  <div className="ys-sk-box" style={{ height: 11, width: '70%', background: '#c4b5fd' }} />
                 </div>
               ))}
             </div>
@@ -129,8 +129,8 @@ export function PageLoader({
                 {Array.from({ length: cols }).map((_, j) => (
                   <div key={j} style={{ flex: j === 0 ? '0 0 60px' : 1, padding: '13px 16px', borderRight: j < cols - 1 ? '1px solid #f1f5f9' : 'none' }}>
                     {j === 0
-                      ? <div className="sk-box" style={{ width: 38, height: 38, borderRadius: 6 }} />
-                      : <div className="sk-box" style={{ height: 11, width: `${45 + (j * 19) % 45}%` }} />
+                      ? <div className="ys-sk-box" style={{ width: 38, height: 38, borderRadius: 6 }} />
+                      : <div className="ys-sk-box" style={{ height: 11, width: `${45 + (j * 19) % 45}%` }} />
                     }
                   </div>
                 ))}
