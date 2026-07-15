@@ -12,15 +12,24 @@ export async function POST(req: NextRequest) {
       return new NextResponse('Ignored topic', { status: 200 });
     }
 
+    const timestamp = new Date().toISOString();
+    console.log(`\n======================================================`);
+    console.log(`[Webhook:inventory_levels/update] RECEIVED at ${timestamp}`);
+    console.log(`[Webhook:inventory_levels/update] Event Name: inventory_levels/update`);
+    console.log(`[Webhook:inventory_levels/update] Shop Domain: ${shop}`);
+    console.log(`[Webhook:inventory_levels/update] Webhook ID: ${webhookId}`);
+
     // Idempotency: skip if already processed
     const existingEvent = await prisma.webhookEvent.findUnique({
       where: { id: webhookId },
     });
 
     if (existingEvent) {
-      console.log(`[Webhook:inventory_levels/update] ${webhookId} already processed.`);
+      console.log(`[Webhook:inventory_levels/update] Idempotency check: SKIPPED (Already processed)`);
       return new NextResponse('Already processed', { status: 200 });
     }
+
+    console.log(`[Webhook:inventory_levels/update] Idempotency check: PASSED (New event)`);
 
     // Record event
     await prisma.webhookEvent.create({
@@ -35,20 +44,40 @@ export async function POST(req: NextRequest) {
       return new NextResponse('Invalid payload', { status: 400 });
     }
 
-    console.log(`[Webhook:inventory_levels/update] shop=${shop} item=${inventory_item_id} location=${location_id} qty=${available}`);
+    console.log(`[Webhook:inventory_levels/update] Inventory Item ID: ${inventory_item_id}`);
+    console.log(`[Webhook:inventory_levels/update] Location ID: ${location_id}`);
+    console.log(`[Webhook:inventory_levels/update] Available Quantity: ${available}`);
 
-    // Process in background — return 200 immediately so Shopify does not retry
-    processInventoryUpdate(
-      shop,
-      inventory_item_id.toString(),
-      location_id.toString(),
-      available,
-      webhookId
-    ).then(() => {
-      console.log(`[Webhook:inventory_levels/update] sync complete for ${shop}`);
-    }).catch((err: Error) => {
-      console.error(`[Webhook:inventory_levels/update] sync failed for ${shop}:`, err.message);
+    // Look up Variant and Product for logging
+    const inventoryItemIdStr = String(inventory_item_id);
+    const gidInventoryItemId = inventoryItemIdStr.includes('gid://')
+      ? inventoryItemIdStr
+      : `gid://shopify/InventoryItem/${inventoryItemIdStr}`;
+    
+    const variantInfo = await prisma.variantMap.findFirst({
+      where: { inventoryItemId: gidInventoryItemId, store: { shopDomain: shop } },
     });
+
+    if (variantInfo) {
+      console.log(`[Webhook:inventory_levels/update] Variant ID: ${variantInfo.shopifyVariantId}`);
+      console.log(`[Webhook:inventory_levels/update] Product ID: ${variantInfo.shopifyProductId}`);
+      console.log(`[Webhook:inventory_levels/update] SKU: ${variantInfo.sku}`);
+    } else {
+      console.log(`[Webhook:inventory_levels/update] SKU/Variant Info: Not found in VariantMap for this shop`);
+    }
+
+    try {
+      await processInventoryUpdate(
+        shop,
+        inventory_item_id.toString(),
+        location_id.toString(),
+        available,
+        webhookId
+      );
+      console.log(`[Webhook:inventory_levels/update] sync complete for ${shop} at ${new Date().toISOString()}`);
+    } catch (err: any) {
+      console.error(`[Webhook:inventory_levels/update] sync failed for ${shop}:`, err.message);
+    }
 
     return new NextResponse('Webhook processed', { status: 200 });
   } catch (error: any) {

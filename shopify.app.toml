@@ -7,6 +7,7 @@ embedded = true
 
 [build]
 automatically_update_urls_on_dev = true
+dev_command = "npm run next:dev"
 
 [webhooks]
 api_version = "2026-10"
@@ -16,4 +17,4 @@ api_version = "2026-10"
 scopes = "read_inventory,read_products,write_inventory,write_products"
 
 [auth]
-redirect_urls = ["https://dz50mdfc-3000.inc1.devtunnels.ms/api/auth/callback"]
+redirect_urls = [ "https://dz50mdfc-3000.inc1.devtunnels.ms/api/auth/callback" ]

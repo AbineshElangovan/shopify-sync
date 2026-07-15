@@ -17,7 +17,7 @@ function walk(dir) {
       }
     }
   } catch (e) {
-    // Ignore if dir doesn't exist
+
   }
   return results;
 }
@@ -25,7 +25,7 @@ function walk(dir) {
 const files = [...walk('app'), ...walk('components')];
 const allClasses = new Set();
 
-// A regex to match className="...", className={'...'}, className={`...`}
+
 const classNameRegex = /className=(?:\{`|'|")([^`'"]+)(?:`\}|'|")/g;
 
 for (const file of files) {

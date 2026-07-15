@@ -146,35 +146,7 @@ export async function updateLocalProductCache(shopDomain: string, payload: any) 
       console.log(`[ProductSync:Cache] Store ${shopDomain} not found or inactive. Skipping cache update.`);
       return;
     }
-    try {
-      const { getAdminClient } = require('@/lib/shopify/admin');
-      const adminClient = await getAdminClient(shopDomain);
-      const query = `
-        query getProductInventory($id: ID!) {
-          product(id: $id) {
-            variants(first: 50) {
-              edges {
-                node {
-                  id
-                  inventoryQuantity
-                }
-              }
-            }
-          }
-        }
-      `;
-      const res: any = await adminClient.request(query, { variables: { id: `gid://shopify/Product/${payload.id}` } });
-      const gqlVariants = res?.data?.product?.variants?.edges?.map((e: any) => e.node) || [];
-
-      for (const variant of payload.variants || []) {
-        const gqlVar = gqlVariants.find((gv: any) => gv.id === `gid://shopify/ProductVariant/${variant.id}`);
-        if (gqlVar && typeof gqlVar.inventoryQuantity === 'number') {
-          variant.inventory_quantity = gqlVar.inventoryQuantity;
-        }
-      }
-    } catch (err: any) {
-      console.error(`[ProductSync:Cache] Failed to fetch true inventory for ${payload.id}:`, err.message);
-    }
+    // Removed GraphQL query to fetch true inventory because products/update shouldn't modify inventory cache for existing products (it races with inventory_levels/update)
 
     const shopifyProductId = `gid://shopify/Product/${payload.id}`;
     const variants = payload.variants || [];
@@ -228,8 +200,7 @@ export async function updateLocalProductCache(shopDomain: string, payload: any) 
         const needsUpdate = existingCache.sku !== sku || 
                             existingCache.title !== fullTitle || 
                             existingCache.price !== parsedPrice || 
-                            (newImageUrl && existingCache.imageUrl !== newImageUrl) ||
-                            (variant.inventory_quantity !== undefined && existingCache.inventoryQuantity !== variant.inventory_quantity);
+                            (newImageUrl && existingCache.imageUrl !== newImageUrl);
                             
         if (needsUpdate) {
           await prisma.productCache.update({
@@ -240,7 +211,6 @@ export async function updateLocalProductCache(shopDomain: string, payload: any) 
               ...(newImageUrl ? { imageUrl: newImageUrl } : {}),
               shopifyProductId,
               price: parsedPrice,
-              ...(variant.inventory_quantity !== undefined ? { inventoryQuantity: variant.inventory_quantity } : {})
             },
           });
         }

@@ -26,6 +26,26 @@ export const INVENTORY_SET_MUTATION = `
   }
 `;
 
+export const INVENTORY_ADJUST_MUTATION = `
+  mutation inventoryAdjustQuantities($input: InventoryAdjustQuantitiesInput!, $idempotencyKey: String!) {
+    inventoryAdjustQuantities(input: $input) @idempotent(key: $idempotencyKey) {
+      inventoryAdjustmentGroup {
+        createdAt
+        reason
+        changes {
+          name
+          delta
+          quantityAfterChange
+        }
+      }
+      userErrors {
+        field
+        message
+      }
+    }
+  }
+`;
+
 /**
  * Fetches a single inventory item with its levels across locations.
  * Used by: lib/shopify/inventory.ts (getInventoryItem)

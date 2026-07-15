@@ -12,7 +12,7 @@ import { prisma } from '@/lib/db/prisma';
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  title: 'Shopify Inventory Sync',
+  title: 'Multi-Store Inventory Sync',
   description: 'Multi-store inventory synchronization',
 };
 
@@ -67,7 +67,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                       className="w-10 h-auto rounded-lg"
                     />
                     <span className="text-lg font-semibold text-white tracking-wide">
-                      ESHAN InventorySync
+                      Multi-Store Inventory Sync
                     </span>
                   </Link>
 
@@ -93,7 +93,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                   <div className="flex flex-col gap-4">
                     <div className="flex items-center gap-3">
                       <Image src="/logo.png" alt="InventorySync logo" width={75} height={75} className="rounded-lg" style={{ width: '75px', height: '75px' }} />
-                      <span className="text-white text-lg font-semibold">ESHAN InventorySync</span>
+                      <span className="text-white text-lg font-semibold">Multi-Store Inventory Sync</span>
                     </div>
                     <p className="text-sm text-gray-400 leading-relaxed">
                       Automatically keep inventory levels identical across all your Shopify stores in real time, without manual work.
@@ -109,7 +109,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                           <path strokeLinecap="round" strokeLinejoin="round" d="M17.657 16.657L13.414 20.9a2 2 0 01-2.828 0L6.343 16.657a8 8 0 1111.314 0z" />
                           <path strokeLinecap="round" strokeLinejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
                         </svg>
-                        <span>123 ESHAN Inventory Sync, Coimbatore - 641 001</span>
+                        <span>123 Multi-Store Inventory Sync, Coimbatore - 641 001</span>
                       </li>
                       <li className="flex items-center gap-3">
                         <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 shrink-0 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -143,7 +143,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
 
                 <div className="mt-10 pt-6 border-t border-gray-700 flex flex-col sm:flex-row items-center justify-between gap-4">
                   <p className="text-xs text-gray-500">
-                    © {new Date().getFullYear()} ESHAN InventorySync. All rights reserved.
+                    © {new Date().getFullYear()} Multi-Store Inventory Sync. All rights reserved.
                   </p>
                   <div className="flex items-center gap-4 text-xs text-gray-500">
                     <span className="flex items-center gap-1">
