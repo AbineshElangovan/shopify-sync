@@ -14,7 +14,7 @@ globalShared.syncLocks = globalShared.syncLocks || new Set<string>();
 
 // Helper for async locks to prevent race conditions during concurrent execution (e.g. collection creation)
 globalShared.asyncLocks = globalShared.asyncLocks || new Map<string, Promise<void>>();
-async function withLock<T>(key: string, task: () => Promise<T>): Promise<T> {
+export async function withLock<T>(key: string, task: () => Promise<T>): Promise<T> {
   const previousLock = globalShared.asyncLocks.get(key);
   let releaseLock: () => void;
   const newLock = new Promise<void>((resolve) => { releaseLock = resolve; });
@@ -136,19 +136,38 @@ async function findTargetProductBySku(shopDomain: string, sku: string) {
   return null;
 }
 
-export async function updateLocalProductCache(shopDomain: string, payload: any) {
+export async function updateLocalProductCache(shopDomain: string, payload: any, topic?: string) {
   try {
     const store = await prisma.store.findUnique({
       where: { shopDomain },
     });
 
-    if (!store || !store.isActive) {
+    if (!store) return;
+
+    const shopifyProductId = `gid://shopify/Product/${payload.id}`;
+
+    if (topic === 'products/delete') {
+      await prisma.productCache.deleteMany({
+        where: {
+          storeId: store.id,
+          shopifyProductId,
+        },
+      });
+      await prisma.variantMap.deleteMany({
+        where: {
+          storeId: store.id,
+          shopifyProductId,
+        },
+      });
+      return;
+    }
+
+    if (!store.isActive) {
       console.log(`[ProductSync:Cache] Store ${shopDomain} not found or inactive. Skipping cache update.`);
       return;
     }
     // Removed GraphQL query to fetch true inventory because products/update shouldn't modify inventory cache for existing products (it races with inventory_levels/update)
 
-    const shopifyProductId = `gid://shopify/Product/${payload.id}`;
     const variants = payload.variants || [];
     const syncedVariantIds: string[] = [];
 

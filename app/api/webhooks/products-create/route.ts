@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyWebhook } from "@/lib/shopify/webhooks";
 import { prisma } from "@/lib/db/prisma";
-import { processProductCreate, hasSyncLock, releaseSyncLock, updateLocalProductCache } from "@/services/product-sync";
+import { processProductCreate, hasSyncLock, releaseSyncLock, updateLocalProductCache, withLock } from "@/services/product-sync";
 
 export async function POST(req: NextRequest) {
   try {
@@ -33,14 +33,16 @@ export async function POST(req: NextRequest) {
       return new NextResponse("Ignored sync loop", { status: 200 });
     }
 
-    // First update the local database cache for this store (single product)
-    updateLocalProductCache(shop, payload).then(() => {
-      // Replicate the creation to all other connected stores
-      return processProductCreate(shop, payload, webhookId);
-    }).then(() => {
-      console.log(`[Webhook:products/create] sync complete for ${shop}`);
-    }).catch((err) => {
-      console.error(`[Webhook:products/create] sync failed for ${shop}:`, err.message);
+    // Use withLock to prevent concurrent webhooks (like a fast update following a create) from creating duplicates
+    const lockKey = `product_sync_${payload.id}`;
+    withLock(lockKey, async () => {
+      try {
+        await updateLocalProductCache(shop, payload);
+        await processProductCreate(shop, payload, webhookId);
+        console.log(`[Webhook:products/create] sync complete for ${shop}`);
+      } catch (err: any) {
+        console.error(`[Webhook:products/create] sync failed for ${shop}:`, err.message);
+      }
     });
 
     return new NextResponse("Webhook processed successfully", { status: 200 });

@@ -9,13 +9,6 @@ export async function GET(req: NextRequest) {
   try {
     const { store } = await authenticate(req);
     
-    // Trigger product and inventory sync
-    try {
-      await syncStoreProducts(store.shopDomain);
-    } catch (syncErr: any) {
-      console.error("[Products API] Sync error:", syncErr.message);
-    }
-
     // Fetch store-specific products with collections
     const products = await prisma.productCache.findMany({
       where: { storeId: store.id },
@@ -70,6 +63,7 @@ export async function GET(req: NextRequest) {
     products.forEach((p) => {
       const item = {
         id: p.id,
+        shopifyProductId: p.shopifyProductId,
         imageUrls: (p.sku && skuImages[p.sku]?.length > 0) ? skuImages[p.sku] : (p.imageUrl ? [p.imageUrl] : []),
         title: p.title,
         sku: p.sku || 'N/A',
@@ -100,7 +94,7 @@ export async function GET(req: NextRequest) {
         categoryTitles = ['Uncategorized'];
       }
 
-      // Deduplicate category titles to prevent pushing the same item multiple times
+        // Deduplicate category titles to prevent pushing the same item multiple times
       categoryTitles = Array.from(new Set(categoryTitles));
 
       categoryTitles.forEach((title) => {
@@ -108,7 +102,11 @@ export async function GET(req: NextRequest) {
           groupedProducts[title] = [];
         }
         
-        const existingItem = groupedProducts[title].find(i => i.sku === item.sku && item.sku !== 'N/A');
+        // Group by SKU if available, otherwise fallback to the shopify product ID so variants of the same product merge
+        const existingItem = groupedProducts[title].find((i: any) => 
+          (item.sku !== 'N/A' && i.sku === item.sku) || 
+          (item.sku === 'N/A' && i.shopifyProductId === p.shopifyProductId)
+        );
         
         if (existingItem) {
           // Aggregate inventory quantity

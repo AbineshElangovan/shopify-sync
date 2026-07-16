@@ -67,16 +67,20 @@ export async function POST(req: NextRequest) {
     }
 
     try {
-      await processInventoryUpdate(
+      // Fire and forget - DO NOT AWAIT! 
+      // Shopify requires a 200 OK within 5 seconds, but our cache delay takes 10 seconds.
+      processInventoryUpdate(
         shop,
         inventory_item_id.toString(),
         location_id.toString(),
         available,
         webhookId
-      );
-      console.log(`[Webhook:inventory_levels/update] sync complete for ${shop} at ${new Date().toISOString()}`);
+      ).catch((err: any) => {
+        console.error(`[Webhook:inventory_levels/update] Background sync failed for ${shop}:`, err.message);
+      });
+      console.log(`[Webhook:inventory_levels/update] Background sync started for ${shop} at ${new Date().toISOString()}`);
     } catch (err: any) {
-      console.error(`[Webhook:inventory_levels/update] sync failed for ${shop}:`, err.message);
+      console.error(`[Webhook:inventory_levels/update] sync trigger failed for ${shop}:`, err.message);
     }
 
     return new NextResponse('Webhook processed', { status: 200 });

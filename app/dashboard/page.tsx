@@ -65,7 +65,10 @@ export default async function DashboardPage() {
 
   // ── Low Stock Products Table ──
   const lowStockRaw = await prisma.productCache.findMany({
-    where: { inventoryQuantity: { lte: lowStockThreshold } },
+    where: { 
+      storeId: primaryStore?.id,
+      inventoryQuantity: { lte: lowStockThreshold } 
+    },
     orderBy: { inventoryQuantity: 'asc' },
     take: 100,
   });
@@ -93,6 +96,7 @@ export default async function DashboardPage() {
 
   // ── Recently Added Products Table ──
   const recentlyAddedRaw = await prisma.productCache.findMany({
+    where: { storeId: primaryStore?.id },
     orderBy: { updatedAt: 'desc' },
     take: 100,
   });
