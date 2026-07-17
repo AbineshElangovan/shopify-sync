@@ -7,6 +7,35 @@ export async function POST(req: NextRequest) {
   try {
     const { topic, shop, webhookId, rawBody } = await verifyWebhook(req);
 
+    // Guard: Only allow synchronization from the Master Store
+    const store = await prisma.store.findUnique({
+      where: { shopDomain: shop },
+    });
+
+    const payload = JSON.parse(rawBody);
+    
+    if (!(store as any)?.isMaster) {
+      console.log(`[Webhook:products/delete] Cleaning up local cache for Sub Store: ${shop}`);
+      const deletedGid = `gid://shopify/Product/${payload.id}`;
+      
+      // We must clean up our local cache so the Dashboard metrics update correctly for Sub Stores
+      await prisma.variantMap.deleteMany({
+        where: {
+          storeId: store?.id,
+          shopifyProductId: deletedGid,
+        },
+      });
+
+      await prisma.productCache.deleteMany({
+        where: {
+          storeId: store?.id,
+          shopifyProductId: deletedGid,
+        },
+      });
+
+      return new NextResponse("Ignored sync but cleaned up local cache", { status: 200 });
+    }
+
     // Idempotency: skip if already processed
     const existingEvent = await prisma.webhookEvent.findUnique({
       where: { id: webhookId },
@@ -22,7 +51,6 @@ export async function POST(req: NextRequest) {
       data: { id: webhookId, topic, shopDomain: shop },
     });
 
-    const payload = JSON.parse(rawBody);
     console.log(`[Webhook:products/delete] shop=${shop} productId=${payload?.id}`);
 
     // Loop prevention: check if this is an internally triggered sync deletion
@@ -34,15 +62,16 @@ export async function POST(req: NextRequest) {
     }
 
     // Replicate deletion to target stores
-    processProductDelete(shop, payload, webhookId).then(() => {
+    try {
+      await processProductDelete(shop, payload, webhookId);
       console.log(`[Webhook:products/delete] sync complete for ${shop}`);
-    }).catch((err) => {
+    } catch (err: any) {
       console.error(`[Webhook:products/delete] sync failed for ${shop}:`, err.message);
-    });
+    }
 
-    return new NextResponse("Webhook processed successfully", { status: 200 });
+    return new NextResponse("Webhook processed successfully", { status: 200 }); // Hot reload trigger
   } catch (error: any) {
-    console.error("[Webhook:products/delete] error:", error.message);
+    console.error("[Webhook:products-delete] error:", error.message);
     if (error.message === "Webhook signature verification failed.") {
       return new NextResponse("Unauthorized", { status: 401 });
     }

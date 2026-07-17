@@ -7,6 +7,16 @@ export async function POST(req: NextRequest) {
   try {
     const { topic, shop, webhookId, rawBody } = await verifyWebhook(req);
 
+    // Guard: Only allow synchronization from the Master Store
+    const store = await prisma.store.findUnique({
+      where: { shopDomain: shop },
+    });
+
+    if (!(store as any)?.isMaster) {
+      console.log(`[Webhook:products/update] Ignored event from Sub Store: ${shop}`);
+      return new NextResponse("Ignored Sub Store event", { status: 200 });
+    }
+
     // Idempotency: skip if already processed
     const existingEvent = await prisma.webhookEvent.findUnique({
       where: { id: webhookId },
@@ -35,7 +45,7 @@ export async function POST(req: NextRequest) {
 
     // Use withLock to prevent concurrent webhooks (like a fast update following a create) from creating duplicates
     const lockKey = `product_sync_${payload.id}`;
-    withLock(lockKey, async () => {
+    await withLock(lockKey, async () => {
       try {
         await updateLocalProductCache(shop, payload, topic);
         if (topic === 'products/delete') {
@@ -49,9 +59,9 @@ export async function POST(req: NextRequest) {
       }
     });
 
-    return new NextResponse("Webhook processed successfully", { status: 200 });
+    return new NextResponse("Webhook processed successfully", { status: 200 }); // Hot reload trigger
   } catch (error: any) {
-    console.error("[Webhook:products/update] error:", error.message);
+    console.error("[Webhook:products-update] error:", error.message);
     if (error.message === "Webhook signature verification failed.") {
       return new NextResponse("Unauthorized", { status: 401 });
     }

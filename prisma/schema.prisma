@@ -17,8 +17,9 @@ model Store {
   lowStockThreshold Int      @default(15)
   autoSyncEnabled          Boolean  @default(true)
   priceAdjustmentValue     Float    @default(0.0)
-  priceAdjustmentType      String   @default("PERCENTAGE") // "PERCENTAGE" or "FIXED"
+  priceAdjustmentType      String   @default("PERCENTAGE") 
   isPriceAdjustmentEnabled Boolean  @default(false)
+  isMaster                 Boolean  @default(false)
   installedAt              DateTime @default(now())
   updatedAt                DateTime @updatedAt
 

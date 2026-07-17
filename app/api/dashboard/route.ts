@@ -91,13 +91,15 @@ export async function GET(req: NextRequest) {
       }, new Map()).values()
     ) as typeof productCaches & { imageUrls: string[] }[];
 
-    // Filter low stock using current store's threshold settings (combined inventory)
-    const lowStockProducts = deduplicatedAllProducts
+    // Filter low stock using current store's threshold settings
+    const lowStockProducts = deduplicatedCurrentStoreProducts
       .filter((p) => p.inventoryQuantity <= store.lowStockThreshold)
       .sort((a, b) => a.inventoryQuantity - b.inventoryQuantity)
       .slice(0, 50);
 
-    const recentlyAddedProducts = deduplicatedAllProducts.slice(0, 50);
+    const recentlyAddedProducts = deduplicatedCurrentStoreProducts
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .slice(0, 50);
 
     return NextResponse.json({
       success: true,

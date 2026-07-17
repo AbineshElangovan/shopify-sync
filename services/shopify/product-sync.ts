@@ -169,9 +169,11 @@ export async function updateLocalProductCache(shopDomain: string, payload: any, 
     // Removed GraphQL query to fetch true inventory because products/update shouldn't modify inventory cache for existing products (it races with inventory_levels/update)
 
     const variants = payload.variants || [];
+    console.log(`[ProductSync:Cache] Processing ${variants.length} variants for ${shopDomain}`);
     const syncedVariantIds: string[] = [];
 
     for (const variant of variants) {
+      console.log(`[ProductSync:Cache] Variant ID: ${variant.id}, SKU: ${variant.sku}`);
       const variantTitle = variant.title && variant.title !== 'Default Title' ? ` - ${variant.title}` : '';
       const fullTitle = `${payload.title}${variantTitle}`;
       const sku = variant.sku?.trim() || null;
@@ -235,6 +237,8 @@ export async function updateLocalProductCache(shopDomain: string, payload: any, 
         }
       }
 
+      require('fs').appendFileSync('C:/Users/eabin/OneDrive/Desktop/next task/shopify-sync/sync-debug.log', `[${new Date().toISOString()}] updateLocalProductCache for ${shopDomain}: SKU=${sku}, payloadVariants=${variants.length}\n`);
+      
       await prisma.variantMap.upsert({
         where: {
           storeId_shopifyVariantId: {
@@ -257,26 +261,30 @@ export async function updateLocalProductCache(shopDomain: string, payload: any, 
           locationId: null,
         },
       });
+      require('fs').appendFileSync('C:/Users/eabin/OneDrive/Desktop/next task/shopify-sync/sync-debug.log', `[${new Date().toISOString()}] updateLocalProductCache upserted VariantMap for ${shopDomain}: SKU=${sku}\n`);
     }
 
-    await prisma.productCache.deleteMany({
-      where: {
-        storeId: store.id,
-        shopifyProductId,
-        shopifyVariantId: { notIn: syncedVariantIds },
-      },
-    });
+    if (variants.length > 0) {
+      await prisma.productCache.deleteMany({
+        where: {
+          storeId: store.id,
+          shopifyProductId,
+          shopifyVariantId: { notIn: syncedVariantIds },
+        },
+      });
 
-    await prisma.variantMap.deleteMany({
-      where: {
-        storeId: store.id,
-        shopifyProductId,
-        shopifyVariantId: { notIn: syncedVariantIds },
-      },
-    });
+      await prisma.variantMap.deleteMany({
+        where: {
+          storeId: store.id,
+          shopifyProductId,
+          shopifyVariantId: { notIn: syncedVariantIds },
+        },
+      });
+    }
 
     console.log(`[ProductSync:Cache] Successfully updated local cache for product ${payload.title} in ${shopDomain}`);
   } catch (error: any) {
+    require('fs').appendFileSync('C:/Users/eabin/OneDrive/Desktop/next task/shopify-sync/sync-errors.log', `[${new Date().toISOString()}] Cache error: ${error.message}\n${error.stack}\n`);
     console.error(`[ProductSync:Cache] Failed to update local cache for ${shopDomain}:`, error.message);
   }
 }
@@ -957,7 +965,26 @@ export async function processProductDelete(shopDomain: string, payload: any, web
       },
     });
 
-    const skus = sourceVariantMaps.map((v) => v.sku).filter(Boolean);
+    let skus = sourceVariantMaps.map((v) => v.sku).filter(Boolean);
+
+    if (skus.length === 0) {
+      console.log(`[ProductSync:Delete] No VariantMaps found for ${payload.id}, checking ProductCache for SKUs...`);
+      const sourceProductCaches = await prisma.productCache.findMany({
+        where: {
+          storeId: sourceStore.id,
+          shopifyProductId: `gid://shopify/Product/${payload.id}`,
+        },
+      });
+      skus = sourceProductCaches.map((p) => p.sku).filter(Boolean) as string[];
+    }
+
+    if (skus.length === 0 && payload.variants && payload.variants.length > 0) {
+       console.log(`[ProductSync:Delete] Fallback: using SKUs from webhook payload`);
+       skus = payload.variants.map((v: any) => v.sku).filter(Boolean);
+    }
+    
+    // Ultimate fallback: if we STILL don't have SKUs, and the user deleted it in Shopify, the payload MIGHT still contain variants!
+    // But if payload.variants is empty, we are out of luck.
 
     const targetStores = await prisma.store.findMany({
       where: { shopDomain: { not: shopDomain }, isActive: true },
