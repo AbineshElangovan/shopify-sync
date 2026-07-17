@@ -26,6 +26,15 @@ export async function POST(req: NextRequest) {
         },
       });
 
+      // Delete CollectionProduct records before ProductCache (FK constraint)
+      const subCaches = await prisma.productCache.findMany({
+        where: { storeId: store?.id, shopifyProductId: deletedGid },
+        select: { id: true }
+      });
+      for (const sc of subCaches) {
+        await prisma.collectionProduct.deleteMany({ where: { productCacheId: sc.id } });
+      }
+
       await prisma.productCache.deleteMany({
         where: {
           storeId: store?.id,
@@ -65,6 +74,33 @@ export async function POST(req: NextRequest) {
     try {
       await processProductDelete(shop, payload, webhookId);
       console.log(`[Webhook:products/delete] sync complete for ${shop}`);
+      
+      // Clean up Master store local cache AFTER replicating the delete, so the dashboard instantly updates
+      const deletedGid = `gid://shopify/Product/${payload.id}`;
+      await prisma.variantMap.deleteMany({
+        where: {
+          storeId: store?.id,
+          shopifyProductId: deletedGid,
+        },
+      });
+
+      // Delete CollectionProduct records before ProductCache (FK constraint)
+      const masterCaches = await prisma.productCache.findMany({
+        where: { storeId: store?.id, shopifyProductId: deletedGid },
+        select: { id: true }
+      });
+      for (const mc of masterCaches) {
+        await prisma.collectionProduct.deleteMany({ where: { productCacheId: mc.id } });
+      }
+
+      await prisma.productCache.deleteMany({
+        where: {
+          storeId: store?.id,
+          shopifyProductId: deletedGid,
+        },
+      });
+      console.log(`[Webhook:products/delete] Cleaned up local cache for Master Store: ${shop}`);
+      
     } catch (err: any) {
       console.error(`[Webhook:products/delete] sync failed for ${shop}:`, err.message);
     }

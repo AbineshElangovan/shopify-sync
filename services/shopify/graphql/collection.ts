@@ -107,3 +107,17 @@ export const GET_PRODUCT_COLLECTIONS_QUERY = `
     }
   }
 `;
+
+export const REMOVE_PRODUCT_FROM_COLLECTION_MUTATION = `
+  mutation collectionRemoveProducts($id: ID!, $productIds: [ID!]!) {
+    collectionRemoveProducts(id: $id, productIds: $productIds) {
+      job {
+        id
+      }
+      userErrors {
+        field
+        message
+      }
+    }
+  }
+`;

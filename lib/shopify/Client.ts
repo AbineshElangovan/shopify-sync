@@ -23,7 +23,18 @@ export async function shopifyFetch(input: RequestInfo, init: RequestInit = {}) {
   let token: string;
 
   if (shopifyV4 && typeof shopifyV4.idToken === "function") {
-    token = await shopifyV4.idToken();
+    try {
+      token = await shopifyV4.idToken();
+    } catch (err) {
+      // idToken can throw "host did not respond in time" when app is opened
+      // directly in the browser (not inside Shopify Admin iframe).
+      if (process.env.NODE_ENV === "development") {
+        console.warn("[shopifyFetch] idToken unavailable (host did not respond). Falling back to dev_fallback_token.");
+        token = "dev_fallback_token";
+      } else {
+        throw err;
+      }
+    }
   } else if (app) {
     token = await getSessionToken(app);
   } else if (process.env.NODE_ENV === "development") {
@@ -32,6 +43,7 @@ export async function shopifyFetch(input: RequestInfo, init: RequestInit = {}) {
   } else {
     throw new Error("App Bridge not initialized");
   }
+
 
   let requestInput = input;
   if (typeof window !== "undefined" && window.location) {

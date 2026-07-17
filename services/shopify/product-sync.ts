@@ -8,6 +8,7 @@ import {
   GET_PRODUCT_COLLECTIONS_QUERY, GET_COLLECTIONS_BY_TITLE_QUERY, CREATE_COLLECTION_MUTATION,
   ADD_PRODUCT_TO_COLLECTION_MUTATION
 } from './graphql';
+import { syncProductCollectionsByTags } from './collection-sync';
 
 const globalShared: any = global;
 globalShared.syncLocks = globalShared.syncLocks || new Set<string>();
@@ -146,21 +147,7 @@ export async function updateLocalProductCache(shopDomain: string, payload: any, 
 
     const shopifyProductId = `gid://shopify/Product/${payload.id}`;
 
-    if (topic === 'products/delete') {
-      await prisma.productCache.deleteMany({
-        where: {
-          storeId: store.id,
-          shopifyProductId,
-        },
-      });
-      await prisma.variantMap.deleteMany({
-        where: {
-          storeId: store.id,
-          shopifyProductId,
-        },
-      });
-      return;
-    }
+    // Removed cache cleanup for products/delete to prevent race condition with products-delete route
 
     if (!store.isActive) {
       console.log(`[ProductSync:Cache] Store ${shopDomain} not found or inactive. Skipping cache update.`);
@@ -280,6 +267,59 @@ export async function updateLocalProductCache(shopDomain: string, payload: any, 
           shopifyVariantId: { notIn: syncedVariantIds },
         },
       });
+    }
+
+    try {
+      const client = await getAdminClient(shopDomain);
+      const productResponse: any = await client.request(GET_PRODUCT_COLLECTIONS_QUERY, {
+        variables: { id: shopifyProductId }
+      });
+      const existingEdges = productResponse?.data?.product?.collections?.edges || [];
+      const productCollectionDbIds: string[] = [];
+
+      for (const edge of existingEdges) {
+        if (edge.node) {
+          const col = edge.node;
+          const dbCol = await prisma.collection.upsert({
+            where: {
+              storeId_shopifyCollectionId: {
+                storeId: store.id,
+                shopifyCollectionId: col.id,
+              },
+            },
+            update: { title: col.title, handle: col.handle },
+            create: { storeId: store.id, shopifyCollectionId: col.id, title: col.title, handle: col.handle },
+          });
+          productCollectionDbIds.push(dbCol.id);
+        }
+      }
+
+      const allCaches = await prisma.productCache.findMany({
+        where: { storeId: store.id, shopifyProductId },
+      });
+
+      for (const cache of allCaches) {
+        for (const collectionDbId of productCollectionDbIds) {
+          await prisma.collectionProduct.upsert({
+            where: {
+              collectionId_productCacheId: {
+                collectionId: collectionDbId,
+                productCacheId: cache.id,
+              },
+            },
+            update: {},
+            create: { collectionId: collectionDbId, productCacheId: cache.id },
+          });
+        }
+        await prisma.collectionProduct.deleteMany({
+          where: {
+            productCacheId: cache.id,
+            collectionId: { notIn: productCollectionDbIds },
+          },
+        });
+      }
+    } catch (colErr: any) {
+      console.error(`[ProductSync:Cache] Failed to sync collections to DB for ${shopDomain}:`, colErr.message);
     }
 
     console.log(`[ProductSync:Cache] Successfully updated local cache for product ${payload.title} in ${shopDomain}`);
@@ -410,11 +450,16 @@ export async function processProductCreate(shopDomain: string, payload: any, web
 
       const imagesToSync = (payload.images && payload.images.length > 0) ? payload.images : (payload.image ? [payload.image] : []);
       if (imagesToSync.length > 0) {
-        productInput.files = imagesToSync.map((img: any) => ({
-          contentType: "IMAGE",
-          originalSource: img.src,
-          alt: img.alt || ""
-        }));
+        productInput.files = imagesToSync.map((img: any) => {
+          const fileInput: any = {
+            contentType: "IMAGE",
+            originalSource: img.src,
+          };
+          if (img.alt) {
+            fileInput.alt = img.alt;
+          }
+          return fileInput;
+        });
       }
 
       let syncStatus: 'SUCCESS' | 'FAILED' = 'SUCCESS';
@@ -470,6 +515,8 @@ export async function processProductCreate(shopDomain: string, payload: any, web
             }
           }
 
+          const imageUrl = payload.image?.src || payload.images?.[0]?.src || null;
+
           await prisma.productCache.upsert({
             where: {
               storeId_shopifyVariantId: {
@@ -482,6 +529,7 @@ export async function processProductCreate(shopDomain: string, payload: any, web
               title: `${createdProduct.title}${variant.title && variant.title !== 'Default Title' ? ` - ${variant.title}` : ''}`,
               shopifyProductId: createdProduct.id,
               price: parseFloat(variant.price || "0"),
+              imageUrl,
             },
             create: {
               storeId: targetStore.id,
@@ -491,6 +539,7 @@ export async function processProductCreate(shopDomain: string, payload: any, web
               title: `${createdProduct.title}${variant.title && variant.title !== 'Default Title' ? ` - ${variant.title}` : ''}`,
               inventoryQuantity: initialQuantity,
               price: parseFloat(variant.price || "0"),
+              imageUrl,
             },
           });
 
@@ -522,6 +571,12 @@ export async function processProductCreate(shopDomain: string, payload: any, web
         // if (payload.admin_graphql_api_id && createdProduct?.id) {
         //   await syncProductCollections(shopDomain, payload.admin_graphql_api_id, targetStore.shopDomain, createdProduct.id, targetStore.id);
         // }
+
+        try {
+          await syncProductCollectionsByTags(targetStore.shopDomain, createdProduct.id, payload.tags);
+        } catch (err) {
+          console.error(`[CollectionSync] Failed during Create:`, err);
+        }
 
         console.log(`[ProductSync:Create] Successfully created product "${payload.title}" in target store ${targetStore.shopDomain}`);
       } catch (err: any) {
@@ -756,11 +811,16 @@ export async function processProductUpdate(shopDomain: string, payload: any, web
 
       const imagesToSync = (payload.images && payload.images.length > 0) ? payload.images : (payload.image ? [payload.image] : []);
       if (imagesToSync.length > 0) {
-        productInput.files = imagesToSync.map((img: any) => ({
-          contentType: "IMAGE",
-          originalSource: img.src,
-          alt: img.alt || ""
-        }));
+        productInput.files = imagesToSync.map((img: any) => {
+          const fileInput: any = {
+            contentType: "IMAGE",
+            originalSource: img.src,
+          };
+          if (img.alt) {
+            fileInput.alt = img.alt;
+          }
+          return fileInput;
+        });
       }
 
       console.log(`[ProductSync:UpdateDiag] Comparing fields for product "${mergedTitle}":`);
@@ -770,7 +830,18 @@ export async function processProductUpdate(shopDomain: string, payload: any, web
       console.log(`- Type: merged="${mergedType}" vs target="${targetProduct.productType || ""}" (Match: ${mergedType === (targetProduct.productType || "")})`);
       console.log(`- Status: merged="${mergedStatus}" vs target="${targetProduct.status?.toUpperCase() || "ACTIVE"}" (Match: ${mergedStatus === (targetProduct.status?.toUpperCase() || "ACTIVE")})`);
 
+      let targetImageUrlBase = targetProduct.featuredImage?.url?.split('?')[0];
+      let sourceImageUrlBase = imagesToSync[0]?.src?.split('?')[0];
+      let imageChanged = false;
+      if (sourceImageUrlBase && sourceImageUrlBase !== targetImageUrlBase) {
+        imageChanged = true;
+        console.log(`- Image mismatch: input=${sourceImageUrlBase} vs target=${targetImageUrlBase}`);
+      } else {
+        console.log(`- Image: merged="${sourceImageUrlBase || ""}" vs target="${targetImageUrlBase || ""}" (Match: true)`);
+      }
+
       let hasProductChanges =
+        imageChanged ||
         mergedTitle !== targetProduct.title ||
         mergedDescription !== (targetProduct.descriptionHtml || "") ||
         mergedVendor !== (targetProduct.vendor || "") ||
@@ -807,6 +878,12 @@ export async function processProductUpdate(shopDomain: string, payload: any, web
       // if (payload.admin_graphql_api_id && targetProductId) {
       //   await syncProductCollections(shopDomain, payload.admin_graphql_api_id, targetStore.shopDomain, targetProductId, targetStore.id);
       // }
+
+      try {
+        await syncProductCollectionsByTags(targetStore.shopDomain, targetProductId, payload.tags);
+      } catch (err) {
+        console.error(`[CollectionSync] Failed during Update for ${targetProductId}:`, err);
+      }
 
       if (!hasProductChanges) {
         console.log(`[ProductSync:Update] Product "${mergedTitle}" details are already identical in target store ${targetStore.shopDomain}. Skipping update.`);
@@ -888,6 +965,8 @@ export async function processProductUpdate(shopDomain: string, payload: any, web
             }
           }
 
+          const imageUrl = payload.image?.src || payload.images?.[0]?.src || null;
+
           await prisma.productCache.upsert({
             where: {
               storeId_shopifyVariantId: {
@@ -899,6 +978,7 @@ export async function processProductUpdate(shopDomain: string, payload: any, web
               sku,
               title: `${updatedProduct.title}${variant.title && variant.title !== 'Default Title' ? ` - ${variant.title}` : ''}`,
               price: parseFloat(variant.price || "0"),
+              imageUrl,
             },
             create: {
               storeId: targetStore.id,
@@ -908,6 +988,7 @@ export async function processProductUpdate(shopDomain: string, payload: any, web
               title: `${updatedProduct.title}${variant.title && variant.title !== 'Default Title' ? ` - ${variant.title}` : ''}`,
               inventoryQuantity,
               price: parseFloat(variant.price || "0"),
+              imageUrl,
             },
           });
 
@@ -967,14 +1048,16 @@ export async function processProductDelete(shopDomain: string, payload: any, web
 
     let skus = sourceVariantMaps.map((v) => v.sku).filter(Boolean);
 
+    // Check ProductCache for SKUs if VariantMap returned none
+    const sourceProductCaches = await prisma.productCache.findMany({
+      where: {
+        storeId: sourceStore.id,
+        shopifyProductId: `gid://shopify/Product/${payload.id}`,
+      },
+    });
+
     if (skus.length === 0) {
       console.log(`[ProductSync:Delete] No VariantMaps found for ${payload.id}, checking ProductCache for SKUs...`);
-      const sourceProductCaches = await prisma.productCache.findMany({
-        where: {
-          storeId: sourceStore.id,
-          shopifyProductId: `gid://shopify/Product/${payload.id}`,
-        },
-      });
       skus = sourceProductCaches.map((p) => p.sku).filter(Boolean) as string[];
     }
 
@@ -982,9 +1065,9 @@ export async function processProductDelete(shopDomain: string, payload: any, web
        console.log(`[ProductSync:Delete] Fallback: using SKUs from webhook payload`);
        skus = payload.variants.map((v: any) => v.sku).filter(Boolean);
     }
-    
-    // Ultimate fallback: if we STILL don't have SKUs, and the user deleted it in Shopify, the payload MIGHT still contain variants!
-    // But if payload.variants is empty, we are out of luck.
+
+    // Extract title from source ProductCache or payload for null-SKU fallback
+    const sourceTitle = sourceProductCaches[0]?.title || payload.title || null;
 
     const targetStores = await prisma.store.findMany({
       where: { shopDomain: { not: shopDomain }, isActive: true },
@@ -994,19 +1077,10 @@ export async function processProductDelete(shopDomain: string, payload: any, web
       if (!targetStore.autoSyncEnabled) continue;
 
       let targetProductId: string | null = null;
-      let matchingVariantMap = await prisma.variantMap.findFirst({
-        where: {
-          storeId: targetStore.id,
-          shopifyProductId: { in: sourceVariantMaps.map((m) => m.shopifyProductId).filter(Boolean) }
-        }
-      });
 
-      if (matchingVariantMap) {
-        targetProductId = matchingVariantMap.shopifyProductId;
-      }
-
-      if (!targetProductId && skus.length > 0) {
-        matchingVariantMap = await prisma.variantMap.findFirst({
+      // Step 1: Look up target product by SKU in VariantMap (most reliable)
+      if (skus.length > 0) {
+        const matchingVariantMap = await prisma.variantMap.findFirst({
           where: {
             storeId: targetStore.id,
             sku: { in: skus },
@@ -1014,19 +1088,47 @@ export async function processProductDelete(shopDomain: string, payload: any, web
         });
         if (matchingVariantMap) {
           targetProductId = matchingVariantMap.shopifyProductId;
+          console.log(`[ProductSync:Delete] Found target product ${targetProductId} via VariantMap SKU lookup.`);
         }
       }
 
+      // Step 2: Fall back to live Shopify SKU search if VariantMap lookup failed
       if (!targetProductId && skus.length > 0) {
         console.log(`[ProductSync:Delete] Mapping missing for SKUs ${skus.join(', ')}. Falling back to Shopify search.`);
         const found = await findTargetProductBySku(targetStore.shopDomain, skus[0]);
         if (found) {
           targetProductId = found.productId;
+          console.log(`[ProductSync:Delete] Found target product ${targetProductId} via live Shopify SKU search.`);
+        }
+      }
+
+      // Step 3: Null-SKU fallback — look up by title in ProductCache
+      if (!targetProductId && sourceTitle) {
+        console.log(`[ProductSync:Delete] SKUs exhausted. Falling back to title lookup for "${sourceTitle}" in ${targetStore.shopDomain}.`);
+        const titleMatch = await prisma.productCache.findFirst({
+          where: {
+            storeId: targetStore.id,
+            title: sourceTitle,
+          },
+        });
+        if (titleMatch) {
+          targetProductId = titleMatch.shopifyProductId;
+          console.log(`[ProductSync:Delete] Found target product ${targetProductId} via title match.`);
         }
       }
 
       if (!targetProductId) {
-        console.log(`[ProductSync:Delete] No matching product found in target store ${targetStore.shopDomain} for delete.`);
+        console.log(`[ProductSync:Delete] No matching product found in target store ${targetStore.shopDomain} for delete. Cleaning up any stale local cache only.`);
+        // Even if we can't delete on Shopify, clean up any stale local ProductCache/VariantMap by title
+        if (sourceTitle) {
+          const staleCache = await prisma.productCache.findMany({ where: { storeId: targetStore.id, title: sourceTitle } });
+          for (const sc of staleCache) {
+            await prisma.collectionProduct.deleteMany({ where: { productCacheId: sc.id } });
+          }
+          await prisma.productCache.deleteMany({ where: { storeId: targetStore.id, title: sourceTitle } });
+          await prisma.variantMap.deleteMany({ where: { storeId: targetStore.id, sku: skus.length > 0 ? { in: skus } : undefined } });
+          console.log(`[ProductSync:Delete] Cleaned up stale local records for "${sourceTitle}" in ${targetStore.shopDomain}.`);
+        }
         continue;
       }
 
@@ -1037,6 +1139,14 @@ export async function processProductDelete(shopDomain: string, payload: any, web
 
       acquireSyncLock(targetStore.shopDomain, targetProductId, "DELETE");
 
+      // Controls whether local DB records are removed after the Shopify API call.
+      // Only true when we are confident the product is gone from Shopify:
+      //   ✅ Shopify delete succeeded
+      //   ✅ Shopify returned "does not exist" / "not found" (already deleted externally)
+      // ❌ Never true for network errors, auth errors, rate limits, or server errors —
+      //    in those cases the product may still exist in Shopify and we must not corrupt local data.
+      let shouldCleanupLocal = false;
+
       try {
         const response: any = await client.request(PRODUCT_DELETE_MUTATION, {
           variables: {
@@ -1046,22 +1156,24 @@ export async function processProductDelete(shopDomain: string, payload: any, web
         const userErrors = response?.data?.productDelete?.userErrors || [];
 
         if (userErrors.length > 0) {
-          throw new Error(userErrors.map((e: any) => `${e.field}: ${e.message}`).join(', '));
+          // Shopify returns userErrors (not a thrown exception) for "product does not exist".
+          // This means the product is already gone — safe to clean up locally.
+          const isAlreadyDeleted = userErrors.every((e: any) =>
+            (e.message || '').toLowerCase().includes('does not exist') ||
+            (e.message || '').toLowerCase().includes('not found')
+          );
+          if (isAlreadyDeleted) {
+            console.log(`[ProductSync:Delete] Product ${targetProductId} already deleted from Shopify. Cleaning up local DB only.`);
+            shouldCleanupLocal = true;
+          } else {
+            // Real business logic error from Shopify (e.g. permission issue) — do not clean up
+            throw new Error(userErrors.map((e: any) => `${e.field}: ${e.message}`).join(', '));
+          }
+        } else {
+          // Shopify delete succeeded
+          console.log(`[ProductSync:Delete] Successfully deleted matching product ${targetProductId} in target store ${targetStore.shopDomain}`);
+          shouldCleanupLocal = true;
         }
-
-        await prisma.variantMap.deleteMany({
-          where: {
-            storeId: targetStore.id,
-            shopifyProductId: targetProductId,
-          },
-        });
-
-        await prisma.productCache.deleteMany({
-          where: {
-            storeId: targetStore.id,
-            shopifyProductId: targetProductId,
-          },
-        });
 
         for (const sku of skus) {
           await createSyncLog({
@@ -1074,12 +1186,14 @@ export async function processProductDelete(shopDomain: string, payload: any, web
             webhookEventId: webhookId,
           });
         }
-
-        console.log(`[ProductSync:Delete] Successfully deleted matching product ${targetProductId} in target store ${targetStore.shopDomain}`);
       } catch (err: any) {
         syncStatus = 'FAILED';
         failureReason = err.message || 'Unknown error during deletion';
         console.error(`[ProductSync:Delete] Failed to delete product in ${targetStore.shopDomain}:`, failureReason);
+
+        // Do NOT set shouldCleanupLocal = true here.
+        // This catch handles real failures: network errors, auth errors, rate limits, server errors.
+        // The product may still exist in Shopify — preserving local data is safer.
 
         for (const sku of skus) {
           await createSyncLog({
@@ -1093,9 +1207,41 @@ export async function processProductDelete(shopDomain: string, payload: any, web
             webhookEventId: webhookId,
           });
         }
-
+      } finally {
+        // Always release the sync lock, regardless of outcome.
         releaseSyncLock(targetStore.shopDomain, targetProductId, "DELETE");
+
+        // Only clean up local DB if Shopify confirmed the product is gone.
+        if (shouldCleanupLocal) {
+          await prisma.variantMap.deleteMany({
+            where: {
+              storeId: targetStore.id,
+              shopifyProductId: targetProductId,
+            },
+          });
+
+          const targetCaches = await prisma.productCache.findMany({
+            where: { storeId: targetStore.id, shopifyProductId: targetProductId },
+            select: { id: true }
+          });
+          for (const tc of targetCaches) {
+            await prisma.collectionProduct.deleteMany({ where: { productCacheId: tc.id } });
+          }
+
+          await prisma.productCache.deleteMany({
+            where: {
+              storeId: targetStore.id,
+              shopifyProductId: targetProductId,
+            },
+          });
+
+          console.log(`[ProductSync:Delete] Local DB cleanup complete for ${targetProductId} in ${targetStore.shopDomain}.`);
+        } else {
+          console.log(`[ProductSync:Delete] Skipped local DB cleanup for ${targetProductId} in ${targetStore.shopDomain} due to API error — local data preserved.`);
+        }
       }
+
+
     }
 
     await prisma.variantMap.deleteMany({
@@ -1105,12 +1251,22 @@ export async function processProductDelete(shopDomain: string, payload: any, web
       },
     });
 
+    // Delete CollectionProduct records before ProductCache (FK constraint)
+    const sourceCachesToDelete = await prisma.productCache.findMany({
+      where: { storeId: sourceStore.id, shopifyProductId: `gid://shopify/Product/${payload.id}` },
+      select: { id: true }
+    });
+    for (const sc of sourceCachesToDelete) {
+      await prisma.collectionProduct.deleteMany({ where: { productCacheId: sc.id } });
+    }
+
     await prisma.productCache.deleteMany({
       where: {
         storeId: sourceStore.id,
         shopifyProductId: `gid://shopify/Product/${payload.id}`,
       },
     });
+
 
   } catch (error: any) {
     console.error(`[ProductSync:Delete] Fatal error:`, error.message);

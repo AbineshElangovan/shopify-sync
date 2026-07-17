@@ -47,12 +47,12 @@ export async function POST(req: NextRequest) {
     const lockKey = `product_sync_${payload.id}`;
     await withLock(lockKey, async () => {
       try {
-        await updateLocalProductCache(shop, payload, topic);
         if (topic === 'products/delete') {
-          await processProductDelete(shop, payload, webhookId);
-        } else {
-          await processProductUpdate(shop, payload, webhookId);
+          console.log(`[Webhook:products/update] Ignored products/delete topic (handled by products-delete route)`);
+          return;
         }
+        await updateLocalProductCache(shop, payload, topic);
+        await processProductUpdate(shop, payload, webhookId);
         console.log(`[Webhook:${topic}] sync complete for ${shop}`);
       } catch (err: any) {
         console.error(`[Webhook:${topic}] sync failed for ${shop}:`, err.message);
