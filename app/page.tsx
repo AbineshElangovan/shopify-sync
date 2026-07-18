@@ -20,6 +20,19 @@ export default function DashboardPage() {
         if (res.ok) {
           const json = await res.json();
           setData(json);
+        } else {
+          // If the backend returns 500/401, it means the store is not installed in the DB.
+          // Automatically redirect to the OAuth flow to install the store.
+          const urlParams = new URLSearchParams(window.location.search);
+          const shop = urlParams.get('shop');
+          const host = urlParams.get('host');
+          if (shop) {
+             const authUrl = new URL('/api/auth', window.location.origin);
+             authUrl.searchParams.set('shop', shop);
+             if (host) authUrl.searchParams.set('host', host);
+             window.location.href = authUrl.toString();
+             return;
+          }
         }
       } catch (err) {
         console.error("Error loading dashboard data:", err);
