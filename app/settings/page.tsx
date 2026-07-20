@@ -63,7 +63,7 @@ export default function SettingsPage() {
 
   const loadData = React.useCallback(async () => {
     try {
-      const storesRes = await shopifyFetch('/api/stores?active=false');
+      const storesRes = await shopifyFetch(`/api/stores?active=false&t=${Date.now()}`, { cache: 'no-store' });
       if (storesRes.ok) {
         const storesJson = await storesRes.json();
         const loadedStores = storesJson.stores || [];
@@ -90,7 +90,7 @@ export default function SettingsPage() {
         setMasterStoreId(initialMasterStoreId);
       }
 
-      const settingsRes = await shopifyFetch('/api/settings');
+      const settingsRes = await shopifyFetch(`/api/settings?t=${Date.now()}`, { cache: 'no-store' });
       if (settingsRes.ok) {
         const settingsJson = await settingsRes.json();
         const threshVal = settingsJson.settings.lowStockThreshold;
