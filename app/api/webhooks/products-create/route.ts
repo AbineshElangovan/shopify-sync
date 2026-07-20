@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { verifyWebhook } from "@/lib/shopify/webhooks";
 import { prisma } from "@/lib/db/prisma";
 import { processProductCreate, hasSyncLock, releaseSyncLock, updateLocalProductCache, withLock } from "@/services/product-sync";
+import { generateSkusForProductIfNeeded } from "@/services/sku";
 
 export async function POST(req: NextRequest) {
   try {
@@ -47,8 +48,21 @@ export async function POST(req: NextRequest) {
     const lockKey = `product_sync_${payload.id}`;
     await withLock(lockKey, async () => {
       try {
-        await updateLocalProductCache(shop, payload);
-        await processProductCreate(shop, payload, webhookId);
+        // Fetch the absolute latest source of truth from Shopify FIRST
+        // This catches inventory, collections, statuses, and any SKUs already generated
+        const { fetchLatestShopifyProduct } = require('@/services/shopify/product-fetcher');
+        let enrichedPayload = payload;
+        
+        const latestPayload = await fetchLatestShopifyProduct(shop, payload.id);
+        if (latestPayload) {
+          enrichedPayload = latestPayload;
+        }
+
+        // Only generate SKUs if they are STILL missing after fetching the latest data
+        enrichedPayload = await generateSkusForProductIfNeeded(shop, enrichedPayload);
+
+        await updateLocalProductCache(shop, enrichedPayload);
+        await processProductCreate(shop, enrichedPayload, webhookId);
         console.log(`[Webhook:products/create] sync complete for ${shop}`);
       } catch (err: any) {
         require('fs').appendFileSync('C:/Users/eabin/OneDrive/Desktop/next task/shopify-sync/sync-errors.log', `[${new Date().toISOString()}] products-create route error: ${err.message}\n${err.stack}\n`);

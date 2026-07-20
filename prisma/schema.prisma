@@ -150,3 +150,13 @@ model CollectionProduct {
   @@unique([collectionId, productCacheId])
   @@map("collection_products")
 }
+
+model VendorCode {
+  id           String   @id @default(uuid())
+  vendorName   String   @unique
+  code         String   @unique
+  nextSequence Int      @default(1)
+  createdAt    DateTime @default(now())
+
+  @@map("vendor_codes")
+}

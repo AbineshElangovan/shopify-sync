@@ -51,8 +51,23 @@ export async function POST(req: NextRequest) {
           console.log(`[Webhook:products/update] Ignored products/delete topic (handled by products-delete route)`);
           return;
         }
-        await updateLocalProductCache(shop, payload, topic);
-        await processProductUpdate(shop, payload, webhookId);
+
+        // Fetch the absolute latest source of truth from Shopify FIRST
+        // This solves the race condition where the webhook payload is stale and missing the SKU
+        // because it was triggered by a rapid quantity change right after creation.
+        const { fetchLatestShopifyProduct } = require('@/services/shopify/product-fetcher');
+        let currentPayload = payload;
+        
+        const latestPayload = await fetchLatestShopifyProduct(shop, payload.id);
+        if (latestPayload) {
+          currentPayload = latestPayload;
+        }
+
+        const { generateSkusForProductIfNeeded } = require('@/services/sku');
+        currentPayload = await generateSkusForProductIfNeeded(shop, currentPayload);
+
+        await updateLocalProductCache(shop, currentPayload, topic);
+        await processProductUpdate(shop, currentPayload, webhookId);
         console.log(`[Webhook:${topic}] sync complete for ${shop}`);
       } catch (err: any) {
         console.error(`[Webhook:${topic}] sync failed for ${shop}:`, err.message);

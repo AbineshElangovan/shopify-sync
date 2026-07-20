@@ -9,14 +9,14 @@ import {
 } from './graphql/collection';
 
 const TAG_TO_COLLECTION_MAP: Record<string, string> = {
-  'Inner': 'INNERS',
-  'Pants': 'PANTS',
-  'Shirts': 'SHIRTS',
-  'T-Shirt': 'T-SHIRTS',
-  'Accessories': 'MENS ACCESSORIES',
-  'Shoes': 'SHOES',
-  'Socks': 'SOCKS',
-  'Trousers': 'TROUSERS',
+  'inner': 'INNERS',
+  'pants': 'PANTS',
+  'shirts': 'SHIRTS',
+  't-shirt': 'T-SHIRTS',
+  'accessories': 'MENS ACCESSORIES',
+  'shoes': 'SHOES',
+  'socks': 'SOCKS',
+  'trousers': 'TROUSERS',
 };
 
 export async function syncProductCollectionsByTags(targetShopDomain: string, productId: string, tagsString?: string) {
@@ -31,7 +31,7 @@ export async function syncProductCollectionsByTags(targetShopDomain: string, pro
     });
     
     // Parse tags and determine desired collections
-    const tags = tagsString ? tagsString.split(',').map(t => t.trim()).filter(Boolean) : [];
+    const tags = tagsString ? tagsString.split(',').map(t => t.trim().toLowerCase()).filter(Boolean) : [];
     const desiredCollections = new Set<string>();
     for (const tag of tags) {
       if (TAG_TO_COLLECTION_MAP[tag]) {

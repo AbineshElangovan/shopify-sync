@@ -190,6 +190,7 @@ export async function updateLocalProductCache(shopDomain: string, payload: any, 
       });
 
       const parsedPrice = parseFloat(variant.price || "0");
+      const trueInventory = variant.inventory_quantity ?? 0;
       
       if (!existingCache) {
         await prisma.productCache.create({
@@ -199,8 +200,8 @@ export async function updateLocalProductCache(shopDomain: string, payload: any, 
             shopifyVariantId,
             sku,
             title: fullTitle,
-            imageUrl: newImageUrl || null,
-            inventoryQuantity: variant.inventory_quantity ?? 0,
+            imageUrl: payload.image?.src || payload.images?.[0]?.src || null,
+            inventoryQuantity: trueInventory,
             price: parsedPrice,
           }
         });
@@ -208,7 +209,8 @@ export async function updateLocalProductCache(shopDomain: string, payload: any, 
         const needsUpdate = existingCache.sku !== sku || 
                             existingCache.title !== fullTitle || 
                             existingCache.price !== parsedPrice || 
-                            (newImageUrl && existingCache.imageUrl !== newImageUrl);
+                            existingCache.inventoryQuantity !== trueInventory ||
+                            (payload.image?.src || payload.images?.[0]?.src && existingCache.imageUrl !== (payload.image?.src || payload.images?.[0]?.src));
                             
         if (needsUpdate) {
           await prisma.productCache.update({
@@ -216,9 +218,10 @@ export async function updateLocalProductCache(shopDomain: string, payload: any, 
             data: {
               sku,
               title: fullTitle,
-              ...(newImageUrl ? { imageUrl: newImageUrl } : {}),
+              ...(payload.image?.src || payload.images?.[0]?.src ? { imageUrl: payload.image?.src || payload.images?.[0]?.src } : {}),
               shopifyProductId,
               price: parsedPrice,
+              inventoryQuantity: trueInventory,
             },
           });
         }
@@ -270,6 +273,11 @@ export async function updateLocalProductCache(shopDomain: string, payload: any, 
     }
 
     try {
+      // First ensure tags are properly mapped to collections in Shopify
+      if (payload.tags) {
+        await syncProductCollectionsByTags(shopDomain, shopifyProductId, payload.tags);
+      }
+
       const client = await getAdminClient(shopDomain);
       const productResponse: any = await client.request(GET_PRODUCT_COLLECTIONS_QUERY, {
         variables: { id: shopifyProductId }
