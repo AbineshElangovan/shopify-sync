@@ -1,7 +1,7 @@
 # Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
 
 client_id = "f82dbdee74418429d3510c35ca99aae3"
-name = "ESHAN Chennai Store"
+name = "Multi-Store Inventory Sync"
 application_url = "https://dz50mdfc-3000.inc1.devtunnels.ms"
 embedded = true
 

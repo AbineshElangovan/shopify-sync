@@ -1,5 +1,5 @@
 {
-  "name": "ESHAN Chennai Store",
+  "name": "Multi-Store Inventory Sync",
   "handle": "",
   "modules": [
     {
@@ -43,7 +43,7 @@
       "assets": "branding",
       "target": "",
       "config": {
-        "name": "ESHAN Chennai Store"
+        "name": "Multi-Store Inventory Sync"
       }
     }
   ]
