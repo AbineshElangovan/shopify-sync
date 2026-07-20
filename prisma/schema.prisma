@@ -13,6 +13,7 @@ model Store {
   accessToken       String
   scope             String
   label             String?
+  masterLabel       String?  @unique
   isActive          Boolean  @default(true)
   lowStockThreshold Int      @default(15)
   autoSyncEnabled          Boolean  @default(true)

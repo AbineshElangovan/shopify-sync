@@ -4,9 +4,45 @@ import React, { useState, useEffect } from 'react';
 import { Card, Table } from '@/components/common';
 import { BlockStack, Layout, Button, ChoiceList, InlineStack } from '@shopify/polaris';
 import { shopifyFetch } from '@/lib/shopify/Client';
+import { useRouter } from 'next/navigation';
 import { Input, Checkbox, Select } from '@/components/forms';
 
+const ThemedSection = ({
+  title,
+  description,
+  bgColor,
+  borderColor,
+  stripeColor,
+  titleColor,
+  descColor,
+  children
+}: {
+  title: string;
+  description?: string;
+  bgColor: string;
+  borderColor: string;
+  stripeColor: string;
+  titleColor: string;
+  descColor?: string;
+  children: React.ReactNode;
+}) => (
+  <div style={{ backgroundColor: bgColor, border: `1px solid ${borderColor}`, borderRadius: '12px', padding: '24px', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)' }}>
+    <div style={{ marginBottom: '20px', borderLeft: `4px solid ${stripeColor}`, paddingLeft: '12px' }}>
+      <h2 style={{ fontSize: '1.15rem', fontWeight: 700, color: titleColor, margin: 0 }}>
+        {title}
+      </h2>
+      {description && (
+        <p style={{ marginTop: '4px', color: descColor, fontSize: '0.875rem' }}>
+          {description}
+        </p>
+      )}
+    </div>
+    {children}
+  </div>
+);
+
 export default function SettingsPage() {
+  const router = useRouter();
   const [stores, setStores] = useState<any[]>([]);
   const [threshold, setThreshold] = useState<string>('15');
   const [customThreshold, setCustomThreshold] = useState<string>('15');
@@ -21,6 +57,10 @@ export default function SettingsPage() {
   const [storeSuccessText, setStoreSuccessText] = useState<{ [storeId: string]: string }>({});
   const [toastMessage, setToastMessage] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
+  const [masterLabels, setMasterLabels] = useState<{ [storeId: string]: string }>({});
+  const [masterSaving, setMasterSaving] = useState(false);
+  const [masterStoreId, setMasterStoreId] = useState<string | null>(null);
+
   const loadData = React.useCallback(async () => {
     try {
       const storesRes = await shopifyFetch('/api/stores?active=false');
@@ -29,8 +69,10 @@ export default function SettingsPage() {
         const loadedStores = storesJson.stores || [];
         setStores(loadedStores);
 
-        // Initialize store price adjustments
         const initialAdjustments: { [storeId: string]: string } = {};
+        const initialMasterLabels: { [storeId: string]: string } = {};
+        let initialMasterStoreId = null;
+
         loadedStores.forEach((store: any) => {
           let initialVal = '0';
           if (store.priceAdjustmentValue !== undefined && store.priceAdjustmentValue !== null) {
@@ -38,8 +80,14 @@ export default function SettingsPage() {
             initialVal = `${sign}${store.priceAdjustmentValue}`;
           }
           initialAdjustments[store.id] = initialVal;
+          initialMasterLabels[store.id] = store.masterLabel || '';
+          if (store.isMaster) {
+            initialMasterStoreId = store.id;
+          }
         });
         setStoreAdjustments(initialAdjustments);
+        setMasterLabels(initialMasterLabels);
+        setMasterStoreId(initialMasterStoreId);
       }
 
       const settingsRes = await shopifyFetch('/api/settings');
@@ -81,11 +129,60 @@ export default function SettingsPage() {
     };
   }, []);
 
+  // Automatically hide any toast message after 15 seconds
+  useEffect(() => {
+    if (toastMessage) {
+      const timer = setTimeout(() => {
+        setToastMessage(null);
+      }, 15000);
+      return () => clearTimeout(timer);
+    }
+  }, [toastMessage]);
+
   const handleStoreAdjustmentChange = (storeId: string, val: string) => {
     setStoreAdjustments(prev => ({
       ...prev,
       [storeId]: val
     }));
+  };
+
+  const handleMasterLabelChange = (storeId: string, val: string) => {
+    setMasterLabels(prev => ({ ...prev, [storeId]: val }));
+  };
+
+  const handleSetMaster = async (storeId: string, autoLabel: string) => {
+    const confirmMsg = "Are you sure you want to change the Master Store?";
+    if (!window.confirm(confirmMsg)) return;
+
+    setMasterSaving(true);
+    try {
+      const res = await shopifyFetch('/api/stores/master', {
+        method: 'PUT',
+        body: JSON.stringify({ storeId, masterLabel: autoLabel })
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setToastMessage({ message: '✅ Master changed.', type: 'success' });
+        setTimeout(() => {
+          setToastMessage(prev => prev?.message === '✅ Master changed.' ? null : prev);
+        }, 15000);
+        await loadData();
+        router.refresh();
+      } else {
+        setToastMessage({ message: `❌ Failed: ${data.error}`, type: 'error' });
+        setTimeout(() => {
+          setToastMessage(prev => prev?.message === `❌ Failed: ${data.error}` ? null : prev);
+        }, 15000);
+      }
+    } catch (err: any) {
+      setToastMessage({ message: '❌ Failed to change Master.', type: 'error' });
+      setTimeout(() => {
+        setToastMessage(prev => prev?.message === '❌ Failed to change Master.' ? null : prev);
+      }, 15000);
+    } finally {
+      setMasterSaving(false);
+    }
   };
 
   const handleStoreSave = async (storeId: string) => {
@@ -231,15 +328,74 @@ export default function SettingsPage() {
                 }
               />
 
-              <Card>
-                <div style={{ marginBottom: '20px' }}>
-                  <h2 style={{ fontSize: '1.05rem', fontWeight: 700, color: '#1f2937', margin: 0 }}>
-                    Store-Specific Pricing Rules & Adjustments
-                  </h2>
-                  <p style={{ marginTop: '4px', color: '#4b5563', fontSize: '0.875rem' }}>
-                    Configure automatic markups or fixed price adjustments when replicating products to each target store.
-                  </p>
-                </div>
+              <ThemedSection
+                title="Master Store Configuration"
+                description="Identify the primary store. Synchronization originates from the Master Store."
+                bgColor="#fff1f2"
+                borderColor="#fecdd3"
+                stripeColor="#f43f5e"
+                titleColor="#9f1239"
+                descColor="#be123c"
+              >
+
+                <BlockStack gap="400">
+                  {stores.length === 0 ? (
+                    <p style={{ color: '#9ca3af', fontSize: '13px' }}>No stores available to configure.</p>
+                  ) : (
+                    stores.map((s) => (
+                      <div
+                        key={s.id}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          padding: '16px',
+                          border: s.isMaster ? '2px solid #6366f1' : '1px solid #e5e7eb',
+                          borderRadius: '10px',
+                          backgroundColor: s.isMaster ? '#eef2ff' : '#f9fafb',
+                          gap: '16px',
+                          flexWrap: 'wrap'
+                        }}
+                      >
+                        <div>
+                          <span style={{ fontWeight: 600, fontSize: '14px', color: '#111827' }}>
+                            {s.label || s.shopDomain}
+                          </span>
+                          <div style={{ color: '#6b7280', fontSize: '12px', marginTop: '2px' }}>
+                            {s.shopDomain}
+                          </div>
+                        </div>
+
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                          <span style={{ fontSize: '13px', fontWeight: s.isMaster ? 600 : 500, color: s.isMaster ? '#4338ca' : '#4b5563', marginRight: '16px' }}>
+                            {s.isMaster ? '● Master Store' : '○ Connected Store'}
+                          </span>
+
+                          {!s.isMaster && (
+                            <Button
+                              variant="primary"
+                              loading={masterSaving}
+                              onClick={() => handleSetMaster(s.id, (s.label || s.shopDomain).replace('.myshopify.com', ''))}
+                            >
+                              Make Master
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </BlockStack>
+              </ThemedSection>
+
+              <ThemedSection
+                title="Store-Specific Pricing Rules & Adjustments"
+                description="Configure automatic markups or fixed price adjustments when replicating products to each target store."
+                bgColor="#ecfdf5"
+                borderColor="#a7f3d0"
+                stripeColor="#10b981"
+                titleColor="#065f46"
+                descColor="#047857"
+              >
 
                 <BlockStack gap="400">
                   {stores.length === 0 ? (
@@ -306,14 +462,19 @@ export default function SettingsPage() {
                     ))
                   )}
                 </BlockStack>
-              </Card>
+              </ThemedSection>
             </BlockStack>
           </Layout.Section>
 
           <Layout.Section variant="oneThird">
             <BlockStack gap="500">
-              <Card>
-                <h2 className="text-lg font-bold mb-4">Store Configurations</h2>
+              <ThemedSection
+                title="Store Configurations"
+                bgColor="#fffbeb"
+                borderColor="#fde68a"
+                stripeColor="#f59e0b"
+                titleColor="#b45309"
+              >
 
                 <BlockStack gap="400">
                   <Checkbox
@@ -359,7 +520,7 @@ export default function SettingsPage() {
                     </InlineStack>
                   </div>
                 </BlockStack>
-              </Card>
+              </ThemedSection>
             </BlockStack>
           </Layout.Section>
         </Layout>

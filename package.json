@@ -10,7 +10,8 @@
     "start": "next start",
     "prisma:studio": "prisma studio",
     "prisma:migrate": "prisma migrate dev",
-    "prisma:generate": "prisma generate"
+    "prisma:generate": "prisma generate",
+    "prepare": "husky"
   },
   "dependencies": {
     "@prisma/client": "^6.19.0",
@@ -32,6 +33,7 @@
     "@types/node": "^20",
     "@types/react": "^18.3.1",
     "@types/react-dom": "^18.3.1",
+    "husky": "^9.1.7",
     "tailwindcss": "^4",
     "tsx": "^4.23.1",
     "typescript": "^5"

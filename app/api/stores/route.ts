@@ -28,6 +28,8 @@ export async function GET(req: NextRequest) {
       id: s.id,
       shopDomain: s.shopDomain,
       label: s.label,
+      masterLabel: s.masterLabel,
+      isMaster: s.isMaster,
       isActive: s.isActive && hasValidShopifyAccessToken(s.accessToken),
       scope: s.scope,
       installedAt: s.installedAt,
@@ -100,6 +102,10 @@ export async function DELETE(req: NextRequest) {
     const store = await prisma.store.findUnique({ where: { shopDomain: shop } });
     if (!store) {
       return NextResponse.json({ error: `Store ${shop} not found` }, { status: 404 });
+    }
+
+    if (store.isMaster) {
+      return NextResponse.json({ success: false, error: 'Cannot delete the master store. Please assign another master store first.' }, { status: 400 });
     }
 
     await prisma.$transaction([

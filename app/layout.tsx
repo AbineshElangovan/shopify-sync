@@ -40,6 +40,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     return normalized.startsWith('shp');
   }).length;
 
+  const masterStore = activeStores.find(s => s.isMaster);
+  const masterLabel = masterStore ? (masterStore.masterLabel || masterStore.shopDomain) : 'Not Configured';
+
   return (
     <html lang="en">
       <head>
@@ -66,14 +69,19 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                       height={70}
                       className="w-10 h-auto rounded-lg"
                     />
-                    <span className="text-lg font-semibold text-white tracking-wide">
+                    <span className="text-lg font-semibold text-white tracking-wide hidden sm:block">
                       Multi-Store Inventory Sync
                     </span>
                   </Link>
 
-                  <Suspense fallback={<div className="text-gray-400 text-sm">Loading navigation...</div>}>
-                    <NavBar />
-                  </Suspense>
+                  <div className="flex items-center gap-6">
+                    <Suspense fallback={<div className="text-gray-400 text-sm">Loading navigation...</div>}>
+                      <NavBar 
+                        masterLabel={masterLabel} 
+                        masterDomain={masterStore?.shopDomain || ''} 
+                      />
+                    </Suspense>
+                  </div>
 
                 </div>
               </div>
