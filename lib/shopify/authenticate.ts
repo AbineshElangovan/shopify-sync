@@ -12,7 +12,8 @@ export async function authenticate(req: NextRequest) {
     if (process.env.NODE_ENV === "development") {
       const shopParam = req.nextUrl.searchParams.get("shop");
       const store = await prisma.store.findFirst({
-        where: shopParam ? { shopDomain: shopParam, isActive: true } : { isActive: true }
+        where: shopParam ? { shopDomain: shopParam, isActive: true } : { isActive: true },
+        orderBy: { installedAt: 'asc' }
       });
       if (store) {
         console.warn("[authenticate] Missing token in dev mode. Falling back to active store:", store.shopDomain);
@@ -30,7 +31,8 @@ export async function authenticate(req: NextRequest) {
     if (process.env.NODE_ENV === "development" || token === "dev_fallback_token") {
       const shopParam = req.nextUrl.searchParams.get("shop");
       const store = await prisma.store.findFirst({
-        where: shopParam ? { shopDomain: shopParam, isActive: true } : { isActive: true }
+        where: shopParam ? { shopDomain: shopParam, isActive: true } : { isActive: true },
+        orderBy: { installedAt: 'asc' }
       });
       if (store) {
         console.warn("[authenticate] Invalid/mock token in dev mode. Falling back to active store:", store.shopDomain);

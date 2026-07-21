@@ -1,15 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db/prisma';
 import { authenticate } from '@/lib/shopify/authenticate';
+import { hasValidShopifyAccessToken } from '@/services/shopify/utils';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: NextRequest) {
   try {
     const { store } = await authenticate(req);
-
+    
     // Fetch data for all stores to combine inventory
-    const [productCaches, totalSyncs, successSyncs, latestSync, allStores] = await Promise.all([
+    const [productCaches, totalSyncs, successSyncs, latestSync, allStores, connections] = await Promise.all([
       prisma.productCache.findMany({ orderBy: [{ updatedAt: 'desc' }, { id: 'asc' }] }),
       prisma.syncLog.count(),
       prisma.syncLog.count({ where: { status: 'SUCCESS' } }),
@@ -17,6 +18,8 @@ export async function GET(req: NextRequest) {
         orderBy: { createdAt: 'desc' }
       }),
       prisma.store.findMany({ where: { isActive: true } }),
+      // @ts-ignore - bypassing stale Prisma client cache
+      (prisma as any).storeConnection.findMany()
     ]);
 
     let lastUpdated = 'Never';
@@ -27,16 +30,24 @@ export async function GET(req: NextRequest) {
     }
 
     // Group ALL store products by SKU to prevent null-SKU products from merging
-    const currentStoreProducts = productCaches.filter(p => p.storeId === store.id);
+    const currentStoreProducts = productCaches.filter((p: any) => p.storeId === store.id);
     const totalProducts = currentStoreProducts.length;
-    const totalInventory = currentStoreProducts.reduce((a, p) => a + p.inventoryQuantity, 0);
-    const activeProducts = currentStoreProducts.filter((p) => p.inventoryQuantity > 0).length;
-    const lowStockCount = currentStoreProducts.filter((p) => p.inventoryQuantity <= store.lowStockThreshold).length;
+    const totalInventory = currentStoreProducts.reduce((a: any, p: any) => a + p.inventoryQuantity, 0);
+    const activeProducts = currentStoreProducts.filter((p: any) => p.inventoryQuantity > 0).length;
+    const lowStockCount = currentStoreProducts.filter((p: any) => p.inventoryQuantity <= store.lowStockThreshold).length;
 
     const stats = { totalProducts, totalInventory, activeProducts, lowStock: lowStockCount, lastUpdated };
 
-    const storesWithProducts = allStores.map(s => {
-      const storeSpecificProducts = productCaches.filter(p => p.storeId === s.id);
+    const connectedStoreIds = new Set(connections.map((c: any) => c.targetStoreId));
+    const visibleStores = allStores.filter((s: any) => 
+      s.id === store.id || 
+      s.shopDomain === 'eshan-inventory-solutions.myshopify.com' || 
+      s.shopDomain === 'eshan-coimbatore-store-8jjdfk4t.myshopify.com' || 
+      connectedStoreIds.has(s.id)
+    );
+
+    const storesWithProducts = visibleStores.map((s: any) => {
+      const storeSpecificProducts = productCaches.filter((p: any) => p.storeId === s.id);
       return {
         id: s.id,
         shopDomain: s.shopDomain,
@@ -44,9 +55,9 @@ export async function GET(req: NextRequest) {
         isActive: s.isActive,
         installedAt: s.installedAt,
         productCount: storeSpecificProducts.length,
-        inventoryTotal: storeSpecificProducts.reduce((acc, p) => acc + p.inventoryQuantity, 0),
-        salesValue: storeSpecificProducts.reduce((acc, p) => acc + (p.price * p.inventoryQuantity), 0),
-        activeProductCount: storeSpecificProducts.filter(p => p.inventoryQuantity > 0).length,
+        inventoryTotal: storeSpecificProducts.reduce((acc: any, p: any) => acc + p.inventoryQuantity, 0),
+        salesValue: storeSpecificProducts.reduce((acc: any, p: any) => acc + (p.price * p.inventoryQuantity), 0),
+        activeProductCount: storeSpecificProducts.filter((p: any) => p.inventoryQuantity > 0).length,
       };
     });
 
@@ -56,12 +67,12 @@ export async function GET(req: NextRequest) {
 
     // Filter low stock using current store's threshold settings
     const lowStockProducts = currentStoreProducts
-      .filter((p) => p.inventoryQuantity <= store.lowStockThreshold)
-      .sort((a, b) => a.inventoryQuantity - b.inventoryQuantity)
+      .filter((p: any) => p.inventoryQuantity <= store.lowStockThreshold)
+      .sort((a: any, b: any) => a.inventoryQuantity - b.inventoryQuantity)
       .slice(0, 50);
 
     const recentlyAddedProducts = currentStoreProducts
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
       .slice(0, 50);
 
     return NextResponse.json({

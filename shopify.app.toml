@@ -1,20 +1,19 @@
 # Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
 
 client_id = "f82dbdee74418429d3510c35ca99aae3"
-name = "Multi-Store Inventory Sync"
+name = "StoreBridge"
 application_url = "https://dz50mdfc-3000.inc1.devtunnels.ms"
 embedded = true
 
 [build]
 automatically_update_urls_on_dev = true
-dev_command = "npm run next:dev"
 
 [webhooks]
 api_version = "2026-10"
 
 [access_scopes]
 # Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
-scopes = "read_inventory,read_products,write_inventory,write_products,read_publications,write_publications"
+scopes = "read_inventory,read_products,read_publications,write_inventory,write_products,write_publications"
 
 [auth]
 redirect_urls = [ "https://dz50mdfc-3000.inc1.devtunnels.ms/api/auth/callback" ]

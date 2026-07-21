@@ -12,6 +12,27 @@ function logDebug(msg: string) {
   console.log(msg);
 }
 
+async function fetchDefaultLocation(shopDomain: string): Promise<string | null> {
+  try {
+    const client = await getAdminClient(shopDomain);
+    const response: any = await client.request(`
+      query {
+        locations(first: 1) {
+          edges {
+            node {
+              id
+            }
+          }
+        }
+      }
+    `);
+    return response?.data?.locations?.edges?.[0]?.node?.id || null;
+  } catch (error) {
+    logDebug(`[SyncService] Failed to fetch default location for ${shopDomain}: ${error}`);
+    return null;
+  }
+}
+
 export async function processInventoryUpdate(
   shopDomain: string,
   inventoryItemId: string,
@@ -175,7 +196,20 @@ export async function processInventoryUpdate(
 
       let targetLocationQuantity = 0;
       let targetTotalQuantity = 0;
+      let effectiveLocationId = target.locationId;
       try {
+        if (!effectiveLocationId) {
+          effectiveLocationId = await fetchDefaultLocation(target.store.shopDomain);
+          if (effectiveLocationId) {
+            // Self-heal the VariantMap
+            await prisma.variantMap.update({
+              where: { id: target.id },
+              data: { locationId: effectiveLocationId }
+            });
+            logDebug(`[${new Date().toISOString()}] [SyncService] Self-healed missing locationId for ${target.store.shopDomain}: ${effectiveLocationId}`);
+          }
+        }
+
         const client = await getAdminClient(target.store.shopDomain);
         const response: any = await client.request(
           `query getTargetInventoryItemLevels($id: ID!) {
@@ -204,7 +238,7 @@ export async function processInventoryUpdate(
             const q = edge.node.quantities[0]?.quantity;
             if (typeof q === 'number') {
               targetTotalQuantity += q;
-              if (edge.node.location.id === target.locationId) {
+              if (edge.node.location.id === effectiveLocationId) {
                 targetLocationQuantity = q;
               }
             }
@@ -221,15 +255,15 @@ export async function processInventoryUpdate(
       logDebug(`[${new Date().toISOString()}] [SyncService:Sync] [Target Store After Update]: ${targetNewQuantity} (Store: ${target.store.shopDomain})`);
 
       try {
-        if (!target.locationId) {
-          throw new Error('Target location ID not mapped for this variant.');
+        if (!effectiveLocationId) {
+          throw new Error('Target location ID not mapped for this variant and could not be dynamically fetched.');
         }
 
         logDebug(`[${new Date().toISOString()}] [SyncService] Requesting Shopify inventory set for ${target.store.shopDomain}...`);
         await setInventoryQuantity(
           target.store.shopDomain,
           target.inventoryItemId,
-          target.locationId,
+          effectiveLocationId,
           targetNewQuantity
         );
         logDebug(`[${new Date().toISOString()}] [SyncService] Shopify inventory update response SUCCESS for ${target.store.shopDomain}`);

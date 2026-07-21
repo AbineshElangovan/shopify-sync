@@ -14,36 +14,7 @@ export async function POST(req: NextRequest) {
 
     const payload = JSON.parse(rawBody);
     
-    if (!(store as any)?.isMaster) {
-      console.log(`[Webhook:products/delete] Cleaning up local cache for Sub Store: ${shop}`);
-      const deletedGid = `gid://shopify/Product/${payload.id}`;
-      
-      // We must clean up our local cache so the Dashboard metrics update correctly for Sub Stores
-      await prisma.variantMap.deleteMany({
-        where: {
-          storeId: store?.id,
-          shopifyProductId: deletedGid,
-        },
-      });
-
-      // Delete CollectionProduct records before ProductCache (FK constraint)
-      const subCaches = await prisma.productCache.findMany({
-        where: { storeId: store?.id, shopifyProductId: deletedGid },
-        select: { id: true }
-      });
-      for (const sc of subCaches) {
-        await prisma.collectionProduct.deleteMany({ where: { productCacheId: sc.id } });
-      }
-
-      await prisma.productCache.deleteMany({
-        where: {
-          storeId: store?.id,
-          shopifyProductId: deletedGid,
-        },
-      });
-
-      return new NextResponse("Ignored sync but cleaned up local cache", { status: 200 });
-    }
+    // Removed isMaster guard for universal sync
 
     // Idempotency: skip if already processed
     const existingEvent = await prisma.webhookEvent.findUnique({

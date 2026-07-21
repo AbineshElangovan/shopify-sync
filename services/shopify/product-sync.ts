@@ -366,8 +366,17 @@ export async function updateLocalProductCache(shopDomain: string, payload: any, 
   }
 }
 
-export async function processProductCreate(shopDomain: string, payload: any, webhookId?: string) {
+export async function processProductCreate(shopDomain: string, payload: any, webhookId?: string, targetStoreDomains?: string[]) {
   try {
+    // Quick loop prevention for create <-> update cycle
+    const loopDepth = (global as any)._syncLoopDepth || 0;
+    if (loopDepth > 3) {
+      console.error(`[DEBUG-CREATE] INFINITE LOOP DETECTED. Aborting.`);
+      (global as any)._syncLoopDepth = 0;
+      return;
+    }
+    (global as any)._syncLoopDepth = loopDepth + 1;
+
     const sourceStore = await prisma.store.findUnique({
       where: { shopDomain },
     });
@@ -384,7 +393,10 @@ export async function processProductCreate(shopDomain: string, payload: any, web
     }
 
     const targetStores = await prisma.store.findMany({
-      where: { shopDomain: { not: shopDomain }, isActive: true },
+      where: { 
+        shopDomain: targetStoreDomains ? { in: targetStoreDomains } : { not: shopDomain }, 
+        isActive: true 
+      },
     });
 
     for (const targetStore of targetStores) {
@@ -433,7 +445,7 @@ export async function processProductCreate(shopDomain: string, payload: any, web
 
       if (existingMapping) {
         console.log(`[ProductSync:Create] Product already exists in ${targetStore.shopDomain}. Delegating to update.`);
-        await processProductUpdate(shopDomain, payload, webhookId);
+        await processProductUpdate(shopDomain, payload, webhookId, [targetStore.shopDomain]);
         continue;
       }
 
@@ -632,8 +644,17 @@ export async function processProductCreate(shopDomain: string, payload: any, web
   }
 }
 
-export async function processProductUpdate(shopDomain: string, payload: any, webhookId?: string) {
+export async function processProductUpdate(shopDomain: string, payload: any, webhookId?: string, targetStoreDomains?: string[]) {
   try {
+    // Quick loop prevention for create <-> update cycle
+    const loopDepth = (global as any)._syncLoopDepth || 0;
+    if (loopDepth > 3) {
+      console.error(`[DEBUG-UPDATE] INFINITE LOOP DETECTED. Aborting.`);
+      (global as any)._syncLoopDepth = 0;
+      return;
+    }
+    (global as any)._syncLoopDepth = loopDepth + 1;
+
     const sourceStore = await prisma.store.findUnique({
       where: { shopDomain },
     });
@@ -650,7 +671,10 @@ export async function processProductUpdate(shopDomain: string, payload: any, web
     }
 
     const targetStores = await prisma.store.findMany({
-      where: { shopDomain: { not: shopDomain }, isActive: true },
+      where: { 
+        shopDomain: targetStoreDomains ? { in: targetStoreDomains } : { not: shopDomain }, 
+        isActive: true 
+      },
     });
 
     for (const targetStore of targetStores) {
@@ -696,7 +720,7 @@ export async function processProductUpdate(shopDomain: string, payload: any, web
 
       if (!matchingVariantMap) {
         console.log(`[ProductSync:Update] Product does not exist in target store ${targetStore.shopDomain}. Routing to create.`);
-        await processProductCreate(shopDomain, payload, webhookId);
+        await processProductCreate(shopDomain, payload, webhookId, [targetStore.shopDomain]);
         continue;
       }
 

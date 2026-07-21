@@ -5,6 +5,7 @@ import { usePathname, useSearchParams } from 'next/navigation';
 const NAV_LINKS = [
   { href: '/', label: 'Dashboard' },
   { href: '/products', label: 'Products' },
+  { href: '/connections', label: 'Connections' },
   { href: '/sync', label: 'Sync' },
   { href: '/settings', label: 'Settings' },
 ];

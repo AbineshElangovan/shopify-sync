@@ -9,6 +9,7 @@ datasource db {
 
 model Store {
   id                String   @id @default(uuid())
+  uniqueStoreId     String   @unique @default(uuid())
   shopDomain        String   @unique
   accessToken       String
   scope             String
@@ -29,8 +30,23 @@ model Store {
   collections   Collection[]
   sourceLogs   SyncLog[]    @relation("SourceStore")
   destLogs     SyncLog[]    @relation("DestinationStore")
+  sourceConnections StoreConnection[] @relation("SourceConnections")
+  targetConnections StoreConnection[] @relation("TargetConnections")
 
   @@map("stores")
+}
+
+model StoreConnection {
+  id              String   @id @default(uuid())
+  sourceStoreId   String
+  targetStoreId   String
+  createdAt       DateTime @default(now())
+
+  sourceStore     Store    @relation("SourceConnections", fields: [sourceStoreId], references: [id], onDelete: Cascade)
+  targetStore     Store    @relation("TargetConnections", fields: [targetStoreId], references: [id], onDelete: Cascade)
+
+  @@unique([sourceStoreId, targetStoreId])
+  @@map("store_connections")
 }
 
 model Session {

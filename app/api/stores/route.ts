@@ -3,28 +3,43 @@ import { prisma } from '@/lib/db/prisma';
 
 import { hasValidShopifyAccessToken, applyPriceAdjustmentToStore } from '@/services/shopify';
 
+import { authenticate } from '@/lib/shopify/authenticate';
+
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: NextRequest) {
   try {
+    const { store } = await authenticate(req);
     const { searchParams } = req.nextUrl;
     const activeOnly = searchParams.get('active') !== 'false';
 
-    const stores = await prisma.store.findMany({
-      where: activeOnly ? { isActive: true } : undefined,
-      orderBy: { installedAt: 'desc' },
-      include: {
-        _count: {
-          select: {
-            productCaches: true,
-            variantMaps: true,
-            sourceLogs: true,
+    const [stores, connections] = await Promise.all([
+      prisma.store.findMany({
+        where: activeOnly ? { isActive: true } : undefined,
+        orderBy: { installedAt: 'desc' },
+        include: {
+          _count: {
+            select: {
+              productCaches: true,
+              variantMaps: true,
+              sourceLogs: true,
+            },
           },
         },
-      },
-    });
+      }),
+      // @ts-ignore - bypassing stale Prisma client cache
+      (prisma as any).storeConnection.findMany()
+    ]);
 
-    const enrichedStores = stores.map((s) => ({
+    const connectedStoreIds = new Set(connections.map((c: any) => c.targetStoreId));
+    const visibleStores = stores.filter((s: any) => 
+      s.id === store.id || 
+      s.shopDomain === 'eshan-inventory-solutions.myshopify.com' || 
+      s.shopDomain === 'eshan-coimbatore-store-8jjdfk4t.myshopify.com' || 
+      connectedStoreIds.has(s.id)
+    );
+
+    const enrichedStores = visibleStores.map((s: any) => ({
       id: s.id,
       shopDomain: s.shopDomain,
       label: s.label,
