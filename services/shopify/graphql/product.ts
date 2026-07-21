@@ -332,3 +332,35 @@ export const PRODUCT_VARIANTS_DELETE_MUTATION = `
     }
   }
 `;
+
+/**
+ * Fetches all publications (sales channels) for a store.
+ * Used by: services/shopify/product-sync.ts
+ */
+export const GET_PUBLICATIONS_QUERY = `
+  query getPublications {
+    publications(first: 20) {
+      edges {
+        node {
+          id
+          name
+        }
+      }
+    }
+  }
+`;
+
+/**
+ * Publishes a product to specified publications.
+ * Used by: services/shopify/product-sync.ts
+ */
+export const PUBLISH_MUTATION = `
+  mutation publishablePublish($id: ID!, $input: [PublicationInput!]!) {
+    publishablePublish(id: $id, input: $input) {
+      userErrors {
+        field
+        message
+      }
+    }
+  }
+`;

@@ -6,7 +6,7 @@ import {
   PRODUCT_SET_MUTATION, PRODUCT_DELETE_MUTATION, PRODUCT_VARIANTS_DELETE_MUTATION,
   GET_VARIANT_BY_SKU_QUERY, GET_PRODUCT_BY_ID_QUERY, LOCATIONS_QUERY,
   GET_PRODUCT_COLLECTIONS_QUERY, GET_COLLECTIONS_BY_TITLE_QUERY, CREATE_COLLECTION_MUTATION,
-  ADD_PRODUCT_TO_COLLECTION_MUTATION
+  ADD_PRODUCT_TO_COLLECTION_MUTATION, GET_PUBLICATIONS_QUERY, PUBLISH_MUTATION
 } from './graphql';
 import { syncProductCollectionsByTags } from './collection-sync';
 
@@ -113,6 +113,36 @@ async function fetchDefaultLocation(shopDomain: string): Promise<string | null> 
   }
 }
 
+async function publishProductToAllChannels(shopDomain: string, productId: string) {
+  try {
+    const client = await getAdminClient(shopDomain);
+    const pubResponse: any = await client.request(GET_PUBLICATIONS_QUERY);
+    const publications = pubResponse?.data?.publications?.edges || [];
+    
+    if (publications.length === 0) return;
+
+    const publicationInputs = publications.map((edge: any) => ({
+      publicationId: edge.node.id
+    }));
+
+    const response: any = await client.request(PUBLISH_MUTATION, {
+      variables: {
+        id: productId,
+        input: publicationInputs
+      }
+    });
+
+    const userErrors = response?.data?.publishablePublish?.userErrors || [];
+    if (userErrors.length > 0) {
+      console.error(`[ProductSync:Publish] Failed to publish ${productId} in ${shopDomain}:`, userErrors);
+    } else {
+      console.log(`[ProductSync:Publish] Successfully published ${productId} to ${publications.length} channels in ${shopDomain}`);
+    }
+  } catch (error: any) {
+    console.error(`[ProductSync:Publish] Error publishing ${productId} in ${shopDomain}:`, error.message);
+  }
+}
+
 async function findTargetProductBySku(shopDomain: string, sku: string) {
   try {
     const client = await getAdminClient(shopDomain);
@@ -206,11 +236,11 @@ export async function updateLocalProductCache(shopDomain: string, payload: any, 
           }
         });
       } else {
+        const newImageUrl = payload.image?.src || payload.images?.[0]?.src || null;
         const needsUpdate = existingCache.sku !== sku || 
                             existingCache.title !== fullTitle || 
                             existingCache.price !== parsedPrice || 
-                            existingCache.inventoryQuantity !== trueInventory ||
-                            (payload.image?.src || payload.images?.[0]?.src && existingCache.imageUrl !== (payload.image?.src || payload.images?.[0]?.src));
+                            (newImageUrl !== null && existingCache.imageUrl !== newImageUrl);
                             
         if (needsUpdate) {
           await prisma.productCache.update({
@@ -218,10 +248,9 @@ export async function updateLocalProductCache(shopDomain: string, payload: any, 
             data: {
               sku,
               title: fullTitle,
-              ...(payload.image?.src || payload.images?.[0]?.src ? { imageUrl: payload.image?.src || payload.images?.[0]?.src } : {}),
+              ...(newImageUrl !== null ? { imageUrl: newImageUrl } : {}),
               shopifyProductId,
               price: parsedPrice,
-              inventoryQuantity: trueInventory,
             },
           });
         }
@@ -438,6 +467,7 @@ export async function processProductCreate(shopDomain: string, payload: any, web
           const variantInput: any = {
             price: calculateAdjustedPrice(v.price, sourceStore, targetStore),
             sku: v.sku?.trim() || "",
+            inventoryItem: { tracked: true }
           };
           const options: string[] = [];
           if (v.option1) options.push(v.option1);
@@ -585,6 +615,9 @@ export async function processProductCreate(shopDomain: string, payload: any, web
         } catch (err) {
           console.error(`[CollectionSync] Failed during Create:`, err);
         }
+
+        // Auto-publish to all sales channels so the product appears on the storefront
+        await publishProductToAllChannels(targetStore.shopDomain, createdProduct.id);
 
         console.log(`[ProductSync:Create] Successfully created product "${payload.title}" in target store ${targetStore.shopDomain}`);
       } catch (err: any) {
@@ -739,6 +772,7 @@ export async function processProductUpdate(shopDomain: string, payload: any, web
         const variantInput: any = {
           price: calculateAdjustedPrice(sourceVar.price, sourceStore, targetStore),
           sku: sku,
+          inventoryItem: { tracked: true }
         };
 
         const options: string[] = [];
@@ -1020,6 +1054,9 @@ export async function processProductUpdate(shopDomain: string, payload: any, web
             },
           });
         }
+
+        // Auto-publish to all sales channels during update as well
+        await publishProductToAllChannels(targetStore.shopDomain, targetProductId);
 
         console.log(`[ProductSync:Update] Successfully updated product "${mergedTitle}" in target store ${targetStore.shopDomain}`);
       } catch (err: any) {

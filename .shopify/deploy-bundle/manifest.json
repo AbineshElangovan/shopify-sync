@@ -9,7 +9,7 @@
       "assets": "app_access",
       "target": "",
       "config": {
-        "scopes": "read_inventory,read_products,write_inventory,write_products",
+        "scopes": "read_inventory,read_products,read_publications,write_inventory,write_products,write_publications",
         "redirect_url_allowlist": [
           "https://dz50mdfc-3000.inc1.devtunnels.ms/api/auth/callback"
         ]
