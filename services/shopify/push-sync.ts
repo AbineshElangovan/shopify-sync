@@ -1,7 +1,9 @@
 import { prisma } from "@/lib/db/prisma";
 import { getAdminClient } from "@/lib/shopify/admin";
-import { generateNextSku } from "../sku/generator";
 import { GET_PRODUCTS_QUERY } from "./graphql";
+import { fetchLatestShopifyProduct } from "./product-fetcher";
+import { processProductCreate } from "./product-sync";
+import { generateSkusForProductIfNeeded } from "@/services/sku";
 
 export async function pushProductsToDestinations(sourceStoreId: string, targetStoreIds: string[]) {
   console.log(`[PushSync] Starting push sync from source: ${sourceStoreId} to targets:`, targetStoreIds);
@@ -36,95 +38,28 @@ export async function pushProductsToDestinations(sourceStoreId: string, targetSt
 
   console.log(`[PushSync] Fetched ${allSourceProducts.length} products from Source Store.`);
 
-  // 2. Iterate Target Stores
-  for (const targetStore of targetStores) {
+  const targetStoreDomains = targetStores.map(s => s.shopDomain);
+
+  // 2. Iterate Source Products and trigger processProductCreate
+  for (const sourceProduct of allSourceProducts) {
     try {
-      const targetClient = await getAdminClient(targetStore.shopDomain);
+      console.log(`[PushSync] Syncing product ${sourceProduct.id}`);
+      let payload = await fetchLatestShopifyProduct(sourceStore.shopDomain, sourceProduct.id);
+      if (!payload) continue;
       
-      // Get primary location of target store for inventory sync
-      const locResponse = await targetClient.request(`query { locations(first: 1) { edges { node { id } } } }`);
-      const targetLocationId = locResponse.data?.locations?.edges?.[0]?.node?.id;
+      // Ensure SKUs exist on source payload before distributing (same as webhook logic)
+      payload = await generateSkusForProductIfNeeded(sourceStore.shopDomain, payload);
 
-      for (const sourceProduct of allSourceProducts) {
-        // Map variants and generate SKUs if missing
-        const variantsToPush = [];
-        for (const vEdge of sourceProduct.variants?.edges ?? []) {
-          const v = vEdge.node;
-          let sku = v.sku?.trim();
-          if (!sku) {
-            sku = await generateNextSku(targetStore.id);
-          }
-          
-          variantsToPush.push({
-            id: v.id, // We'll need to check if we are updating or creating
-            title: v.title,
-            price: v.price,
-            sku: sku,
-            inventoryItem: v.inventoryItem,
-          });
-        }
+      const webhookId = `manual-sync-${Date.now()}-${payload.id}`;
+      // This will handle Create, Update, Collection mappings, Price adjustments, and Images!
+      await processProductCreate(sourceStore.shopDomain, payload, webhookId, targetStoreDomains);
+    } catch (err: any) {
+       console.error(`[PushSync] Error syncing product ${sourceProduct.id}:`, err);
+    }
+  }
 
-        // Check if product is already mapped
-        const existingMap = await prisma.productMapping.findUnique({
-          where: {
-            sourceStoreId_targetStoreId_sourceProductId: {
-              sourceStoreId: sourceStore.id,
-              targetStoreId: targetStore.id,
-              sourceProductId: sourceProduct.id
-            }
-          }
-        });
-
-        if (existingMap) {
-          // UPDATE EXISTING PRODUCT
-          // Minimal implementation: in production we would send a productUpdate mutation
-          console.log(`[PushSync] Updating existing product mapped to ${existingMap.targetProductId}`);
-          // ... update logic
-        } else {
-          // CREATE NEW PRODUCT
-          const productCreateInput = {
-            title: sourceProduct.title,
-            descriptionHtml: sourceProduct.descriptionHtml,
-            vendor: sourceProduct.vendor,
-            productType: sourceProduct.productType,
-            status: sourceProduct.status,
-            variants: variantsToPush.map(v => ({
-              price: v.price,
-              sku: v.sku,
-              title: v.title,
-            }))
-          };
-
-          const createMutation = `
-            mutation productCreate($input: ProductInput!) {
-              productCreate(input: $input) {
-                product { id variants(first: 100) { edges { node { id } } } }
-                userErrors { field message }
-              }
-            }
-          `;
-          const res = await targetClient.request(createMutation, { variables: { input: productCreateInput } });
-          const newProduct = res.data?.productCreate?.product;
-          
-          if (newProduct) {
-             // Save Mapping
-             await prisma.productMapping.create({
-               data: {
-                 sourceStoreId: sourceStore.id,
-                 targetStoreId: targetStore.id,
-                 sourceProductId: sourceProduct.id,
-                 targetProductId: newProduct.id,
-                 // variant mapping can be added here
-               }
-             });
-             console.log(`[PushSync] Created product ${newProduct.id} on ${targetStore.shopDomain}`);
-          } else {
-             console.error("[PushSync] Failed to create product", res.data?.productCreate?.userErrors);
-          }
-        }
-      }
-      
-      // Log Success
+  // 3. Log Success
+  for (const targetStore of targetStores) {
       await prisma.syncLog.create({
         data: {
           sku: "FULL_SYNC",
@@ -136,21 +71,5 @@ export async function pushProductsToDestinations(sourceStoreId: string, targetSt
           triggerType: "MANUAL",
         }
       });
-      
-    } catch (targetErr: any) {
-      console.error(`[PushSync] Error syncing to target ${targetStore.shopDomain}:`, targetErr);
-      await prisma.syncLog.create({
-        data: {
-          sku: "FULL_SYNC",
-          sourceStoreId: sourceStore.id,
-          destinationStoreId: targetStore.id,
-          previousQuantity: 0,
-          updatedQuantity: 0,
-          status: "FAILED",
-          failureReason: targetErr.message,
-          triggerType: "MANUAL",
-        }
-      });
-    }
   }
 }

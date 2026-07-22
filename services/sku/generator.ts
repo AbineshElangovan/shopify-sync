@@ -45,6 +45,41 @@ export async function generateSkusForProductIfNeeded(shopDomain: string, payload
     if (!variant.sku || variant.sku.trim() === '') {
       variant.sku = await generateNextSku(store.id);
       updated = true;
+      
+      // We MUST push the newly generated SKU back to the Master Store's Shopify Admin
+      // Otherwise, subsequent webhooks will see an empty SKU and generate ANOTHER new SKU, causing duplicates!
+      try {
+        const { getAdminClient } = require('@/lib/shopify/admin');
+        const client = await getAdminClient(shopDomain);
+        
+        const numericVariantId = variant.admin_graphql_api_id 
+          ? variant.admin_graphql_api_id 
+          : `gid://shopify/ProductVariant/${variant.id}`;
+          
+        const numericProductId = payload.admin_graphql_api_id
+          ? payload.admin_graphql_api_id
+          : `gid://shopify/Product/${payload.id}`;
+          
+        const updateMutation = `
+          mutation productVariantsBulkUpdate($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {
+            productVariantsBulkUpdate(productId: $productId, variants: $variants) {
+              userErrors { field message }
+            }
+          }
+        `;
+        await client.request(updateMutation, {
+          variables: {
+            productId: numericProductId,
+            variants: [{
+              id: numericVariantId,
+              inventoryItem: { sku: variant.sku }
+            }]
+          }
+        });
+        console.log(`[SKU Generator] Successfully pushed generated SKU ${variant.sku} back to Master Store ${shopDomain}`);
+      } catch (err: any) {
+        console.error(`[SKU Generator] Failed to push SKU ${variant.sku} back to Master Store:`, err.message);
+      }
     }
   }
 

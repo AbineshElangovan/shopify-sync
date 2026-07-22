@@ -57,15 +57,25 @@ export async function processInventoryUpdate(
       ? inventoryItemIdStr
       : `gid://shopify/InventoryItem/${inventoryItemIdStr}`;
 
-    const sourceVariantMap = await prisma.variantMap.findFirst({
-      where: {
-        storeId: sourceStore.id,
-        inventoryItemId: gidInventoryItemId,
-      },
-    });
+    let sourceVariantMap = null;
+    let retries = 0;
+    while (!sourceVariantMap && retries < 5) {
+      sourceVariantMap = await prisma.variantMap.findFirst({
+        where: {
+          storeId: sourceStore.id,
+          inventoryItemId: gidInventoryItemId,
+        },
+      });
+      
+      if (!sourceVariantMap) {
+        logDebug(`[${new Date().toISOString()}] [SyncService] VariantMap not found for ${gidInventoryItemId}. Retrying in 2 seconds... (${retries + 1}/5)`);
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        retries++;
+      }
+    }
 
     if (!sourceVariantMap) {
-      logDebug(`[${new Date().toISOString()}] [SyncService] VariantMap lookup: No variant map found for inventory item ${gidInventoryItemId} in store ${shopDomain}. Skipping.`);
+      logDebug(`[${new Date().toISOString()}] [SyncService] VariantMap lookup failed after retries for inventory item ${gidInventoryItemId} in store ${shopDomain}. Skipping.`);
       return;
     }
 
@@ -78,46 +88,6 @@ export async function processInventoryUpdate(
     }
 
     let trueTotalInventory = availableQuantity;
-    try {
-      logDebug(`[${new Date().toISOString()}] [SyncService] Waiting 10000ms for Shopify cache to invalidate...`);
-      await new Promise((resolve) => setTimeout(resolve, 10000));
-      
-      const adminClient = await getAdminClient(shopDomain);
-      const query = `
-        query getInventoryItemLevels($id: ID!) {
-          inventoryItem(id: $id) {
-            inventoryLevels(first: 50) {
-              edges {
-                node {
-                  quantities(names: ["available"]) {
-                    quantity
-                  }
-                }
-              }
-            }
-          }
-        }
-      `;
-      const response: any = await adminClient.request(query, { variables: { id: gidInventoryItemId } });
-      const levels = response.data?.inventoryItem?.inventoryLevels?.edges || [];
-      
-      let sum = 0;
-      let foundLevels = false;
-      for (const edge of levels) {
-        const q = edge.node.quantities?.[0]?.quantity;
-        if (typeof q === 'number') {
-          sum += q;
-          foundLevels = true;
-        }
-      }
-      
-      if (foundLevels) {
-        trueTotalInventory = sum;
-      }
-    } catch (err: any) {
-      logDebug(`[${new Date().toISOString()}] [SyncService] Failed to fetch true inventory for ${sku}: ${err.message}`);
-    }
-
     const sourceCachedProduct = await prisma.productCache.findFirst({
       where: {
         storeId: sourceStore.id,
@@ -248,8 +218,11 @@ export async function processInventoryUpdate(
         logDebug(`[${new Date().toISOString()}] [SyncService] Failed to fetch target location quantity: ${err.message}`);
       }
 
-      const targetNewQuantity = Math.max(0, targetLocationQuantity + delta);
-      const targetNewTotalQuantity = Math.max(0, targetTotalQuantity + delta);
+      // In a Hub-and-Spoke model, the Master Store is the absolute source of truth.
+      // We should NOT use delta-based syncing, because if a store misses a webhook or gets manually edited, they drift permanently.
+      // Instead, we force the Target Store to exactly match the Master Store's absolute inventory quantity.
+      const targetNewQuantity = trueTotalInventory;
+      const targetNewTotalQuantity = trueTotalInventory;
 
       logDebug(`[${new Date().toISOString()}] [SyncService:Sync] [Target Store Before Update]: ${targetLocationQuantity} (Store: ${target.store.shopDomain})`);
       logDebug(`[${new Date().toISOString()}] [SyncService:Sync] [Target Store After Update]: ${targetNewQuantity} (Store: ${target.store.shopDomain})`);

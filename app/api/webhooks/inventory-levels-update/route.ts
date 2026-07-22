@@ -12,6 +12,7 @@ export async function POST(req: NextRequest) {
       return new NextResponse('Ignored topic', { status: 200 });
     }
 
+
     const timestamp = new Date().toISOString();
     console.log(`\n======================================================`);
     console.log(`[Webhook:inventory_levels/update] RECEIVED at ${timestamp}`);

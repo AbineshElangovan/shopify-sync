@@ -60,6 +60,14 @@ export async function POST(req: NextRequest) {
         
         const latestPayload = await fetchLatestShopifyProduct(shop, payload.id);
         if (latestPayload) {
+          // Shopify GraphQL is eventually consistent. If we just generated a SKU, it might be missing here.
+          // Merge the original payload's SKU to prevent wiping it out.
+          latestPayload.variants.forEach((latestVariant: any) => {
+             const originalVariant = payload.variants?.find((v: any) => v.admin_graphql_api_id === latestVariant.admin_graphql_api_id || v.id == latestVariant.id);
+             if (!latestVariant.sku && originalVariant?.sku) {
+                 latestVariant.sku = originalVariant.sku;
+             }
+          });
           currentPayload = latestPayload;
         }
 

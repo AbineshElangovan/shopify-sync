@@ -46,6 +46,7 @@ const GET_FULL_PRODUCT_QUERY = `
             }
             inventoryItem {
               id
+              sku
               inventoryLevels(first: 10) {
                 edges {
                   node {
@@ -137,7 +138,7 @@ export async function fetchLatestShopifyProduct(shopDomain: string, productId: s
           admin_graphql_api_id: variant.id,
           title: variant.title,
           price: variant.price,
-          sku: variant.sku || '',
+          sku: variant.inventoryItem?.sku || variant.sku || '',
           inventory_item_id: parseInt(numericInventoryItemId, 10),
           inventory_quantity: inventoryQuantity,
           option1,

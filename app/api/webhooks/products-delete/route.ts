@@ -12,9 +12,12 @@ export async function POST(req: NextRequest) {
       where: { shopDomain: shop },
     });
 
+    if (!(store as any)?.isMaster) {
+      console.log(`[Webhook:products/delete] Ignored event from Sub Store: ${shop}`);
+      return new NextResponse("Ignored Sub Store event", { status: 200 });
+    }
+
     const payload = JSON.parse(rawBody);
-    
-    // Removed isMaster guard for universal sync
 
     // Idempotency: skip if already processed
     const existingEvent = await prisma.webhookEvent.findUnique({

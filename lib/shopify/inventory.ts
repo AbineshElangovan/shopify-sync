@@ -14,7 +14,7 @@ export async function setInventoryQuantity(
     const response = await client.request(INVENTORY_SET_MUTATION, {
       variables: {
         input: {
-          name: "available",
+          name: "on_hand",
           reason: "correction",
           quantities: [
             {
@@ -66,7 +66,7 @@ export async function adjustInventoryQuantity(
     const response = await client.request(INVENTORY_ADJUST_MUTATION, {
       variables: {
         input: {
-          name: "available",
+          name: "on_hand",
           reason: "correction",
           changes: [
             {
