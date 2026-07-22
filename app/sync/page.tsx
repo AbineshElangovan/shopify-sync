@@ -5,7 +5,6 @@ import { Card, Table, Badge, SearchBar, Filter, Pagination, EmptyState, StatCard
 import { ChoiceList, IndexTable } from '@shopify/polaris';
 import { CheckCircleIcon, AlertTriangleIcon, ProductIcon } from '@shopify/polaris-icons';
 import { shopifyFetch } from '@/lib/shopify/Client';
-import ManualSyncWidget from './ManualSyncWidget';
 
 export default function SyncPage() {
   const [data, setData] = useState<any>(null);
@@ -134,10 +133,6 @@ export default function SyncPage() {
           }
         />
       </Card>
-      
-      <div className="mt-8">
-        <ManualSyncWidget />
-      </div>
     </div>
   );
 }

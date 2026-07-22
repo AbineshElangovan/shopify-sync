@@ -1,18 +1,24 @@
 import { prisma } from './lib/db/prisma';
 
 async function main() {
-  console.log("Generating dummy Sync Logs...");
+  console.log("Clearing old Sync Logs...");
+  await prisma.syncLog.deleteMany({});
+  
+  console.log("Generating 5 dummy Sync Logs...");
 
   // Find the master store and some connected stores
-  const masterStore = await prisma.store.findFirst();
+  // Find the user's main store so the logs actually show up on their dashboard
+  const masterStore = await prisma.store.findFirst({
+    where: { shopDomain: 'eshan-coimbatore-store-8jjdfk4t.myshopify.com' }
+  }) || await prisma.store.findFirst();
+  
   if (!masterStore) {
     console.error("No master store found!");
     return;
   }
 
   const dummyStores = await prisma.store.findMany({
-    where: { shopDomain: { not: masterStore.shopDomain } },
-    take: 3
+    where: { shopDomain: { not: masterStore.shopDomain } }
   });
 
   if (dummyStores.length === 0) {
@@ -23,7 +29,7 @@ async function main() {
   const skus = ['TSHIRT-RED-M', 'MUG-WHITE', 'HAT-BLUE', 'SHOE-9', 'HOODIE-BLK-L'];
   const statuses = ['SUCCESS', 'SUCCESS', 'SUCCESS', 'FAILED', 'PENDING'];
 
-  for (let i = 0; i < 15; i++) {
+  for (let i = 0; i < 5; i++) {
     const targetStore = dummyStores[i % dummyStores.length];
     const sku = skus[i % skus.length];
     const status = statuses[Math.floor(Math.random() * statuses.length)];
@@ -45,7 +51,7 @@ async function main() {
     });
   }
 
-  console.log("Successfully inserted 15 dummy Sync Logs!");
+  console.log("Successfully inserted 5 dummy Sync Logs!");
 }
 
 main()

@@ -303,30 +303,7 @@ export default function SettingsPage() {
         <Layout>
           <Layout.Section>
             <BlockStack gap="500">
-              <Table
-                title="Connected Store Channels"
-                headerColor="#2563eb"
-                columns={[
-                  { title: 'Store Label', key: 'label', type: 'bold' },
-                  { title: 'Shopify Domain', key: 'domain' },
-                  { title: 'Installed On', key: 'installedAt' },
-                  {
-                    title: 'Connection State',
-                    key: 'status',
-                    type: 'status',
-                    badgeRules: { CONNECTED: 'success', DISCONNECTED: 'critical' },
-                  },
-                ]}
-                items={formattedStores}
-                paginate={false}
-                searchable={false}
-                filterable={false}
-                emptyState={
-                  <div style={{ padding: '40px', textAlign: 'center', color: '#6b7280' }}>
-                    No connected store records found. Visit the Partner Dashboard to register this app.
-                  </div>
-                }
-              />
+
 
               <ThemedSection
                 title="Master Store Configuration"
