@@ -3,9 +3,13 @@ import { prisma } from "@/lib/db/prisma";
 
 export async function POST(req: NextRequest) {
   try {
-    const timestamp = Date.now();
-    const manualShopDomain = `manual-store-${timestamp}.local`;
-    const label = `Manual Store ${new Date().toLocaleString()}`;
+    const manualStoresCount = await prisma.store.count({
+      where: { scope: "manual" }
+    });
+    
+    const storeNumber = manualStoresCount + 1;
+    const manualShopDomain = `test-store-${storeNumber}.local`;
+    const label = `Test Store ${storeNumber}`;
 
     // Create the store record in Prisma.
     // The schema automatically assigns a unique 'id' and 'uniqueStoreId' using @default(uuid()).

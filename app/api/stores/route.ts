@@ -32,12 +32,7 @@ export async function GET(req: NextRequest) {
     ]);
 
     const connectedStoreIds = new Set(connections.map((c: any) => c.targetStoreId));
-    const visibleStores = stores.filter((s: any) => 
-      s.id === store.id || 
-      s.shopDomain === 'eshan-inventory-solutions.myshopify.com' || 
-      s.shopDomain === 'eshan-coimbatore-store-8jjdfk4t.myshopify.com' || 
-      connectedStoreIds.has(s.id)
-    );
+    const visibleStores = stores;
 
     const enrichedStores = visibleStores.map((s: any) => ({
       id: s.id,

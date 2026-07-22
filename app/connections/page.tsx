@@ -58,6 +58,7 @@ export default function ConnectionsPage() {
   const [storeIdInput, setStoreIdInput] = useState('');
   const [connecting, setConnecting] = useState(false);
   const [currentStoreUniqueId, setCurrentStoreUniqueId] = useState('');
+  const [isMaster, setIsMaster] = useState(false);
   
   // Manual Sync State
   const [syncing, setSyncing] = useState(false);
@@ -87,7 +88,7 @@ export default function ConnectionsPage() {
       
       const [storesRes, connectionsRes] = await Promise.all([
         shopifyFetch('/api/stores?active=false'),
-        fetch('/api/connections')
+        shopifyFetch('/api/connections')
       ]);
       
       if (storesRes.ok) {
@@ -98,8 +99,13 @@ export default function ConnectionsPage() {
       const data = await connectionsRes.json();
       if (data.success) {
         setConnections(data.connections || []);
-        if (data.store && data.store.uniqueStoreId) {
-          setCurrentStoreUniqueId(data.store.uniqueStoreId);
+        if (data.store) {
+          if (data.store.uniqueStoreId) {
+            setCurrentStoreUniqueId(data.store.uniqueStoreId);
+          }
+          if (data.store.isMaster !== undefined) {
+            setIsMaster(data.store.isMaster);
+          }
         }
       }
     } catch (err) {
@@ -115,7 +121,7 @@ export default function ConnectionsPage() {
     setToastMessage(null);
     
     try {
-      const res = await fetch('/api/connections', {
+      const res = await shopifyFetch('/api/connections', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ uniqueStoreId: storeIdInput.trim() })
@@ -140,7 +146,7 @@ export default function ConnectionsPage() {
     setGeneratingStore(true);
     setToastMessage(null);
     try {
-      const res = await fetch('/api/stores/manual', {
+      const res = await shopifyFetch('/api/stores/manual', {
         method: 'POST',
       });
       const data = await res.json();
@@ -163,7 +169,7 @@ export default function ConnectionsPage() {
   const handleRemoveStore = async (targetStoreId: string) => {
     if (!confirm('Are you sure you want to remove this connection?')) return;
     try {
-      const res = await fetch(`/api/connections?targetStoreId=${targetStoreId}`, {
+      const res = await shopifyFetch(`/api/connections?targetStoreId=${targetStoreId}`, {
         method: 'DELETE'
       });
       const data = await res.json();
@@ -200,7 +206,7 @@ export default function ConnectionsPage() {
       setSyncing(true);
       setToastMessage({ message: 'Sync initiated in the background. Check the Sync logs for progress.', type: 'success' });
       
-      const res = await fetch('/api/sync/manual', {
+      const res = await shopifyFetch('/api/sync/manual', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ selectedTargetStoreIds: selectedStores })
@@ -268,42 +274,7 @@ export default function ConnectionsPage() {
         <Layout.Section>
           <BlockStack gap="500">
             
-            {/* Installed Stores Section (Purple/Fuchsia Theme) */}
-            <ThemedSection
-              title="Connected Store Channels"
-              description="A global view of all store channels where this app is currently installed."
-              bgColor="#faf5ff"
-              borderColor="#e9d5ff"
-              stripeColor="#a855f7"
-              titleColor="#581c87"
-              descColor="#6b21a8"
-            >
-              <div className="bg-white rounded-lg shadow-sm overflow-hidden border border-purple-100 mt-4">
-                <Table
-                  columns={[
-                    { title: 'Store Label', key: 'label', type: 'bold' },
-                    { title: 'Shopify Domain', key: 'domain' },
-                    { title: 'Installed On', key: 'installedAt' },
-                    {
-                      title: 'Connection State',
-                      key: 'status',
-                      type: 'status',
-                      badgeRules: { CONNECTED: 'success', DISCONNECTED: 'critical' },
-                    },
-                  ]}
-                  items={formattedInstalledStores}
-                  paginate={false}
-                  searchable={false}
-                  filterable={false}
-                  headerColor="#a855f7"
-                  emptyState={
-                    <div style={{ padding: '20px', textAlign: 'center', color: '#6b7280' }}>
-                      No connected store records found.
-                    </div>
-                  }
-                />
-              </div>
-            </ThemedSection>
+
 
             {/* Store Pairing Section (Blue/Indigo Theme) */}
             <ThemedSection
@@ -317,48 +288,71 @@ export default function ConnectionsPage() {
             >
               <BlockStack gap="400">
                 {currentStoreUniqueId && (
-                  <div className="mb-2 text-sm text-blue-900">
-                    Your Unique Store ID: <strong className="bg-blue-200 px-2 py-1 rounded text-blue-900 shadow-sm">{currentStoreUniqueId}</strong>
+                  <div className="mb-2 text-sm text-blue-900 flex items-center gap-2">
+                    Your Unique Store ID: 
+                    <strong className="bg-blue-200 px-2 py-1 rounded text-blue-900 shadow-sm">
+                      {currentStoreUniqueId}
+                    </strong>
+                    <button 
+                      onClick={() => {
+                        navigator.clipboard.writeText(currentStoreUniqueId);
+                        setToastMessage({ message: 'Copied to clipboard!', type: 'success' });
+                      }}
+                      className="ml-2 px-2 py-1 bg-white border border-blue-300 text-blue-700 text-xs rounded hover:bg-blue-50 transition-colors cursor-pointer"
+                    >
+                      Copy
+                    </button>
                   </div>
                 )}
 
-                <InlineStack gap="300" blockAlign="start">
-                  <Box maxWidth="400px" width="100%">
-                    <TextField
-                      label="Unique Store ID"
-                      labelHidden
-                      value={storeIdInput}
-                      onChange={setStoreIdInput}
-                      placeholder="e.g. ESHAN-3B91C7E4"
-                      autoComplete="off"
-                    />
-                  </Box>
-                  <Button 
-                    variant="primary" 
-                    onClick={handleAddStore} 
-                    disabled={connecting || !storeIdInput.trim()}
-                    loading={connecting}
-                  >
-                    + Add Store
-                  </Button>
-                </InlineStack>
+                {isMaster && (
+                  <>
+                    <InlineStack gap="300" blockAlign="start">
+                      <Box maxWidth="400px" width="100%">
+                        <TextField
+                          label="Unique Store ID"
+                          labelHidden
+                          value={storeIdInput}
+                          onChange={setStoreIdInput}
+                          placeholder="e.g. ESHAN-3B91C7E4"
+                          autoComplete="off"
+                        />
+                      </Box>
+                      <Button 
+                        variant="primary" 
+                        onClick={handleAddStore} 
+                        disabled={connecting || !storeIdInput.trim()}
+                        loading={connecting}
+                      >
+                        + Add Store
+                      </Button>
+                    </InlineStack>
+
+                    {connections.length === 0 && (
+                      <div className="mt-4 pt-4 border-t border-blue-200">
+                        <h3 className="font-semibold text-blue-900 mb-2">Create a Manual Store</h3>
+                        <p className="text-sm text-blue-800 mb-3">If you need a store ID for an external or manual store that isn't connected via Shopify, you can generate a new one here.</p>
+                        <Button 
+                          variant="primary"
+                          onClick={handleGenerateManualStore}
+                          loading={generatingStore}
+                        >
+                          Generate Test Store ID
+                        </Button>
+                      </div>
+                    )}
+                  </>
+                )}
 
                 <div className="mt-4 pt-4 border-t border-blue-200">
-                  <h3 className="font-semibold text-blue-900 mb-2">Create a Manual Store</h3>
-                  <p className="text-sm text-blue-800 mb-3">If you need a store ID for an external or manual store that isn't connected via Shopify, you can generate a new one here.</p>
-                  <Button 
-                    onClick={handleGenerateManualStore}
-                    loading={generatingStore}
-                  >
-                    Generate Manual Store ID
-                  </Button>
-                </div>
-
-                <div className="mt-4 pt-4 border-t border-blue-200">
-                  <h3 className="font-semibold text-blue-900 mb-4">Connected Destinations</h3>
+                  <h3 className="font-semibold text-blue-900 mb-4">
+                    {isMaster ? 'Connected Destinations' : 'Connected Master Store'}
+                  </h3>
                   {connections.length === 0 ? (
                     <div className="p-4 bg-white bg-opacity-60 border border-blue-100 rounded-lg text-blue-800 text-sm">
-                      No connected stores found. Enter a destination store's Unique Store ID above to pair them.
+                      {isMaster 
+                        ? "No connected stores found. Enter a destination store's Unique Store ID above to pair them."
+                        : "This store is not currently connected to a Master store."}
                     </div>
                   ) : (
                     <div className="bg-white rounded-lg shadow-sm overflow-hidden border border-blue-100">
@@ -377,57 +371,53 @@ export default function ConnectionsPage() {
             </ThemedSection>
 
             {/* Manual Synchronization Section (Emerald/Green Theme) */}
-            <ThemedSection
-              title="Manual Synchronization"
-              description="Force an immediate, full catalog push to your selected destination stores."
-              bgColor="#f0fdf4"
-              borderColor="#bbf7d0"
-              stripeColor="#22c55e"
-              titleColor="#14532d"
-              descColor="#166534"
-            >
-              {connections.length === 0 ? (
-                <div className="p-4 bg-white bg-opacity-60 border border-green-100 rounded-lg text-green-800 text-sm">
-                  You must pair at least one destination store before you can synchronize.
-                </div>
-              ) : (
-                <BlockStack gap="400">
-                  <div className="bg-white rounded-lg border border-green-200 p-4 shadow-sm">
-                    <h3 className="font-semibold text-green-900 mb-3 text-sm uppercase tracking-wide">Select Targets</h3>
-                    <BlockStack gap="300">
-                      {connections.map((conn) => (
-                        <Checkbox
-                          key={conn.targetStoreId}
-                          label={conn.targetStore.label || conn.targetStore.shopDomain}
-                          checked={selectedStores.includes(conn.targetStoreId)}
-                          onChange={() => handleToggleSyncSelection(conn.targetStoreId)}
-                        />
-                      ))}
-                    </BlockStack>
-                  </div>
-                  
-                  <InlineStack gap="300">
-                    <button 
-                      onClick={handleSelectAllSync}
-                      className="px-4 py-2 bg-white border border-green-300 text-green-800 font-medium rounded-lg hover:bg-green-50 transition-colors shadow-sm"
-                    >
-                      {selectedStores.length === connections.length ? 'Deselect All' : 'Select All'}
-                    </button>
-                    <button 
-                      onClick={handleSync}
-                      disabled={selectedStores.length === 0 || syncing}
-                      className={`px-4 py-2 font-medium rounded-lg transition-all shadow-sm ${
-                        selectedStores.length === 0 || syncing 
-                          ? 'bg-green-200 text-green-500 cursor-not-allowed' 
-                          : 'bg-green-600 text-white hover:bg-green-700'
-                      }`}
-                    >
-                      {syncing ? 'Syncing...' : 'Sync Selected Stores'}
-                    </button>
-                  </InlineStack>
-                </BlockStack>
-              )}
-            </ThemedSection>
+            {isMaster && connections.length > 0 && (
+              <ThemedSection
+                title="Manual Synchronization"
+                description="Force an immediate, full catalog push to your selected destination stores."
+                bgColor="#f0fdf4"
+                borderColor="#bbf7d0"
+                stripeColor="#22c55e"
+                titleColor="#14532d"
+                descColor="#166534"
+              >
+                  <BlockStack gap="400">
+                    <div className="bg-white rounded-lg border border-green-200 p-4 shadow-sm">
+                      <h3 className="font-semibold text-green-900 mb-3 text-sm uppercase tracking-wide">Select Targets</h3>
+                      <BlockStack gap="300">
+                        {connections.map((conn) => (
+                          <Checkbox
+                            key={conn.targetStoreId}
+                            label={conn.targetStore.label || conn.targetStore.shopDomain}
+                            checked={selectedStores.includes(conn.targetStoreId)}
+                            onChange={() => handleToggleSyncSelection(conn.targetStoreId)}
+                          />
+                        ))}
+                      </BlockStack>
+                    </div>
+                    
+                    <InlineStack gap="300">
+                      <button 
+                        onClick={handleSelectAllSync}
+                        className="px-4 py-2 bg-white border border-green-300 text-green-800 font-medium rounded-lg hover:bg-green-50 transition-colors shadow-sm"
+                      >
+                        {selectedStores.length === connections.length ? 'Deselect All' : 'Select All'}
+                      </button>
+                      <button 
+                        onClick={handleSync}
+                        disabled={selectedStores.length === 0 || syncing}
+                        className={`px-4 py-2 font-medium rounded-lg transition-all shadow-sm ${
+                          selectedStores.length === 0 || syncing 
+                            ? 'bg-green-200 text-green-500 cursor-not-allowed' 
+                            : 'bg-green-600 text-white hover:bg-green-700'
+                        }`}
+                      >
+                        {syncing ? 'Syncing...' : 'Sync Selected Stores'}
+                      </button>
+                    </InlineStack>
+                  </BlockStack>
+              </ThemedSection>
+            )}
 
           </BlockStack>
         </Layout.Section>

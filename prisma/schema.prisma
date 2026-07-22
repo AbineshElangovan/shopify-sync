@@ -11,6 +11,7 @@ model Store {
   id                String   @id @default(uuid())
   uniqueStoreId     String   @unique @default(uuid())
   shopDomain        String   @unique
+  shopifyStoreId    String?
   accessToken       String
   scope             String
   label             String?
@@ -32,6 +33,7 @@ model Store {
   destLogs     SyncLog[]    @relation("DestinationStore")
   sourceConnections StoreConnection[] @relation("SourceConnections")
   targetConnections StoreConnection[] @relation("TargetConnections")
+  storeSettings     StoreSetting?
 
   @@map("stores")
 }
@@ -176,4 +178,33 @@ model VendorCode {
   createdAt    DateTime @default(now())
 
   @@map("vendor_codes")
+}
+
+model StoreSetting {
+  id          String   @id @default(uuid())
+  storeId     String   @unique
+  skuPrefix   String   @default("SKU")
+  skuSequence Int      @default(1)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  store       Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@map("store_settings")
+}
+
+model ProductMapping {
+  id              String   @id @default(uuid())
+  sourceStoreId   String
+  targetStoreId   String
+  sourceProductId String
+  targetProductId String
+  sourceVariantId String?
+  targetVariantId String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([sourceStoreId, targetStoreId, sourceProductId])
+  @@index([sourceStoreId, targetStoreId])
+  @@map("product_mappings")
 }

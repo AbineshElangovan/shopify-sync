@@ -144,12 +144,14 @@ export async function handleAuthCallback(req: NextRequest) {
   await cleanupSeededData();
 
   let shopLabel = normalizedShop;
+  let shopifyStoreId: string | null = null;
   try {
     console.log("[OAuth] Fetching shop details from Shopify GraphQL API for:", normalizedShop);
     const client = new shopify.clients.Graphql({ session });
     const shopResponse: any = await client.request(`
       query {
         shop {
+          id
           name
         }
       }
@@ -161,25 +163,45 @@ export async function handleAuthCallback(req: NextRequest) {
     } else {
       console.log("[OAuth] Shop query returned empty or missing name. Defaulting label to domain.");
     }
+    
+    if (shopResponse.data?.shop?.id) {
+      shopifyStoreId = shopResponse.data.shop.id;
+    }
   } catch (error: any) {
     console.error("[OAuth] Failed to fetch shop details from Shopify:", error.message);
     console.log("[OAuth] Falling back to shop domain as label:", normalizedShop);
   }
   console.log("[OAuth] Upserting store record in database for shop:", normalizedShop);
+  
+  const existingStore = await prisma.store.findUnique({ where: { shopDomain: normalizedShop } });
+  const isReinstall = existingStore && !existingStore.isActive;
+  
+  const updateData: any = {
+    accessToken: accessToken,
+    scope: scope || "",
+    isActive: true,
+    label: shopLabel,
+  };
+  
+  if (shopifyStoreId) {
+    updateData.shopifyStoreId = shopifyStoreId;
+  }
+
+  if (isReinstall) {
+    updateData.uniqueStoreId = `STORE-${Math.random().toString(36).substring(2, 10).toUpperCase()}`;
+  }
+
   const storedShop = await prisma.store.upsert({
     where: { shopDomain: normalizedShop },
-    update: {
-      accessToken: accessToken,
-      scope: scope || "",
-      isActive: true,
-      label: shopLabel,
-    },
+    update: updateData,
     create: {
       shopDomain: normalizedShop,
+      shopifyStoreId: shopifyStoreId,
       accessToken: accessToken,
       scope: scope || "",
       isActive: true,
       label: shopLabel,
+      uniqueStoreId: `STORE-${Math.random().toString(36).substring(2, 10).toUpperCase()}`,
     },
   });
 

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { authenticate } from "@/lib/shopify/authenticate";
 import { prisma } from "@/lib/db/prisma";
-import { syncStoreProducts } from "@/services/shopify";
+import { pushProductsToDestinations } from "@/services/shopify/push-sync";
 
 export async function POST(req: NextRequest) {
   try {
@@ -30,16 +30,10 @@ export async function POST(req: NextRequest) {
         console.log("[Manual Sync] Starting background manual sync for", selectedTargetStoreIds.length, "stores");
         
         // Fetch valid target stores
-        const targetStores = await prisma.store.findMany({
-          where: { id: { in: selectedTargetStoreIds }, isActive: true }
-        });
-
-        // Run full product sync for each target store
-        for (const targetStore of targetStores) {
-           await syncStoreProducts(targetStore.shopDomain);
-        }
+        // We only need the source store ID, which is `store.id` from the authenticate() call.
+        await pushProductsToDestinations(store.id, selectedTargetStoreIds);
         
-        console.log("[Manual Sync] Completed full sync to selected stores.");
+        console.log("[Manual Sync] Completed full push sync to selected stores.");
       } catch (err: any) {
         console.error("[Manual Sync] Background Error:", err);
       }

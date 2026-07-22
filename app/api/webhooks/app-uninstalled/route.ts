@@ -27,16 +27,37 @@ export async function POST(req: NextRequest) {
 
     console.log(`Processing app uninstalled for shop ${shop}`);
     
-    // Mark the store as inactive
-    await prisma.store.updateMany({
-      where: { shopDomain: shop },
-      data: { isActive: false },
+    // Find the store being uninstalled
+    const store = await prisma.store.findUnique({
+      where: { shopDomain: shop }
     });
 
-    // Optionally, delete sessions for this shop
-    await prisma.session.deleteMany({
-      where: { shop },
-    });
+    if (store) {
+      // 1. Remove all existing StoreConnection records for this store
+      await prisma.storeConnection.deleteMany({
+        where: {
+          OR: [
+            { sourceStoreId: store.id },
+            { targetStoreId: store.id }
+          ]
+        }
+      });
+
+      // 2. Invalidate the previous uniqueStoreId and mark inactive
+      const invalidatedId = `${store.uniqueStoreId}-uninstalled-${Date.now()}`;
+      await prisma.store.update({
+        where: { id: store.id },
+        data: { 
+          isActive: false,
+          uniqueStoreId: invalidatedId
+        },
+      });
+
+      // 3. Delete sessions for this shop
+      await prisma.session.deleteMany({
+        where: { shop },
+      });
+    }
 
     return new NextResponse("Webhook processed successfully", { status: 200 });
   } catch (error: any) {

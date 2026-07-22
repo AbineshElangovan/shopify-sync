@@ -6,19 +6,41 @@ export async function GET(req: NextRequest) {
   try {
     const { store } = await authenticate(req);
     
-    // Fetch all connections universally
-    const connections = await prisma.storeConnection.findMany({
-      include: {
-        targetStore: {
-          select: {
-            id: true,
-            shopDomain: true,
-            label: true,
-            uniqueStoreId: true,
-          }
-        }
-      }
+    // Fetch outgoing connections
+    const outgoing = await prisma.storeConnection.findMany({
+      where: { sourceStoreId: store.id },
+      include: { targetStore: true }
     });
+
+    // Fetch incoming connections
+    const incoming = await prisma.storeConnection.findMany({
+      where: { targetStoreId: store.id },
+      include: { sourceStore: true }
+    });
+
+    // Map them into a unified list for the frontend
+    const connections = [
+      ...outgoing.map(c => ({
+        targetStoreId: c.targetStoreId,
+        direction: 'outgoing',
+        targetStore: {
+          id: c.targetStore.id,
+          shopDomain: c.targetStore.shopDomain,
+          label: c.targetStore.label,
+          uniqueStoreId: c.targetStore.uniqueStoreId,
+        }
+      })),
+      ...incoming.map(c => ({
+        targetStoreId: c.sourceStoreId, // mapped for frontend compatibility
+        direction: 'incoming',
+        targetStore: {
+          id: c.sourceStore.id,
+          shopDomain: c.sourceStore.shopDomain,
+          label: c.sourceStore.label,
+          uniqueStoreId: c.sourceStore.uniqueStoreId,
+        }
+      }))
+    ];
 
     return NextResponse.json({ success: true, store, connections });
   } catch (err: any) {
@@ -50,13 +72,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: "Invalid Unique Store ID. Store not found." }, { status: 404 });
     }
 
-    // Prevent duplicate connections
-    const existing = await prisma.storeConnection.findUnique({
+    // Prevent duplicate connections (in either direction to be safe)
+    const existing = await prisma.storeConnection.findFirst({
       where: {
-        sourceStoreId_targetStoreId: {
-          sourceStoreId: store.id,
-          targetStoreId: targetStore.id
-        }
+        OR: [
+          { sourceStoreId: store.id, targetStoreId: targetStore.id },
+          { sourceStoreId: targetStore.id, targetStoreId: store.id }
+        ]
       }
     });
 
@@ -68,16 +90,6 @@ export async function POST(req: NextRequest) {
       data: {
         sourceStoreId: store.id,
         targetStoreId: targetStore.id
-      },
-      include: {
-        targetStore: {
-          select: {
-            id: true,
-            shopDomain: true,
-            label: true,
-            uniqueStoreId: true
-          }
-        }
       }
     });
 
@@ -100,7 +112,10 @@ export async function DELETE(req: NextRequest) {
 
     await prisma.storeConnection.deleteMany({
       where: {
-        targetStoreId
+        OR: [
+          { sourceStoreId: store.id, targetStoreId: targetStoreId },
+          { sourceStoreId: targetStoreId, targetStoreId: store.id }
+        ]
       }
     });
 
