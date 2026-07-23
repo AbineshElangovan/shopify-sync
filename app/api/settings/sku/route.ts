@@ -27,21 +27,55 @@ export async function POST(req: NextRequest) {
   try {
     const { store } = await authenticate(req);
     const body = await req.json();
-    const { skuPrefix } = body;
+    const { skuPrefix, skuSequence } = body;
 
-    if (!skuPrefix || typeof skuPrefix !== "string") {
-      return NextResponse.json({ success: false, error: "Valid SKU Prefix is required" }, { status: 400 });
+    if (!skuPrefix || typeof skuPrefix !== "string" || skuPrefix.length < 2 || skuPrefix.length > 10) {
+      return NextResponse.json({ success: false, error: "Product Prefix must be between 2 and 10 characters." }, { status: 400 });
     }
 
-    const cleanPrefix = skuPrefix.trim().toUpperCase().replace(/[^A-Z0-9-]/g, "");
+    const cleanPrefix = skuPrefix.trim().toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 10);
+    const requestedSequence = parseInt(skuSequence, 10);
+    
+    if (isNaN(requestedSequence) || requestedSequence < 1 || requestedSequence > 999999) {
+      return NextResponse.json({ success: false, error: "Sequence must be a valid number between 1 and 999999." }, { status: 400 });
+    }
+
+    // Validation: Check prefix history
+    const prefixStr = `STB-${cleanPrefix}-`;
+    const existingProducts = await prisma.productCache.findMany({
+      where: { 
+        storeId: store.id,
+        sku: { startsWith: prefixStr }
+      },
+      select: { sku: true }
+    });
+
+    let maxSeq = 0;
+    for (const product of existingProducts) {
+      if (!product.sku) continue;
+      const seqPart = product.sku.replace(prefixStr, '');
+      const seqNum = parseInt(seqPart, 10);
+      if (!isNaN(seqNum) && seqNum > maxSeq) {
+        maxSeq = seqNum;
+      }
+    }
+
+    if (maxSeq > 0 && requestedSequence <= maxSeq) {
+      return NextResponse.json({ 
+        success: false, 
+        error: `Prefix "${cleanPrefix}" already exists. Next available sequence: ${maxSeq + 1}.`,
+        nextSequence: maxSeq + 1
+      }, { status: 400 });
+    }
 
     const setting = await prisma.storeSetting.upsert({
       where: { storeId: store.id },
-      update: { skuPrefix: cleanPrefix },
+      update: { skuPrefix: cleanPrefix, skuSequence: requestedSequence, isSkuGenerationEnabled: true },
       create: {
         storeId: store.id,
         skuPrefix: cleanPrefix,
-        skuSequence: 1,
+        skuSequence: requestedSequence,
+        isSkuGenerationEnabled: true,
       }
     });
 

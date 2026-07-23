@@ -71,9 +71,6 @@ export async function POST(req: NextRequest) {
           currentPayload = latestPayload;
         }
 
-        const { generateSkusForProductIfNeeded } = require('@/services/sku');
-        currentPayload = await generateSkusForProductIfNeeded(shop, currentPayload);
-
         await updateLocalProductCache(shop, currentPayload, topic);
         await processProductUpdate(shop, currentPayload, webhookId);
         console.log(`[Webhook:${topic}] sync complete for ${shop}`);

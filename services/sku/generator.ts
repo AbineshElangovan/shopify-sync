@@ -1,53 +1,40 @@
 import { prisma } from "@/lib/db/prisma";
 
-/**
- * Retrieves the store's SKU configuration and generates the next SKU.
- * If the store has no setting configured, it defaults to prefix "SKU".
- * 
- * @param storeId The unique ID of the store in the database
- * @returns The formatted SKU string (e.g. "ESH-000001")
- */
-export async function generateNextSku(storeId: string): Promise<string> {
-  // Ensure a setting exists for the store
-  const setting = await prisma.storeSetting.upsert({
-    where: { storeId },
-    update: {},
-    create: {
-      storeId,
-      skuPrefix: "SKU",
-      skuSequence: 1,
-    }
-  });
-
-  // The current sequence is what we will use
-  const currentSequence = setting.skuSequence;
-
-  // Immediately increment the sequence for the next call
-  await prisma.storeSetting.update({
-    where: { storeId },
-    data: { skuSequence: { increment: 1 } }
-  });
-
-  // Format the SKU: PREFIX-000001
-  // Pad with leading zeros to 6 digits
-  const paddedSequence = currentSequence.toString().padStart(6, '0');
-  return `${setting.skuPrefix}-${paddedSequence}`;
-}
-
 export async function generateSkusForProductIfNeeded(shopDomain: string, payload: any) {
   const store = await prisma.store.findUnique({ where: { shopDomain } });
   if (!store) return payload;
 
-  const variants = payload.variants || [];
-  let updated = false;
+  const setting = await prisma.storeSetting.findUnique({ where: { storeId: store.id } });
+  if (!setting || !setting.isSkuGenerationEnabled) {
+    return payload; // SKU generation is disabled or not configured
+  }
 
+  const prefix = setting.skuPrefix || "SKU";
+  const variants = payload.variants || [];
+
+  let needsGeneration = variants.some((v: any) => !v.sku || v.sku.trim() === '');
+  if (!needsGeneration) return payload;
+
+  // Use a transaction to atomically increment the sequence for each variant that needs a SKU
   for (const variant of variants) {
     if (!variant.sku || variant.sku.trim() === '') {
-      variant.sku = await generateNextSku(store.id);
-      updated = true;
+      // 1. Atomically get and increment the sequence in one database operation
+      const updatedSetting = await prisma.storeSetting.update({
+        where: { storeId: store.id },
+        data: {
+          skuSequence: { increment: 1 }
+        },
+        select: { skuSequence: true }
+      });
       
-      // We MUST push the newly generated SKU back to the Master Store's Shopify Admin
-      // Otherwise, subsequent webhooks will see an empty SKU and generate ANOTHER new SKU, causing duplicates!
+      // The updatedSetting.skuSequence is the NEXT sequence (incremented),
+      // so the sequence we USE for this variant is the value BEFORE incrementing.
+      const sequenceToUse = updatedSetting.skuSequence - 1;
+      
+      const paddedSequence = sequenceToUse.toString().padStart(4, '0');
+      variant.sku = `STB-${prefix}-${paddedSequence}`;
+      
+      // 2. Push the newly generated SKU back to the Master Store's Shopify Admin
       try {
         const { getAdminClient } = require('@/lib/shopify/admin');
         const client = await getAdminClient(shopDomain);

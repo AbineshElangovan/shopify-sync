@@ -222,14 +222,23 @@ export async function updateLocalProductCache(shopDomain: string, payload: any, 
       const parsedPrice = parseFloat(variant.price || "0");
       const trueInventory = variant.inventory_quantity ?? 0;
       
+      let finalSku = variant.sku?.trim() || null;
+      // Prevent stale webhooks/GraphQL from wiping out a successfully generated SKU
+      if (!finalSku && existingCache && existingCache.sku && existingCache.sku !== 'N/A') {
+        finalSku = existingCache.sku;
+      }
+      
+      const productTags = payload.tags || null;
+      
       if (!existingCache) {
         await prisma.productCache.create({
           data: {
             storeId: store.id,
             shopifyProductId,
             shopifyVariantId,
-            sku,
+            sku: finalSku,
             title: fullTitle,
+            tags: productTags,
             imageUrl: payload.image?.src || payload.images?.[0]?.src || null,
             inventoryQuantity: trueInventory,
             price: parsedPrice,
@@ -237,17 +246,19 @@ export async function updateLocalProductCache(shopDomain: string, payload: any, 
         });
       } else {
         const newImageUrl = payload.image?.src || payload.images?.[0]?.src || null;
-        const needsUpdate = existingCache.sku !== sku || 
+        const needsUpdate = existingCache.sku !== finalSku || 
                             existingCache.title !== fullTitle || 
                             existingCache.price !== parsedPrice || 
+                            existingCache.tags !== productTags ||
                             (newImageUrl !== null && existingCache.imageUrl !== newImageUrl);
                             
         if (needsUpdate) {
           await prisma.productCache.update({
             where: { id: existingCache.id },
             data: {
-              sku,
+              sku: finalSku,
               title: fullTitle,
+              tags: productTags,
               ...(newImageUrl !== null ? { imageUrl: newImageUrl } : {}),
               shopifyProductId,
               price: parsedPrice,

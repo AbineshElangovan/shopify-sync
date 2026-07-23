@@ -96,6 +96,7 @@ model ProductCache {
   shopifyVariantId  String
   sku               String?
   title             String
+  tags              String?
   imageUrl          String?
   price             Float    @default(0.0)
   inventoryQuantity Int      @default(0)
@@ -170,22 +171,13 @@ model CollectionProduct {
   @@map("collection_products")
 }
 
-model VendorCode {
-  id           String   @id @default(uuid())
-  vendorName   String   @unique
-  code         String   @unique
-  nextSequence Int      @default(1)
-  createdAt    DateTime @default(now())
-
-  @@map("vendor_codes")
-}
-
 model StoreSetting {
   id          String   @id @default(uuid())
   storeId     String   @unique
-  skuPrefix   String   @default("SKU")
-  skuSequence Int      @default(1)
-  createdAt   DateTime @default(now())
+  skuPrefix              String   @default("SKU")
+  skuSequence            Int      @default(1)
+  isSkuGenerationEnabled Boolean  @default(true)
+  createdAt              DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   store       Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
@@ -208,3 +200,4 @@ model ProductMapping {
   @@index([sourceStoreId, targetStoreId])
   @@map("product_mappings")
 }
+

@@ -1,12 +1,15 @@
 "use client";
 import React, { useState, useEffect } from 'react';
-import { Layout, BlockStack, Box, TextField, Button } from '@shopify/polaris';
+import { Layout, BlockStack, Box, TextField, Button, Text } from '@shopify/polaris';
 
 export default function SkuSettingsPage() {
-  const [skuPrefix, setSkuPrefix] = useState('SKU');
+  const [skuPrefix, setSkuPrefix] = useState('SHOE');
+  const [skuSequence, setSkuSequence] = useState('0001');
+  
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [toastMessage, setToastMessage] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const [inlineError, setInlineError] = useState<string | null>(null);
 
   useEffect(() => {
     fetchSettings();
@@ -18,7 +21,11 @@ export default function SkuSettingsPage() {
       const res = await fetch('/api/settings/sku');
       const data = await res.json();
       if (data.success && data.setting) {
-        setSkuPrefix(data.setting.skuPrefix);
+        setSkuPrefix(data.setting.skuPrefix || 'SHOE');
+        
+        // Ensure sequence displays nicely as 4 digits minimum
+        const seq = data.setting.skuSequence || 1;
+        setSkuSequence(seq.toString().padStart(4, '0'));
       }
     } catch (err) {
       console.error(err);
@@ -30,19 +37,28 @@ export default function SkuSettingsPage() {
   const handleSave = async () => {
     setSaving(true);
     setToastMessage(null);
+    setInlineError(null);
+    
     try {
       const res = await fetch('/api/settings/sku', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ skuPrefix })
+        body: JSON.stringify({ skuPrefix, skuSequence })
       });
       const data = await res.json();
       
       if (data.success) {
         setSkuPrefix(data.setting.skuPrefix);
-        setToastMessage({ message: 'SKU Prefix saved successfully!', type: 'success' });
+        setSkuSequence(data.setting.skuSequence.toString().padStart(4, '0'));
+        setToastMessage({ message: '✅ SKU configuration saved successfully.', type: 'success' });
       } else {
-        setToastMessage({ message: data.error || 'Failed to save', type: 'error' });
+        setToastMessage({ message: data.error || 'Failed to save configuration.', type: 'error' });
+        
+        // Handle specific validation errors for Prefix History Sequence mismatch
+        if (data.nextSequence) {
+           setInlineError(`⚠ Prefix "${skuPrefix}" already exists. Next available sequence: ${data.nextSequence}.`);
+           setSkuSequence(data.nextSequence.toString().padStart(4, '0'));
+        }
       }
     } catch (err: any) {
       setToastMessage({ message: err.message, type: 'error' });
@@ -52,86 +68,69 @@ export default function SkuSettingsPage() {
   };
 
   if (loading) {
-    return <div className="p-8 max-w-2xl mx-auto mt-10">Loading SKU Settings...</div>;
+    return <div className="p-8 max-w-2xl mx-auto mt-10">Loading SKU Configuration...</div>;
   }
 
   return (
-    <div className="p-8 max-w-2xl mx-auto mb-16">
-      <h1 className="text-3xl font-bold mb-8 text-gray-900">SKU Generation Settings</h1>
+    <div className="p-8 max-w-xl mx-auto mb-16">
+      <h1 className="text-3xl font-bold mb-8 text-gray-900">SKU Configuration</h1>
+      
+      {toastMessage && (
+        <div className={`mb-6 p-4 rounded-md font-medium shadow-sm border ${
+          toastMessage.type === 'success' ? 'bg-green-50 text-green-800 border-green-200' : 'bg-red-50 text-red-800 border-red-200'
+        }`}>
+          {toastMessage.message}
+        </div>
+      )}
 
       <Layout>
         <Layout.Section>
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
             <BlockStack gap="400">
-              <div>
-                <h2 className="text-xl font-semibold mb-2">Configure SKU Prefix</h2>
-                <p className="text-gray-600 mb-4 text-sm">
-                  This prefix will be used when automatically generating SKUs for products synced to destination stores. 
-                  For example, if your prefix is <strong>{skuPrefix || "SKU"}</strong>, the system will generate <strong>{skuPrefix || "SKU"}-000001</strong>.
-                </p>
-              </div>
-
-              <Box maxWidth="300px">
+              
+              <Box>
                 <TextField
-                  label="SKU Prefix"
-                  value={skuPrefix}
-                  onChange={setSkuPrefix}
+                  label="Application Prefix"
+                  value="STB"
+                  onChange={() => {}}
+                  disabled
                   autoComplete="off"
-                  helpText="Only uppercase letters and numbers are recommended."
+                  helpText="Application prefix is fixed and read-only."
                 />
               </Box>
 
-              <div className="mt-4 border-t pt-4 border-gray-100 flex justify-end">
+              <Box>
+                <TextField
+                  label="Product Prefix"
+                  value={skuPrefix}
+                  onChange={(val) => setSkuPrefix(val.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10))}
+                  autoComplete="off"
+                />
+              </Box>
+              
+              <Box>
+                <TextField
+                  label="Starting Sequence"
+                  value={skuSequence}
+                  onChange={(val) => setSkuSequence(val.replace(/[^0-9]/g, '').slice(0, 6))}
+                  autoComplete="off"
+                  error={inlineError || undefined}
+                />
+              </Box>
+              
+              <div className="mt-2 p-3 bg-gray-50 border border-gray-100 rounded text-sm text-gray-600">
+                Generated SKU Example: <Text as="span" fontWeight="bold">STB-{skuPrefix || "SHOE"}-{skuSequence ? skuSequence.toString().padStart(4, '0') : "0001"}</Text>
+              </div>
+
+              <div className="mt-4 pt-4 border-t border-gray-100 flex justify-end">
                 <Button variant="primary" onClick={handleSave} loading={saving}>
-                  Save Settings
+                  Save
                 </Button>
               </div>
             </BlockStack>
           </div>
         </Layout.Section>
       </Layout>
-
-      {toastMessage && (
-        <div
-          style={{
-            position: 'fixed',
-            bottom: '24px',
-            right: '24px',
-            zIndex: 9999,
-            backgroundColor: toastMessage.type === 'success' ? '#16a34a' : '#dc2626',
-            color: '#ffffff',
-            padding: '12px 24px',
-            borderRadius: '8px',
-            boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-            fontSize: '14px',
-            fontWeight: 500,
-            animation: 'syncToastSlideIn 0.3s ease-out',
-          }}
-        >
-          <style>{`
-            @keyframes syncToastSlideIn {
-              from { transform: translateY(100px); opacity: 0; }
-              to { transform: translateY(0); opacity: 1; }
-            }
-          `}</style>
-          <span>{toastMessage.message}</span>
-          <button
-            onClick={() => setToastMessage(null)}
-            style={{
-              background: 'transparent',
-              border: 'none',
-              color: '#ffffff',
-              cursor: 'pointer',
-              marginLeft: '12px',
-              fontSize: '14px',
-              opacity: 0.8,
-            }}
-          >✕</button>
-        </div>
-      )}
     </div>
   );
 }

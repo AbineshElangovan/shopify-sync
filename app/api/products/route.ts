@@ -44,19 +44,41 @@ export async function GET(req: NextRequest) {
     // Cross-store collection fallback logic
     const currentSkus = products.map(p => p.sku).filter(Boolean) as string[];
     const crossStoreProducts = await prisma.productCache.findMany({
-      where: { sku: { in: currentSkus }, collections: { some: {} } },
+      where: { 
+        sku: { in: currentSkus },
+        OR: [
+          { collections: { some: {} } },
+          { tags: { not: null } }
+        ]
+      },
       include: { collections: { include: { collection: true } } }
     });
 
     const skuCategories: { [sku: string]: string[] } = {};
+    
     crossStoreProducts.forEach(p => {
-      if (p.sku && p.collections) {
+      if (p.sku) {
         if (!skuCategories[p.sku]) skuCategories[p.sku] = [];
-        p.collections.forEach(cp => {
-           if (!skuCategories[p.sku!].includes(cp.collection.title)) {
-             skuCategories[p.sku!].push(cp.collection.title);
-           }
-        });
+        
+        if (p.collections) {
+          p.collections.forEach(cp => {
+             if (!skuCategories[p.sku!].includes(cp.collection.title)) {
+               skuCategories[p.sku!].push(cp.collection.title);
+             }
+          });
+        }
+        
+        if (p.tags) {
+          const tagList = p.tags.split(',').map((t: string) => t.trim().toUpperCase()).filter(Boolean);
+          
+          tagList.forEach(tag => {
+            // Case-insensitive deduplication
+            const existing = skuCategories[p.sku!].map(c => c.toUpperCase());
+            if (!existing.includes(tag)) {
+              skuCategories[p.sku!].push(tag);
+            }
+          });
+        }
       }
     });
 
@@ -86,11 +108,38 @@ export async function GET(req: NextRequest) {
 
       let categoryTitles: string[] = [];
       
+      const TAG_MAP: Record<string, string> = {
+        'inner': 'INNERS',
+        'inners': 'INNERS',
+        'pants': 'PANTS',
+        'shirts': 'SHIRTS',
+        't-shirt': 'T-SHIRTS',
+        'accessories': 'MENS ACCESSORIES',
+        'shoes': 'SHOES',
+        'socks': 'SOCKS',
+        'trousers': 'TROUSERS',
+      };
+      
       if (p.collections && p.collections.length > 0) {
-        categoryTitles = p.collections.map(cp => cp.collection.title);
-      } else if (p.sku && skuCategories[p.sku] && skuCategories[p.sku].length > 0) {
-        categoryTitles = skuCategories[p.sku];
-      } else {
+        categoryTitles = categoryTitles.concat(p.collections.map(cp => cp.collection.title));
+      }
+      if (p.sku && skuCategories[p.sku] && skuCategories[p.sku].length > 0) {
+        categoryTitles = categoryTitles.concat(skuCategories[p.sku]);
+      }
+      if (p.tags) {
+        const tagList = p.tags.split(',').map((t: string) => t.trim().toUpperCase()).filter(Boolean);
+        
+        // Deduplicate tags that match existing collections case-insensitively
+        const existingUpperCategories = categoryTitles.map(c => c.toUpperCase());
+        for (const tag of tagList) {
+          if (!existingUpperCategories.includes(tag)) {
+            categoryTitles.push(tag);
+            existingUpperCategories.push(tag); // Prevent duplicates within tags themselves
+          }
+        }
+      }
+      
+      if (categoryTitles.length === 0) {
         categoryTitles = ['Uncategorized'];
       }
 

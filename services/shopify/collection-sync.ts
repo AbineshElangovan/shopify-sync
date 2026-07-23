@@ -8,17 +8,6 @@ import {
   GET_PRODUCT_COLLECTIONS_QUERY
 } from './graphql/collection';
 
-const TAG_TO_COLLECTION_MAP: Record<string, string> = {
-  'inner': 'INNERS',
-  'pants': 'PANTS',
-  'shirts': 'SHIRTS',
-  't-shirt': 'T-SHIRTS',
-  'accessories': 'MENS ACCESSORIES',
-  'shoes': 'SHOES',
-  'socks': 'SOCKS',
-  'trousers': 'TROUSERS',
-};
-
 export async function syncProductCollectionsByTags(targetShopDomain: string, productId: string, tagsString?: string) {
   try {
     if (!productId) return;
@@ -30,13 +19,10 @@ export async function syncProductCollectionsByTags(targetShopDomain: string, pro
       where: { storeId: targetStore.id, shopifyProductId: productId }
     });
     
-    // Parse tags and determine desired collections
-    const tags = tagsString ? tagsString.split(',').map(t => t.trim().toLowerCase()).filter(Boolean) : [];
+    const tags = tagsString ? tagsString.split(',').map(t => t.trim().toUpperCase()).filter(Boolean) : [];
     const desiredCollections = new Set<string>();
     for (const tag of tags) {
-      if (TAG_TO_COLLECTION_MAP[tag]) {
-        desiredCollections.add(TAG_TO_COLLECTION_MAP[tag]);
-      }
+      desiredCollections.add(tag);
     }
 
     // Fetch existing collections for the product
@@ -49,25 +35,24 @@ export async function syncProductCollectionsByTags(targetShopDomain: string, pro
     
     for (const edge of existingEdges) {
       if (edge.node) {
-        currentCollections.set(edge.node.title, edge.node.id);
+        currentCollections.set(edge.node.title.toUpperCase(), edge.node.id); // uppercase for case-insensitive matching
       }
     }
 
-    // Identify which mapped collections to remove and which to add
-    // Note: We only remove from collections that are PART of our mapping but not desired.
-    // We shouldn't remove the product from unrelated collections.
-    const mappedCollectionNames = Object.values(TAG_TO_COLLECTION_MAP);
-    
-    const toRemove: string[] = []; // Collection IDs
-    for (const [title, id] of currentCollections.entries()) {
-      if (mappedCollectionNames.includes(title) && !desiredCollections.has(title)) {
-        toRemove.push(id);
-      }
-    }
+    // We no longer automatically remove products from collections 
+    // because we don't have a hardcoded list to track which ones we manage vs which ones the merchant manages.
+    const toRemove: string[] = []; 
+    const toAdd: string[] = [];
 
-    const toAdd: string[] = []; // Collection Names
     for (const desired of desiredCollections) {
-      if (!currentCollections.has(desired)) {
+      let found = false;
+      for (const [title, _id] of currentCollections.entries()) {
+        if (title === desired) {
+          found = true;
+          break;
+        }
+      }
+      if (!found) {
         toAdd.push(desired);
       }
     }

@@ -3,7 +3,6 @@ import { getAdminClient } from "@/lib/shopify/admin";
 import { GET_PRODUCTS_QUERY } from "./graphql";
 import { fetchLatestShopifyProduct } from "./product-fetcher";
 import { processProductCreate } from "./product-sync";
-import { generateSkusForProductIfNeeded } from "@/services/sku";
 
 export async function pushProductsToDestinations(sourceStoreId: string, targetStoreIds: string[]) {
   console.log(`[PushSync] Starting push sync from source: ${sourceStoreId} to targets:`, targetStoreIds);
@@ -46,9 +45,6 @@ export async function pushProductsToDestinations(sourceStoreId: string, targetSt
       console.log(`[PushSync] Syncing product ${sourceProduct.id}`);
       let payload = await fetchLatestShopifyProduct(sourceStore.shopDomain, sourceProduct.id);
       if (!payload) continue;
-      
-      // Ensure SKUs exist on source payload before distributing (same as webhook logic)
-      payload = await generateSkusForProductIfNeeded(sourceStore.shopDomain, payload);
 
       const webhookId = `manual-sync-${Date.now()}-${payload.id}`;
       // This will handle Create, Update, Collection mappings, Price adjustments, and Images!

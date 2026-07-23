@@ -440,6 +440,22 @@ export default function SettingsPage() {
                   )}
                 </BlockStack>
               </ThemedSection>
+
+              <ThemedSection
+                title="SKU Generation Settings"
+                description="Configure automatic SKU generation and rules for new products."
+                bgColor="#f0fdf4"
+                borderColor="#bbf7d0"
+                stripeColor="#22c55e"
+                titleColor="#166534"
+                descColor="#15803d"
+              >
+                <div style={{ padding: '8px 0' }}>
+                  <Button variant="primary" onClick={() => router.push('/settings/sku')}>
+                    Configure SKU Generation
+                  </Button>
+                </div>
+              </ThemedSection>
             </BlockStack>
           </Layout.Section>
 
