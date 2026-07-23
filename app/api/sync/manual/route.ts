@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { authenticate } from "@/lib/shopify/authenticate";
+import { authenticate, handleApiError } from "@/lib/shopify/authenticate";
 import { prisma } from "@/lib/db/prisma";
 import { pushProductsToDestinations } from "@/services/shopify/push-sync";
 
@@ -13,15 +13,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: "No target stores selected" }, { status: 400 });
     }
 
-    // Verify connections exist
+    // Verify connections exist and belong to the authenticated store
     const connections = await prisma.storeConnection.findMany({
       where: {
+        sourceStoreId: store.id,
         targetStoreId: { in: selectedTargetStoreIds }
       }
     });
 
     if (connections.length !== selectedTargetStoreIds.length) {
-      return NextResponse.json({ success: false, error: "One or more selected stores are not explicitly connected." }, { status: 400 });
+      return NextResponse.json({ success: false, error: "One or more selected stores are not explicitly connected to your store." }, { status: 400 });
     }
 
     // Start background sync
@@ -42,6 +43,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: true, message: "Sync initiated" });
   } catch (err: any) {
     console.error("[Manual Sync API] POST Error:", err.message);
-    return NextResponse.json({ success: false, error: err.message }, { status: 500 });
+    return handleApiError(err);
   }
 }

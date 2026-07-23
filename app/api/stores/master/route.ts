@@ -1,15 +1,27 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db/prisma';
+import { authenticate, handleApiError } from '@/lib/shopify/authenticate';
 
 export const dynamic = 'force-dynamic';
 
 export async function PUT(req: NextRequest) {
   try {
+    const { store } = await authenticate(req);
     const body = await req.json();
     const { storeId, masterLabel } = body;
 
     if (!storeId) {
       return NextResponse.json({ success: false, error: 'storeId is required' }, { status: 400 });
+    }
+
+    // Verify ownership/access before updating master store
+    const connections = await (prisma as any).storeConnection.findMany({
+      where: { sourceStoreId: store.id }
+    });
+    const authorizedStoreIds = new Set([store.id, ...connections.map((c: any) => c.targetStoreId)]);
+    
+    if (!authorizedStoreIds.has(storeId)) {
+      return NextResponse.json({ success: false, error: `Unauthorized to modify store ${storeId}` }, { status: 403 });
     }
 
     if (!masterLabel || masterLabel.trim().length === 0) {
@@ -64,6 +76,6 @@ export async function PUT(req: NextRequest) {
     return NextResponse.json({ success: true, masterStore: updatedStore });
   } catch (error: any) {
     console.error('[Master Store API] Error:', error);
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    return handleApiError(error);
   }
 }

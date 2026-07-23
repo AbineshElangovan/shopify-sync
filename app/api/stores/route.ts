@@ -3,7 +3,7 @@ import { prisma } from '@/lib/db/prisma';
 
 import { hasValidShopifyAccessToken, applyPriceAdjustmentToStore } from '@/services/shopify';
 
-import { authenticate } from '@/lib/shopify/authenticate';
+import { authenticate, handleApiError } from '@/lib/shopify/authenticate';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,28 +13,33 @@ export async function GET(req: NextRequest) {
     const { searchParams } = req.nextUrl;
     const activeOnly = searchParams.get('active') !== 'false';
 
-    const [stores, connections] = await Promise.all([
-      prisma.store.findMany({
-        where: activeOnly ? { isActive: true } : undefined,
-        orderBy: { installedAt: 'desc' },
-        include: {
-          _count: {
-            select: {
-              productCaches: true,
-              variantMaps: true,
-              sourceLogs: true,
-            },
+    const connections = await (prisma as any).storeConnection.findMany({
+      where: { sourceStoreId: store.id }
+    });
+    
+    const connectedStoreIds = connections.map((c: any) => c.targetStoreId);
+    const visibleStoreIds = [store.id, ...connectedStoreIds];
+
+    const whereClause: any = { id: { in: visibleStoreIds } };
+    if (activeOnly) {
+      whereClause.isActive = true;
+    }
+
+    const stores = await prisma.store.findMany({
+      where: whereClause,
+      orderBy: { installedAt: 'desc' },
+      include: {
+        _count: {
+          select: {
+            productCaches: true,
+            variantMaps: true,
+            sourceLogs: true,
           },
         },
-      }),
-      // @ts-ignore - bypassing stale Prisma client cache
-      (prisma as any).storeConnection.findMany()
-    ]);
+      },
+    });
 
-    const connectedStoreIds = new Set(connections.map((c: any) => c.targetStoreId));
-    const visibleStores = stores;
-
-    const enrichedStores = visibleStores.map((s: any) => ({
+    const enrichedStores = stores.map((s: any) => ({
       id: s.id,
       shopDomain: s.shopDomain,
       label: s.label,
@@ -42,8 +47,6 @@ export async function GET(req: NextRequest) {
       isMaster: s.isMaster,
       isActive: s.isActive && hasValidShopifyAccessToken(s.accessToken),
       scope: s.scope,
-      installedAt: s.installedAt,
-      updatedAt: s.updatedAt,
       productCount: s._count.productCaches,
       variantCount: s._count.variantMaps,
       syncCount: s._count.sourceLogs,
@@ -59,12 +62,13 @@ export async function GET(req: NextRequest) {
     });
   } catch (error: any) {
     console.error('[Stores API] Error:', error);
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    return handleApiError(error);
   }
 }
 
 export async function PUT(req: NextRequest) {
   try {
+    const { store } = await authenticate(req);
     const body = await req.json();
     const { stores } = body;
 
@@ -72,16 +76,25 @@ export async function PUT(req: NextRequest) {
       return NextResponse.json({ success: false, error: "Invalid payload: stores must be an array" }, { status: 400 });
     }
 
-    const updates = stores.map((s: any) =>
-      prisma.store.update({
+    // Verify ownership/access before updating
+    const connections = await (prisma as any).storeConnection.findMany({
+      where: { sourceStoreId: store.id }
+    });
+    const authorizedStoreIds = new Set([store.id, ...connections.map((c: any) => c.targetStoreId)]);
+
+    const updates = stores.map((s: any) => {
+      if (!authorizedStoreIds.has(s.id)) {
+        throw new Error(`Unauthorized to update store ${s.id}`);
+      }
+      return prisma.store.update({
         where: { id: s.id },
         data: {
           priceAdjustmentValue: typeof s.priceAdjustmentValue === 'number' ? s.priceAdjustmentValue : 0,
           priceAdjustmentType: s.priceAdjustmentType || 'PERCENTAGE',
           isPriceAdjustmentEnabled: typeof s.isPriceAdjustmentEnabled === 'boolean' ? s.isPriceAdjustmentEnabled : false,
         },
-      })
-    );
+      });
+    });
 
     await prisma.$transaction(updates);
 
@@ -98,12 +111,13 @@ export async function PUT(req: NextRequest) {
     return NextResponse.json({ success: true });
   } catch (error: any) {
     console.error('[Stores API] Put error:', error);
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    return handleApiError(error);
   }
 }
 
 export async function DELETE(req: NextRequest) {
   try {
+    await authenticate(req);
     const shop = req.nextUrl.searchParams.get('shop');
     if (!shop) {
       return NextResponse.json({ error: 'Missing shop parameter' }, { status: 400 });
@@ -129,6 +143,6 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ success: true, message: `Store ${shop} deactivated` });
   } catch (error: any) {
     console.error('[Stores API] Delete error:', error);
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    return handleApiError(error);
   }
 }

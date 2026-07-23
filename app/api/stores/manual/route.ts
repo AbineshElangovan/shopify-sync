@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db/prisma";
+import { authenticate } from "@/lib/shopify/authenticate";
 
 export async function POST(req: NextRequest) {
   try {
+    await authenticate(req);
     const manualStoresCount = await prisma.store.count({
       where: { scope: "manual" }
     });

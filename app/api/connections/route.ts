@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { authenticate } from "@/lib/shopify/authenticate";
+import { authenticate, handleApiError } from "@/lib/shopify/authenticate";
 import { prisma } from "@/lib/db/prisma";
 
 export async function GET(req: NextRequest) {
@@ -45,7 +45,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ success: true, store, connections });
   } catch (err: any) {
     console.error("[Connections API] GET Error:", err.message);
-    return NextResponse.json({ success: false, error: err.message }, { status: 500 });
+    return handleApiError(err);
   }
 }
 
@@ -96,7 +96,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: true, connection });
   } catch (err: any) {
     console.error("[Connections API] POST Error:", err.message);
-    return NextResponse.json({ success: false, error: err.message }, { status: 500 });
+    return handleApiError(err);
   }
 }
 
@@ -122,6 +122,6 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ success: true });
   } catch (err: any) {
     console.error("[Connections API] DELETE Error:", err.message);
-    return NextResponse.json({ success: false, error: err.message }, { status: 500 });
+    return handleApiError(err);
   }
 }

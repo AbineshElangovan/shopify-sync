@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db/prisma';
-import { authenticate } from '@/lib/shopify/authenticate';
+import { authenticate, handleApiError } from '@/lib/shopify/authenticate';
 import { hasValidShopifyAccessToken } from '@/services/shopify/utils';
 
 export const dynamic = 'force-dynamic';
@@ -9,17 +9,28 @@ export async function GET(req: NextRequest) {
   try {
     const { store } = await authenticate(req);
     
-    // Fetch data for all stores to combine inventory
-    const [productCaches, totalSyncs, successSyncs, latestSync, allStores, connections] = await Promise.all([
-      prisma.productCache.findMany({ orderBy: [{ updatedAt: 'desc' }, { id: 'asc' }] }),
-      prisma.syncLog.count(),
-      prisma.syncLog.count({ where: { status: 'SUCCESS' } }),
+    // 1. Fetch authorized connections for THIS store only
+    const connections = await (prisma as any).storeConnection.findMany({
+      where: { sourceStoreId: store.id }
+    });
+    const connectedStoreIds = connections.map((c: any) => c.targetStoreId);
+    const visibleStoreIds = [store.id, ...connectedStoreIds];
+
+    // 2. Fetch data ONLY for authorized stores
+    const [productCaches, totalSyncs, successSyncs, latestSync, allStores] = await Promise.all([
+      prisma.productCache.findMany({ 
+        where: { storeId: { in: visibleStoreIds } },
+        orderBy: [{ updatedAt: 'desc' }, { id: 'asc' }] 
+      }),
+      prisma.syncLog.count({ where: { sourceStoreId: store.id } }),
+      prisma.syncLog.count({ where: { sourceStoreId: store.id, status: 'SUCCESS' } }),
       prisma.syncLog.findFirst({
+        where: { sourceStoreId: store.id },
         orderBy: { createdAt: 'desc' }
       }),
-      prisma.store.findMany({ where: { isActive: true } }),
-      // @ts-ignore - bypassing stale Prisma client cache
-      (prisma as any).storeConnection.findMany()
+      prisma.store.findMany({ 
+        where: { id: { in: visibleStoreIds }, isActive: true } 
+      })
     ]);
 
     let lastUpdated = 'Never';
@@ -29,7 +40,7 @@ export async function GET(req: NextRequest) {
         diffMins < 1 ? 'Just now' : diffMins < 60 ? `${diffMins} mins ago` : `${Math.floor(diffMins / 60)} hrs ago`;
     }
 
-    // Group ALL store products by SKU to prevent null-SKU products from merging
+    // Current store metrics
     const currentStoreProducts = productCaches.filter((p: any) => p.storeId === store.id);
     const totalProducts = currentStoreProducts.length;
     const totalInventory = currentStoreProducts.reduce((a: any, p: any) => a + p.inventoryQuantity, 0);
@@ -38,22 +49,13 @@ export async function GET(req: NextRequest) {
 
     const stats = { totalProducts, totalInventory, activeProducts, lowStock: lowStockCount, lastUpdated };
 
-    const connectedStoreIds = new Set(connections.map((c: any) => c.targetStoreId));
-    const visibleStores = allStores.filter((s: any) => 
-      s.id === store.id || 
-      s.shopDomain === 'eshan-inventory-solutions.myshopify.com' || 
-      s.shopDomain === 'eshan-coimbatore-store-8jjdfk4t.myshopify.com' || 
-      connectedStoreIds.has(s.id)
-    );
-
-    const storesWithProducts = visibleStores.map((s: any) => {
+    const storesWithProducts = allStores.map((s: any) => {
       const storeSpecificProducts = productCaches.filter((p: any) => p.storeId === s.id);
       return {
         id: s.id,
         shopDomain: s.shopDomain,
         label: s.label || s.shopDomain,
         isActive: s.isActive,
-        installedAt: s.installedAt,
         productCount: storeSpecificProducts.length,
         inventoryTotal: storeSpecificProducts.reduce((acc: any, p: any) => acc + p.inventoryQuantity, 0),
         salesValue: storeSpecificProducts.reduce((acc: any, p: any) => acc + (p.price * p.inventoryQuantity), 0),
@@ -87,6 +89,6 @@ export async function GET(req: NextRequest) {
     });
   } catch (error: any) {
     console.error('[Dashboard API] Error:', error);
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    return handleApiError(error);
   }
 }

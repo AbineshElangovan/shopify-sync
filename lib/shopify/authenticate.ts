@@ -9,37 +9,14 @@ export async function authenticate(req: NextRequest) {
   const token = authHeader?.replace(/^Bearer\s+/i, "");
 
   if (!token) {
-    if (process.env.NODE_ENV === "development") {
-      const shopParam = req.nextUrl.searchParams.get("shop");
-      const store = await prisma.store.findFirst({
-        where: shopParam ? { shopDomain: shopParam, isActive: true } : { isActive: true },
-        orderBy: [{ isMaster: 'desc' }, { installedAt: 'asc' }]
-      });
-      if (store) {
-        console.warn("[authenticate] Missing token in dev mode. Falling back to Master/Active store:", store.shopDomain);
-        return { shop: store.shopDomain, store };
-      }
-    }
-
-    throw new AuthError("Missing session token");
+    throw new AuthError("Unauthorized access. Please log in through Shopify Admin.");
   }
 
   let payload;
   try {
     payload = await shopify.session.decodeSessionToken(token);
   } catch (err) {
-    if (process.env.NODE_ENV === "development" || token === "dev_fallback_token") {
-      const shopParam = req.nextUrl.searchParams.get("shop");
-      const store = await prisma.store.findFirst({
-        where: shopParam ? { shopDomain: shopParam, isActive: true } : { isActive: true },
-        orderBy: [{ isMaster: 'desc' }, { installedAt: 'asc' }]
-      });
-      if (store) {
-        console.warn("[authenticate] Invalid/mock token in dev mode. Falling back to Master/Active store:", store.shopDomain);
-        return { shop: store.shopDomain, store };
-      }
-    }
-    throw new AuthError("Invalid session token");
+    throw new AuthError("Unauthorized access. Please log in through Shopify Admin.");
   }
 
 
@@ -51,4 +28,11 @@ export async function authenticate(req: NextRequest) {
   }
 
   return { shop, store };
+}
+
+export function handleApiError(error: any) {
+  if (error instanceof AuthError) {
+    return NextResponse.json({ success: false, message: error.message }, { status: 401 });
+  }
+  return NextResponse.json({ success: false, error: error.message }, { status: 500 });
 }

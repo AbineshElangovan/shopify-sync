@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db/prisma';
 import { Prisma } from '@prisma/client';
-import { authenticate } from '@/lib/shopify/authenticate';
+import { authenticate, handleApiError } from '@/lib/shopify/authenticate';
 
 export const dynamic = 'force-dynamic';
 
@@ -66,6 +66,6 @@ export async function GET(req: NextRequest) {
 
   } catch (error: any) {
     console.error('Failed to fetch sync logs:', error);
-    return new NextResponse(`Error: ${error.message}`, { status: 500 });
+    return handleApiError(error);
   }
 }

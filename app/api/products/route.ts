@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { authenticate } from "@/lib/shopify/authenticate";
+import { authenticate, handleApiError } from "@/lib/shopify/authenticate";
 import { prisma } from "@/lib/db/prisma";
 import { syncStoreProducts } from "@/services/shopify";
 
@@ -43,8 +43,15 @@ export async function GET(req: NextRequest) {
 
     // Cross-store collection fallback logic
     const currentSkus = products.map(p => p.sku).filter(Boolean) as string[];
+    
+    const connections = await (prisma as any).storeConnection.findMany({
+      where: { sourceStoreId: store.id }
+    });
+    const authorizedStoreIds = [store.id, ...connections.map((c: any) => c.targetStoreId)];
+
     const crossStoreProducts = await prisma.productCache.findMany({
       where: { 
+        storeId: { in: authorizedStoreIds },
         sku: { in: currentSkus },
         OR: [
           { collections: { some: {} } },
@@ -190,6 +197,6 @@ export async function GET(req: NextRequest) {
     });
   } catch (err: any) {
     console.error("[Products API] Error:", err);
-    return NextResponse.json({ success: false, error: err.message }, { status: 500 });
+    return handleApiError(err);
   }
 }
