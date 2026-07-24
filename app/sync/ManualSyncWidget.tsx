@@ -14,6 +14,7 @@ import {
   Icon,
 } from '@shopify/polaris';
 import { DeleteIcon, StoreIcon } from '@shopify/polaris-icons';
+import { authenticatedFetch } from '@shopify/app-bridge/utilities';
 
 export default function ManualSyncWidget() {
   const [connections, setConnections] = useState<any[]>([]);
@@ -44,7 +45,10 @@ export default function ManualSyncWidget() {
   const fetchConnections = async () => {
     try {
       setLoading(true);
-      const res = await fetch('/api/connections');
+      const app = (window as any).shopifyApp;
+      if (!app) return;
+      const fetchAuth = authenticatedFetch(app);
+      const res = await fetchAuth('/api/connections');
       const data = await res.json();
       if (data.success) {
         setConnections(data.connections || []);
@@ -65,7 +69,10 @@ export default function ManualSyncWidget() {
     setToastMessage(null);
     
     try {
-      const res = await fetch('/api/connections', {
+      const app = (window as any).shopifyApp;
+      if (!app) throw new Error("Shopify App Bridge not initialized");
+      const fetchAuth = authenticatedFetch(app);
+      const res = await fetchAuth('/api/connections', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ uniqueStoreId: storeIdInput.trim() })
@@ -90,7 +97,10 @@ export default function ManualSyncWidget() {
     if (!confirm('Are you sure you want to remove this connection?')) return;
     
     try {
-      const res = await fetch(`/api/connections?targetStoreId=${targetStoreId}`, {
+      const app = (window as any).shopifyApp;
+      if (!app) throw new Error("Shopify App Bridge not initialized");
+      const fetchAuth = authenticatedFetch(app);
+      const res = await fetchAuth(`/api/connections?targetStoreId=${targetStoreId}`, {
         method: 'DELETE'
       });
       const data = await res.json();
@@ -128,7 +138,10 @@ export default function ManualSyncWidget() {
       setSyncing(true);
       setToastMessage({ message: 'Sync initiated in the background. You can monitor the logs below.', type: 'success' });
       
-      const res = await fetch('/api/sync/manual', {
+      const app = (window as any).shopifyApp;
+      if (!app) throw new Error("Shopify App Bridge not initialized");
+      const fetchAuth = authenticatedFetch(app);
+      const res = await fetchAuth('/api/sync/manual', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ selectedTargetStoreIds: selectedStores })

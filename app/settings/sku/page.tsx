@@ -1,6 +1,7 @@
 "use client";
 import React, { useState, useEffect } from 'react';
 import { Layout, BlockStack, Box, TextField, Button, Text } from '@shopify/polaris';
+import { authenticatedFetch } from '@shopify/app-bridge/utilities';
 
 export default function SkuSettingsPage() {
   const [skuPrefix, setSkuPrefix] = useState('SHOE');
@@ -18,7 +19,10 @@ export default function SkuSettingsPage() {
   const fetchSettings = async () => {
     try {
       setLoading(true);
-      const res = await fetch('/api/settings/sku');
+      const app = (window as any).shopifyApp;
+      if (!app) return;
+      const fetchAuth = authenticatedFetch(app);
+      const res = await fetchAuth('/api/settings/sku');
       const data = await res.json();
       if (data.success && data.setting) {
         setSkuPrefix(data.setting.skuPrefix || 'SHOE');
@@ -40,7 +44,10 @@ export default function SkuSettingsPage() {
     setInlineError(null);
     
     try {
-      const res = await fetch('/api/settings/sku', {
+      const app = (window as any).shopifyApp;
+      if (!app) throw new Error("Shopify App Bridge not initialized");
+      const fetchAuth = authenticatedFetch(app);
+      const res = await fetchAuth('/api/settings/sku', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ skuPrefix, skuSequence })
