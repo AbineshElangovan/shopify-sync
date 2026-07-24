@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { verifyWebhook } from "@/lib/shopify/webhooks";
 import { prisma } from "@/lib/db/prisma";
 import { processProductDelete, hasSyncLock, releaseSyncLock } from "@/services/product-sync";
+import { archiveProductIdentity } from "@/services/product-identity";
 
 export async function POST(req: NextRequest) {
   try {
@@ -47,6 +48,15 @@ export async function POST(req: NextRequest) {
     // Replicate deletion to target stores
     try {
       await processProductDelete(shop, payload, webhookId);
+      
+      // Archive the Identity
+      if (store) {
+        const archived = await archiveProductIdentity(store.id, String(payload.id));
+        if (!archived) {
+          console.warn(`[Webhook:products/delete] Warning: Identity not found to archive for product ${payload.id}`);
+        }
+      }
+
       console.log(`[Webhook:products/delete] sync complete for ${shop}`);
       
       // Clean up Master store local cache AFTER replicating the delete, so the dashboard instantly updates

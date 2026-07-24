@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { verifyWebhook } from "@/lib/shopify/webhooks";
 import { prisma } from "@/lib/db/prisma";
 import { processProductUpdate, processProductDelete, hasSyncLock, releaseSyncLock, updateLocalProductCache, withLock } from "@/services/product-sync";
+import { requireProductIdentity } from "@/services/product-identity";
 
 export async function POST(req: NextRequest) {
   try {
@@ -73,6 +74,20 @@ export async function POST(req: NextRequest) {
 
         await updateLocalProductCache(shop, currentPayload, topic);
         await processProductUpdate(shop, currentPayload, webhookId);
+        
+        // 1. Verify Product Unique ID exists for all variants
+        const storeRecord = await prisma.store.findUnique({ where: { shopDomain: shop } });
+        if (storeRecord && currentPayload.variants) {
+          for (const variant of currentPayload.variants) {
+            const variantIdStr = variant.admin_graphql_api_id?.split('/').pop() || String(variant.id);
+            const productIdStr = String(currentPayload.id);
+            const identity = await requireProductIdentity(storeRecord.id, productIdStr, variantIdStr);
+            if (!identity) {
+               throw new Error(`Data Inconsistency: Identity missing for variant ${variantIdStr}`);
+            }
+          }
+        }
+
         console.log(`[Webhook:${topic}] sync complete for ${shop}`);
       } catch (err: any) {
         console.error(`[Webhook:${topic}] sync failed for ${shop}:`, err.message);

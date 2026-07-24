@@ -3,6 +3,7 @@ import { verifyWebhook } from "@/lib/shopify/webhooks";
 import { prisma } from "@/lib/db/prisma";
 import { processProductCreate, hasSyncLock, releaseSyncLock, updateLocalProductCache, withLock } from "@/services/product-sync";
 import { generateSkusForProductIfNeeded } from "@/services/sku";
+import { getOrCreateProductIdentity } from "@/services/product-identity";
 
 export async function POST(req: NextRequest) {
   try {
@@ -70,6 +71,20 @@ export async function POST(req: NextRequest) {
 
         await updateLocalProductCache(shop, enrichedPayload);
         await processProductCreate(shop, enrichedPayload, webhookId);
+        
+        // 1. Generate/Verify Product Unique ID for all variants
+        const storeRecord = await prisma.store.findUnique({ where: { shopDomain: shop } });
+        if (storeRecord && enrichedPayload.variants) {
+          for (const variant of enrichedPayload.variants) {
+            const variantIdStr = variant.admin_graphql_api_id?.split('/').pop() || String(variant.id);
+            const productIdStr = String(enrichedPayload.id);
+            const identity = await getOrCreateProductIdentity(storeRecord.id, productIdStr, variantIdStr);
+            if (!identity) {
+               throw new Error(`Failed to persist identity for variant ${variantIdStr}`);
+            }
+          }
+        }
+
         console.log(`[Webhook:products/create] sync complete for ${shop}`);
       } catch (err: any) {
         require('fs').appendFileSync('C:/Users/eabin/OneDrive/Desktop/next task/shopify-sync/sync-errors.log', `[${new Date().toISOString()}] products-create route error: ${err.message}\n${err.stack}\n`);

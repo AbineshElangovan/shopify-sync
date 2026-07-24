@@ -12,6 +12,27 @@ export async function authenticate(req: NextRequest) {
     throw new AuthError("Unauthorized access. Please log in through Shopify Admin.");
   }
 
+  // --- DEV FALLBACK FOR LOCAL BROWSER TESTING ---
+  if (process.env.NODE_ENV === "development" && token === "dev_fallback_token") {
+    // Try to get shop from URL first
+    const urlShop = req.nextUrl?.searchParams?.get("shop");
+    
+    let store;
+    if (urlShop) {
+      store = await prisma.store.findFirst({ where: { shopDomain: urlShop, isActive: true } });
+    }
+    
+    // Fallback to first active store if no shop in URL or shop not found
+    if (!store) {
+      store = await prisma.store.findFirst({ where: { isActive: true } });
+    }
+    
+    if (!store) {
+      throw new AuthError("No active dev store found. Please install the app on a dev store first.");
+    }
+    return { shop: store.shopDomain, store };
+  }
+
   let payload;
   try {
     payload = await shopify.session.decodeSessionToken(token);

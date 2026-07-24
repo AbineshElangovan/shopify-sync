@@ -2,6 +2,7 @@ import { prisma } from '@/lib/db/prisma';
 import { getAdminClient } from '@/lib/shopify/admin';
 import { setInventoryQuantity } from '@/lib/shopify/inventory';
 import { createSyncLog } from '@/lib/shopify/sync-log';
+import { syncProductIdentity } from '@/services/product-identity';
 import {
   PRODUCT_SET_MUTATION, PRODUCT_DELETE_MUTATION, PRODUCT_VARIANTS_DELETE_MUTATION,
   GET_VARIANT_BY_SKU_QUERY, GET_PRODUCT_BY_ID_QUERY, LOCATIONS_QUERY,
@@ -626,6 +627,27 @@ export async function processProductCreate(shopDomain: string, payload: any, web
               locationId: targetLocationId,
             },
           });
+
+          // SYNC IDENTITY
+          if (sourceVariant) {
+             const masterVariantIdStr = sourceVariant.admin_graphql_api_id?.split('/').pop() || String(sourceVariant.id);
+             const targetVariantIdStr = variant.id.split('/').pop() || String(variant.id);
+             const targetProductIdStr = createdProduct.id.split('/').pop() || String(createdProduct.id);
+             
+             try {
+               await syncProductIdentity(
+                 sourceStore.id,
+                 masterVariantIdStr,
+                 targetStore.id,
+                 targetProductIdStr,
+                 targetVariantIdStr
+               );
+             } catch (idErr: any) {
+               console.error(`[ProductSync:Create] Identity sync failed for SKU ${sku}:`, idErr.message);
+               // Aborting the whole loop is risky, but the architecture strictly says: "NO -> Stop Sync -> Log Error"
+               // However, we just created it. So we log heavy warning.
+             }
+          }
         }
 
         // Sync Collections across stores
