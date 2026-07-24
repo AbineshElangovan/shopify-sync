@@ -2,7 +2,7 @@ import { prisma } from '@/lib/db/prisma';
 import { getAdminClient } from '@/lib/shopify/admin';
 import { setInventoryQuantity } from '@/lib/shopify/inventory';
 import { createSyncLog } from '@/lib/shopify/sync-log';
-import { syncProductIdentity } from '@/services/product-identity';
+import { linkConnectedProductMapping, findMappingByVariantId } from '@/services/product-mapping';
 import {
   PRODUCT_SET_MUTATION, PRODUCT_DELETE_MUTATION, PRODUCT_VARIANTS_DELETE_MUTATION,
   GET_VARIANT_BY_SKU_QUERY, GET_PRODUCT_BY_ID_QUERY, LOCATIONS_QUERY,
@@ -119,7 +119,7 @@ async function publishProductToAllChannels(shopDomain: string, productId: string
     const client = await getAdminClient(shopDomain);
     const pubResponse: any = await client.request(GET_PUBLICATIONS_QUERY);
     const publications = pubResponse?.data?.publications?.edges || [];
-    
+
     if (publications.length === 0) return;
 
     const publicationInputs = publications.map((edge: any) => ({
@@ -222,15 +222,15 @@ export async function updateLocalProductCache(shopDomain: string, payload: any, 
 
       const parsedPrice = parseFloat(variant.price || "0");
       const trueInventory = variant.inventory_quantity ?? 0;
-      
+
       let finalSku = variant.sku?.trim() || null;
       // Prevent stale webhooks/GraphQL from wiping out a successfully generated SKU
       if (!finalSku && existingCache && existingCache.sku && existingCache.sku !== 'N/A') {
         finalSku = existingCache.sku;
       }
-      
+
       const productTags = payload.tags || null;
-      
+
       if (!existingCache) {
         await prisma.productCache.create({
           data: {
@@ -247,12 +247,12 @@ export async function updateLocalProductCache(shopDomain: string, payload: any, 
         });
       } else {
         const newImageUrl = payload.image?.src || payload.images?.[0]?.src || null;
-        const needsUpdate = existingCache.sku !== finalSku || 
-                            existingCache.title !== fullTitle || 
-                            existingCache.price !== parsedPrice || 
-                            existingCache.tags !== productTags ||
-                            (newImageUrl !== null && existingCache.imageUrl !== newImageUrl);
-                            
+        const needsUpdate = existingCache.sku !== finalSku ||
+          existingCache.title !== fullTitle ||
+          existingCache.price !== parsedPrice ||
+          existingCache.tags !== productTags ||
+          (newImageUrl !== null && existingCache.imageUrl !== newImageUrl);
+
         if (needsUpdate) {
           await prisma.productCache.update({
             where: { id: existingCache.id },
@@ -269,7 +269,7 @@ export async function updateLocalProductCache(shopDomain: string, payload: any, 
       }
 
       require('fs').appendFileSync('C:/Users/eabin/OneDrive/Desktop/next task/shopify-sync/sync-debug.log', `[${new Date().toISOString()}] updateLocalProductCache for ${shopDomain}: SKU=${sku}, payloadVariants=${variants.length}\n`);
-      
+
       await prisma.variantMap.upsert({
         where: {
           storeId_shopifyVariantId: {
@@ -405,9 +405,9 @@ export async function processProductCreate(shopDomain: string, payload: any, web
     }
 
     const targetStores = await prisma.store.findMany({
-      where: { 
-        shopDomain: targetStoreDomains ? { in: targetStoreDomains } : { not: shopDomain }, 
-        isActive: true 
+      where: {
+        shopDomain: targetStoreDomains ? { in: targetStoreDomains } : { not: shopDomain },
+        isActive: true
       },
     });
 
@@ -415,13 +415,52 @@ export async function processProductCreate(shopDomain: string, payload: any, web
       if (!targetStore.autoSyncEnabled) continue;
 
       const skus = variantsWithSkus.map((v: any) => v.sku.trim());
+      const masterVariantStr = variantsWithSkus[0]?.admin_graphql_api_id?.split('/').pop() || String(variantsWithSkus[0]?.id);
 
-      let existingMapping = await prisma.variantMap.findFirst({
-        where: {
-          storeId: targetStore.id,
-          sku: { in: skus },
-        },
+      console.log(`\n------------------------------------------------------`);
+      console.log(`🚀 [Target Store Sync] -> ${targetStore.shopDomain}`);
+      console.log(`------------------------------------------------------\n`);
+
+      // 1. PRIMARY LOOKUP: Product Unique ID
+      let existingMapping: any = null;
+      console.log(`[Primary Lookup]`);
+      console.log(`🔍 Checking Unique ID for master variant ${masterVariantStr}...\n`);
+      const masterMapping = await prisma.productMapping.findUnique({
+        where: { storeId_shopifyVariantId: { storeId: sourceStore.id, shopifyVariantId: masterVariantStr } }
       });
+
+      if (masterMapping) {
+        console.log(`✅ Master Unique ID found: ${masterMapping.productUniqueId}\n`);
+        existingMapping = await prisma.productMapping.findFirst({
+          where: { storeId: targetStore.id, productUniqueId: masterMapping.productUniqueId }
+        });
+        if (existingMapping) {
+           console.log(`✅ Target Mapping found via Unique ID! Sync will process using Product Unique ID.\n`);
+        }
+      }
+
+      // 2. FALLBACK LOOKUP: SKU (if Unique ID mapping not found)
+      if (!existingMapping) {
+        console.log(`[Fallback Lookup]`);
+        console.log(`⚠️ Target Mapping NOT found via Unique ID. Falling back to SKU lookup...\n`);
+        existingMapping = await prisma.productMapping.findFirst({
+          where: {
+            storeId: targetStore.id,
+            sku: { in: skus },
+          },
+        });
+
+        // Repair mapping if fallback succeeds
+        if (existingMapping && masterMapping) {
+          console.log(`🛠️ Target Mapping found via SKU! Repairing Unique ID link...\n`);
+          await prisma.productMapping.update({
+            where: { id: existingMapping.id },
+            data: { productUniqueId: masterMapping.productUniqueId }
+          });
+        } else if (!existingMapping) {
+          console.log(`❌ Target Mapping NOT found via SKU either. Will create new product.\n`);
+        }
+      }
 
       if (!existingMapping) {
         console.log(`[ProductSync:Create] Mapping missing for SKUs ${skus.join(', ')} in ${targetStore.shopDomain}. Performing Shopify SKU search.`);
@@ -630,23 +669,29 @@ export async function processProductCreate(shopDomain: string, payload: any, web
 
           // SYNC IDENTITY
           if (sourceVariant) {
-             const masterVariantIdStr = sourceVariant.admin_graphql_api_id?.split('/').pop() || String(sourceVariant.id);
-             const targetVariantIdStr = variant.id.split('/').pop() || String(variant.id);
-             const targetProductIdStr = createdProduct.id.split('/').pop() || String(createdProduct.id);
-             
-             try {
-               await syncProductIdentity(
-                 sourceStore.id,
-                 masterVariantIdStr,
-                 targetStore.id,
-                 targetProductIdStr,
-                 targetVariantIdStr
-               );
-             } catch (idErr: any) {
-               console.error(`[ProductSync:Create] Identity sync failed for SKU ${sku}:`, idErr.message);
-               // Aborting the whole loop is risky, but the architecture strictly says: "NO -> Stop Sync -> Log Error"
-               // However, we just created it. So we log heavy warning.
-             }
+            const masterVariantIdStr = sourceVariant.admin_graphql_api_id?.split('/').pop() || String(sourceVariant.id);
+            const targetVariantIdStr = variant.id.split('/').pop() || String(variant.id);
+            const targetProductIdStr = createdProduct.id.split('/').pop() || String(createdProduct.id);
+
+            try {
+              const masterMapping = await findMappingByVariantId(sourceStore.id, masterVariantIdStr);
+              if (masterMapping) {
+                await linkConnectedProductMapping(
+                  masterMapping.productUniqueId,
+                  targetStore.id,
+                  targetProductIdStr,
+                  targetVariantIdStr,
+                  sku,
+                  variant.inventoryItem?.id || null
+                );
+              } else {
+                console.error(`[ProductSync:Create] Master mapping not found for SKU ${sku}`);
+              }
+            } catch (idErr: any) {
+              console.error(`[ProductSync:Create] Identity sync failed for SKU ${sku}:`, idErr.message);
+              // Aborting the whole loop is risky, but the architecture strictly says: "NO -> Stop Sync -> Log Error"
+              // However, we just created it. So we log heavy warning.
+            }
           }
         }
 
@@ -704,9 +749,9 @@ export async function processProductUpdate(shopDomain: string, payload: any, web
     }
 
     const targetStores = await prisma.store.findMany({
-      where: { 
-        shopDomain: targetStoreDomains ? { in: targetStoreDomains } : { not: shopDomain }, 
-        isActive: true 
+      where: {
+        shopDomain: targetStoreDomains ? { in: targetStoreDomains } : { not: shopDomain },
+        isActive: true
       },
     });
 
@@ -714,13 +759,52 @@ export async function processProductUpdate(shopDomain: string, payload: any, web
       if (!targetStore.autoSyncEnabled) continue;
 
       const skus = variantsWithSkus.map((v: any) => v.sku.trim());
+      const masterVariantStr = variantsWithSkus[0]?.admin_graphql_api_id?.split('/').pop() || String(variantsWithSkus[0]?.id);
 
-      let matchingVariantMap = await prisma.variantMap.findFirst({
-        where: {
-          storeId: targetStore.id,
-          sku: { in: skus },
-        },
+      console.log(`\n------------------------------------------------------`);
+      console.log(`🔄 [Target Store Sync (UPDATE)] -> ${targetStore.shopDomain}`);
+      console.log(`------------------------------------------------------\n`);
+
+      // 1. PRIMARY LOOKUP: Product Unique ID
+      let matchingVariantMap: any = null;
+      console.log(`[Primary Lookup]`);
+      console.log(`🔍 Checking Unique ID for master variant ${masterVariantStr}...\n`);
+      const masterMapping = await prisma.productMapping.findUnique({
+        where: { storeId_shopifyVariantId: { storeId: sourceStore.id, shopifyVariantId: masterVariantStr } }
       });
+
+      if (masterMapping) {
+        console.log(`✅ Master Unique ID found: ${masterMapping.productUniqueId}\n`);
+        matchingVariantMap = await prisma.productMapping.findFirst({
+          where: { storeId: targetStore.id, productUniqueId: masterMapping.productUniqueId }
+        });
+        if (matchingVariantMap) {
+           console.log(`✅ Target Mapping found via Unique ID! Sync will process using Product Unique ID.\n`);
+        }
+      }
+
+      // 2. FALLBACK LOOKUP: SKU
+      if (!matchingVariantMap) {
+        console.log(`[Fallback Lookup]`);
+        console.log(`⚠️ Target Mapping NOT found via Unique ID. Falling back to SKU lookup...\n`);
+        matchingVariantMap = await prisma.productMapping.findFirst({
+          where: {
+            storeId: targetStore.id,
+            sku: { in: skus },
+          },
+        });
+
+        // Repair mapping if fallback succeeds
+        if (matchingVariantMap && masterMapping) {
+          console.log(`🛠️ Target Mapping found via SKU! Repairing Unique ID link...\n`);
+          await prisma.productMapping.update({
+            where: { id: matchingVariantMap.id },
+            data: { productUniqueId: masterMapping.productUniqueId }
+          });
+        } else if (!matchingVariantMap) {
+          console.log(`❌ Target Mapping NOT found via SKU either. Will attempt create flow.\n`);
+        }
+      }
 
       if (!matchingVariantMap) {
         console.log(`[ProductSync:Update] Mapping missing for SKUs ${skus.join(', ')} in ${targetStore.shopDomain}. Performing SKU search.`);
@@ -757,7 +841,11 @@ export async function processProductUpdate(shopDomain: string, payload: any, web
         continue;
       }
 
-      const targetProductId = matchingVariantMap.shopifyProductId;
+      let targetProductId = matchingVariantMap.shopifyProductId;
+      if (!targetProductId.startsWith('gid://')) {
+        targetProductId = `gid://shopify/Product/${targetProductId}`;
+      }
+      
       const client = await getAdminClient(targetStore.shopDomain);
 
       let targetProduct: any = null;
@@ -1148,24 +1236,24 @@ export async function processProductDelete(shopDomain: string, payload: any, web
       },
     });
 
-    let skus = sourceVariantMaps.map((v) => v.sku).filter(Boolean);
+    let skus: string[] = [];
 
     // Check ProductCache for SKUs if VariantMap returned none
     const sourceProductCaches = await prisma.productCache.findMany({
       where: {
         storeId: sourceStore.id,
-        shopifyProductId: `gid://shopify/Product/${payload.id}`,
+        shopifyProductId: payload.admin_graphql_api_id || `gid://shopify/Product/${payload.id}`,
       },
     });
 
-    if (skus.length === 0) {
+    if (sourceProductCaches.length > 0) {
       console.log(`[ProductSync:Delete] No VariantMaps found for ${payload.id}, checking ProductCache for SKUs...`);
       skus = sourceProductCaches.map((p) => p.sku).filter(Boolean) as string[];
     }
 
     if (skus.length === 0 && payload.variants && payload.variants.length > 0) {
-       console.log(`[ProductSync:Delete] Fallback: using SKUs from webhook payload`);
-       skus = payload.variants.map((v: any) => v.sku).filter(Boolean);
+      console.log(`[ProductSync:Delete] Fallback: using SKUs from webhook payload`);
+      skus = payload.variants.map((v: any) => v.sku).filter(Boolean);
     }
 
     // Extract title from source ProductCache or payload for null-SKU fallback
@@ -1175,13 +1263,43 @@ export async function processProductDelete(shopDomain: string, payload: any, web
       where: { shopDomain: { not: shopDomain }, isActive: true },
     });
 
+    const masterProductIdStr = String(payload.id);
+    const masterMapping = await prisma.productMapping.findFirst({
+      where: { storeId: sourceStore.id, shopifyProductId: masterProductIdStr }
+    });
+
     for (const targetStore of targetStores) {
       if (!targetStore.autoSyncEnabled) continue;
 
       let targetProductId: string | null = null;
+      let targetMappingId: string | null = null;
 
-      // Step 1: Look up target product by SKU in VariantMap (most reliable)
-      if (skus.length > 0) {
+      // 1. PRIMARY LOOKUP: Product Unique ID
+      if (masterMapping) {
+        const targetMapping = await prisma.productMapping.findFirst({
+          where: { storeId: targetStore.id, productUniqueId: masterMapping.productUniqueId }
+        });
+        if (targetMapping) {
+          console.log(`[ProductSync:Delete] ✅ Found target product via Unique ID mapping in ${targetStore.shopDomain}.`);
+          targetProductId = targetMapping.shopifyProductId;
+          targetMappingId = targetMapping.id;
+        }
+      }
+
+      // 2. FALLBACK LOOKUP: SKU in ProductMapping
+      if (!targetProductId && skus.length > 0) {
+         const targetMapping = await prisma.productMapping.findFirst({
+           where: { storeId: targetStore.id, sku: { in: skus } }
+         });
+         if (targetMapping) {
+           console.log(`[ProductSync:Delete] 🛠️ Found target product via SKU mapping in ${targetStore.shopDomain}.`);
+           targetProductId = targetMapping.shopifyProductId;
+           targetMappingId = targetMapping.id;
+         }
+      }
+
+      // 3. FALLBACK LOOKUP: Legacy VariantMap
+      if (!targetProductId && skus.length > 0) {
         const matchingVariantMap = await prisma.variantMap.findFirst({
           where: {
             storeId: targetStore.id,
@@ -1194,7 +1312,7 @@ export async function processProductDelete(shopDomain: string, payload: any, web
         }
       }
 
-      // Step 2: Fall back to live Shopify SKU search if VariantMap lookup failed
+      // 4. FALLBACK LOOKUP: Shopify live search
       if (!targetProductId && skus.length > 0) {
         console.log(`[ProductSync:Delete] Mapping missing for SKUs ${skus.join(', ')}. Falling back to Shopify search.`);
         const found = await findTargetProductBySku(targetStore.shopDomain, skus[0]);
@@ -1204,7 +1322,7 @@ export async function processProductDelete(shopDomain: string, payload: any, web
         }
       }
 
-      // Step 3: Null-SKU fallback — look up by title in ProductCache
+      // 5. FALLBACK LOOKUP: Title
       if (!targetProductId && sourceTitle) {
         console.log(`[ProductSync:Delete] SKUs exhausted. Falling back to title lookup for "${sourceTitle}" in ${targetStore.shopDomain}.`);
         const titleMatch = await prisma.productCache.findFirst({
@@ -1232,6 +1350,11 @@ export async function processProductDelete(shopDomain: string, payload: any, web
           console.log(`[ProductSync:Delete] Cleaned up stale local records for "${sourceTitle}" in ${targetStore.shopDomain}.`);
         }
         continue;
+      }
+
+      // Ensure targetProductId has gid:// prefix for Shopify API
+      if (typeof targetProductId === 'string' && !targetProductId.startsWith('gid://')) {
+        targetProductId = `gid://shopify/Product/${targetProductId}`;
       }
 
       const client = await getAdminClient(targetStore.shopDomain);
@@ -1315,6 +1438,10 @@ export async function processProductDelete(shopDomain: string, payload: any, web
 
         // Only clean up local DB if Shopify confirmed the product is gone.
         if (shouldCleanupLocal) {
+          if (targetMappingId) {
+             await prisma.productMapping.delete({ where: { id: targetMappingId }});
+             console.log(`[ProductSync:Delete] Deleted target ProductMapping for ${targetStore.shopDomain}.`);
+          }
           await prisma.variantMap.deleteMany({
             where: {
               storeId: targetStore.id,

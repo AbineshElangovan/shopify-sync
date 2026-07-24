@@ -3,8 +3,7 @@ import { verifyWebhook } from "@/lib/shopify/webhooks";
 import { prisma } from "@/lib/db/prisma";
 import { processProductCreate, hasSyncLock, releaseSyncLock, updateLocalProductCache, withLock } from "@/services/product-sync";
 import { generateSkusForProductIfNeeded } from "@/services/sku";
-import { getOrCreateProductIdentity } from "@/services/product-identity";
-
+import { createMasterProductMapping } from "@/services/product-mapping";
 export async function POST(req: NextRequest) {
   try {
     const { topic, shop, webhookId, rawBody } = await verifyWebhook(req);
@@ -69,21 +68,43 @@ export async function POST(req: NextRequest) {
         // Only generate SKUs if they are STILL missing after fetching the latest data
         enrichedPayload = await generateSkusForProductIfNeeded(shop, enrichedPayload);
 
-        await updateLocalProductCache(shop, enrichedPayload);
-        await processProductCreate(shop, enrichedPayload, webhookId);
-        
-        // 1. Generate/Verify Product Unique ID for all variants
+        // 1. Generate Product Unique ID for all variants FIRST
         const storeRecord = await prisma.store.findUnique({ where: { shopDomain: shop } });
         if (storeRecord && enrichedPayload.variants) {
           for (const variant of enrichedPayload.variants) {
             const variantIdStr = variant.admin_graphql_api_id?.split('/').pop() || String(variant.id);
             const productIdStr = String(enrichedPayload.id);
-            const identity = await getOrCreateProductIdentity(storeRecord.id, productIdStr, variantIdStr);
-            if (!identity) {
-               throw new Error(`Failed to persist identity for variant ${variantIdStr}`);
+            const inventoryItemIdStr = variant.inventory_item_id ? String(variant.inventory_item_id) : null;
+            
+            // Check if mapping already exists (in case of retry)
+            const existingMapping = await prisma.productMapping.findUnique({
+               where: { storeId_shopifyVariantId: { storeId: storeRecord.id, shopifyVariantId: variantIdStr } }
+            });
+            
+            if (!existingMapping) {
+              const mapping = await createMasterProductMapping(
+                storeRecord.id, 
+                productIdStr, 
+                variantIdStr, 
+                variant.sku || null, 
+                inventoryItemIdStr
+              );
+              if (!mapping) {
+                 throw new Error(`Failed to persist mapping for variant ${variantIdStr}`);
+              }
+              
+              console.log(`\n======================================================`);
+              console.log(`🛍️  NEW PRODUCT ADDED ON MASTER STORE`);
+              console.log(`======================================================\n`);
+              console.log(`[Unique ID Generation]`);
+              console.log(`➡️  Generated Master Unique ID: ${mapping.productUniqueId}`);
+              console.log(`➡️  For Master Product: ${enrichedPayload.title} (SKU: ${variant.sku || 'N/A'})\n`);
             }
           }
         }
+
+        await updateLocalProductCache(shop, enrichedPayload);
+        await processProductCreate(shop, enrichedPayload, webhookId);
 
         console.log(`[Webhook:products/create] sync complete for ${shop}`);
       } catch (err: any) {

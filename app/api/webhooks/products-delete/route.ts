@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { verifyWebhook } from "@/lib/shopify/webhooks";
 import { prisma } from "@/lib/db/prisma";
 import { processProductDelete, hasSyncLock, releaseSyncLock } from "@/services/product-sync";
-import { archiveProductIdentity } from "@/services/product-identity";
+import { deleteMappingsForProduct } from "@/services/product-mapping";
 
 export async function POST(req: NextRequest) {
   try {
@@ -49,11 +49,11 @@ export async function POST(req: NextRequest) {
     try {
       await processProductDelete(shop, payload, webhookId);
       
-      // Archive the Identity
+      // Delete the Mapping
       if (store) {
-        const archived = await archiveProductIdentity(store.id, String(payload.id));
-        if (!archived) {
-          console.warn(`[Webhook:products/delete] Warning: Identity not found to archive for product ${payload.id}`);
+        const deleted = await deleteMappingsForProduct(store.id, String(payload.id));
+        if (!deleted) {
+          console.warn(`[Webhook:products/delete] Warning: Mapping not found to delete for product ${payload.id}`);
         }
       }
 

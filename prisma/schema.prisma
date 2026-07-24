@@ -34,7 +34,7 @@ model Store {
   sourceConnections StoreConnection[] @relation("SourceConnections")
   targetConnections StoreConnection[] @relation("TargetConnections")
   storeSettings     StoreSetting?
-  productUniqueIdentities ProductUniqueIdentity[]
+  productMappings   ProductMapping[]
 
   @@map("stores")
 }
@@ -187,18 +187,21 @@ model StoreSetting {
 }
 
 model ProductMapping {
-  id              String   @id @default(uuid())
-  sourceStoreId   String
-  targetStoreId   String
-  sourceProductId String
-  targetProductId String
-  sourceVariantId String?
-  targetVariantId String?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id                 String   @id @default(cuid())
+  productUniqueId    String
+  storeId            String
+  storeName          String?
+  shopifyProductId   String
+  shopifyVariantId   String
+  inventoryItemId    String?
+  sku                String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 
-  @@unique([sourceStoreId, targetStoreId, sourceProductId])
-  @@index([sourceStoreId, targetStoreId])
+  store              Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@unique([storeId, shopifyVariantId])
+  @@index([productUniqueId])
   @@map("product_mappings")
 }
 
@@ -207,21 +210,4 @@ model ProductUniqueIdSequence {
   currentSequence Int    @default(1)
   
   @@map("product_unique_id_sequence")
-}
-
-model ProductUniqueIdentity {
-  id               String   @id @default(uuid())
-  uniqueId         String   @unique
-  storeId          String
-  shopifyProductId String
-  shopifyVariantId String
-  isArchived       Boolean  @default(false)
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
-
-  store            Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
-
-  @@unique([storeId, shopifyVariantId])
-  @@index([uniqueId])
-  @@map("product_unique_identities")
 }
