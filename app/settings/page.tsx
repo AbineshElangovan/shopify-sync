@@ -451,7 +451,7 @@ export default function SettingsPage() {
                 descColor="#15803d"
               >
                 <div style={{ padding: '8px 0' }}>
-                  <Button variant="primary" onClick={() => router.push('/settings/sku')}>
+                  <Button variant="primary" onClick={() => router.push(`/settings/sku${window.location.search}`)}>
                     Configure SKU Generation
                   </Button>
                 </div>

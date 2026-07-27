@@ -35,6 +35,8 @@ model Store {
   targetConnections StoreConnection[] @relation("TargetConnections")
   storeSettings     StoreSetting?
   productMappings   ProductMapping[]
+  productBaseSkus   ProductBaseSku[]
+  variantBaseSkus   VariantBaseSku[]
 
   @@map("stores")
 }
@@ -211,3 +213,31 @@ model ProductUniqueIdSequence {
   
   @@map("product_unique_id_sequence")
 }
+
+model ProductBaseSku {
+  id                String   @id @default(uuid())
+  shopifyProductId  String
+  storeId           String
+  baseSequence      Int
+  createdAt         DateTime @default(now())
+
+  store             Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@unique([storeId, shopifyProductId])
+  @@map("product_base_skus")
+}
+
+
+model VariantBaseSku {
+  id                String   @id @default(uuid())
+  shopifyVariantId  String
+  storeId           String
+  baseSequence      Int
+  createdAt         DateTime @default(now())
+
+  store             Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@unique([storeId, shopifyVariantId])
+  @@map("variant_base_skus")
+}
+

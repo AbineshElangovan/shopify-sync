@@ -153,6 +153,8 @@ export async function syncStoreProducts(shopDomain: string) {
         0,
       );
 
+      const productImageUrl = product.images?.edges?.[0]?.node?.url || null;
+
       console.log(`[SyncService] Creating ProductCache for SKU: ${variant.sku}, Variant ID: ${variant.id}, Qty: ${inventoryQuantity}`);
       const cacheRecord = await prisma.productCache.create({
         data: {
@@ -161,7 +163,7 @@ export async function syncStoreProducts(shopDomain: string) {
           shopifyVariantId: variant.id,
           sku: variant.sku?.trim() || null,
           title: `${product.title}${variant.title && variant.title !== 'Default Title' ? ` - ${variant.title}` : ''}`,
-          imageUrl: null,
+          imageUrl: productImageUrl,
           inventoryQuantity,
           price: parseFloat(variant.price || "0"),
         },

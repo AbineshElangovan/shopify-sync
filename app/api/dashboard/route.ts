@@ -41,10 +41,32 @@ export async function GET(req: NextRequest) {
     }
 
     // Current store metrics
-    const currentStoreProducts = productCaches.filter((p: any) => p.storeId === store.id);
-    const totalProducts = currentStoreProducts.length;
+    const rawCurrentStoreProducts = productCaches.filter((p: any) => p.storeId === store.id);
+    
+    // Clean up stale parent products (default variants) if real variants exist
+    const productsByParent = new Map();
+    for (const p of rawCurrentStoreProducts) {
+      if (!productsByParent.has(p.shopifyProductId)) {
+        productsByParent.set(p.shopifyProductId, []);
+      }
+      productsByParent.get(p.shopifyProductId).push(p);
+    }
+
+    const currentStoreProducts: any[] = [];
+    for (const p of rawCurrentStoreProducts) {
+      const siblings = productsByParent.get(p.shopifyProductId);
+      // If there are multiple variants for this product, and this row's title doesn't contain ' - ', it's the stale parent
+      if (siblings.length > 1 && !p.title.includes(' - ')) {
+        continue;
+      }
+      currentStoreProducts.push(p);
+    }
+
+    const totalProducts = new Set(currentStoreProducts.map((p: any) => p.shopifyProductId)).size;
     const totalInventory = currentStoreProducts.reduce((a: any, p: any) => a + p.inventoryQuantity, 0);
-    const activeProducts = currentStoreProducts.filter((p: any) => p.inventoryQuantity > 0).length;
+    const activeProducts = new Set(
+      currentStoreProducts.filter((p: any) => p.inventoryQuantity > 0).map((p: any) => p.shopifyProductId)
+    ).size;
     const lowStockCount = currentStoreProducts.filter((p: any) => p.inventoryQuantity <= store.lowStockThreshold).length;
 
     const stats = { totalProducts, totalInventory, activeProducts, lowStock: lowStockCount, lastUpdated };
@@ -56,16 +78,17 @@ export async function GET(req: NextRequest) {
         shopDomain: s.shopDomain,
         label: s.label || s.shopDomain,
         isActive: s.isActive,
-        productCount: storeSpecificProducts.length,
+        productCount: new Set(storeSpecificProducts.map((p: any) => p.shopifyProductId)).size,
         inventoryTotal: storeSpecificProducts.reduce((acc: any, p: any) => acc + p.inventoryQuantity, 0),
         salesValue: storeSpecificProducts.reduce((acc: any, p: any) => acc + (p.price * p.inventoryQuantity), 0),
-        activeProductCount: storeSpecificProducts.filter((p: any) => p.inventoryQuantity > 0).length,
+        activeProductCount: new Set(
+          storeSpecificProducts.filter((p: any) => p.inventoryQuantity > 0).map((p: any) => p.shopifyProductId)
+        ).size,
       };
     });
 
     const failedSyncs = totalSyncs - successSyncs;
     const syncStats = { totalSyncs, successSyncs, failedSyncs };
-
 
     // Filter low stock using current store's threshold settings
     const lowStockProducts = currentStoreProducts

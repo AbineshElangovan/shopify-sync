@@ -104,6 +104,13 @@ export const GET_PRODUCTS_SYNC_QUERY = `
           id
           title
           handle
+          images(first: 1) {
+            edges {
+              node {
+                url
+              }
+            }
+          }
           variants(first: 10) {
             edges {
               node {

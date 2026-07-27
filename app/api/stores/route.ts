@@ -31,7 +31,6 @@ export async function GET(req: NextRequest) {
       include: {
         _count: {
           select: {
-            productCaches: true,
             variantMaps: true,
             sourceLogs: true,
           },
@@ -39,21 +38,31 @@ export async function GET(req: NextRequest) {
       },
     });
 
-    const enrichedStores = stores.map((s: any) => ({
-      id: s.id,
-      shopDomain: s.shopDomain,
-      label: s.label,
-      masterLabel: s.masterLabel,
-      isMaster: s.isMaster,
-      isActive: s.isActive && hasValidShopifyAccessToken(s.accessToken),
-      scope: s.scope,
-      productCount: s._count.productCaches,
-      variantCount: s._count.variantMaps,
-      syncCount: s._count.sourceLogs,
-      priceAdjustmentValue: s.priceAdjustmentValue,
-      priceAdjustmentType: s.priceAdjustmentType,
-      isPriceAdjustmentEnabled: s.isPriceAdjustmentEnabled,
-    }));
+    const productCaches = await prisma.productCache.findMany({
+      where: { storeId: { in: visibleStoreIds } },
+      select: { storeId: true, shopifyProductId: true }
+    });
+
+    const enrichedStores = stores.map((s: any) => {
+      const storeProducts = productCaches.filter((p: any) => p.storeId === s.id);
+      const uniqueProductCount = new Set(storeProducts.map((p: any) => p.shopifyProductId)).size;
+
+      return {
+        id: s.id,
+        shopDomain: s.shopDomain,
+        label: s.label,
+        masterLabel: s.masterLabel,
+        isMaster: s.isMaster,
+        isActive: s.isActive && hasValidShopifyAccessToken(s.accessToken),
+        scope: s.scope,
+        productCount: uniqueProductCount,
+        variantCount: s._count.variantMaps,
+        syncCount: s._count.sourceLogs,
+        priceAdjustmentValue: s.priceAdjustmentValue,
+        priceAdjustmentType: s.priceAdjustmentType,
+        isPriceAdjustmentEnabled: s.isPriceAdjustmentEnabled,
+      };
+    });
 
     return NextResponse.json({
       success: true,

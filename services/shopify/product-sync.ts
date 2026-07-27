@@ -296,6 +296,18 @@ export async function updateLocalProductCache(shopDomain: string, payload: any, 
     }
 
     if (variants.length > 0) {
+      const staleCaches = await prisma.productCache.findMany({
+        where: {
+          storeId: store.id,
+          shopifyProductId,
+          shopifyVariantId: { notIn: syncedVariantIds },
+        },
+        select: { id: true }
+      });
+      for (const sc of staleCaches) {
+        await prisma.collectionProduct.deleteMany({ where: { productCacheId: sc.id } });
+      }
+
       await prisma.productCache.deleteMany({
         where: {
           storeId: store.id,
@@ -411,6 +423,41 @@ export async function processProductCreate(shopDomain: string, payload: any, web
       },
     });
 
+    // --- FETCH ACTUAL COLLECTIONS AND CATEGORY FROM MASTER STORE ---
+    let actualMasterCollections: string[] = [];
+    try {
+      const sourceClient = await getAdminClient(shopDomain);
+      const masterProductId = payload.admin_graphql_api_id || `gid://shopify/Product/${payload.id}`;
+      const sourceProductResponse: any = await sourceClient.request(`
+        query getProductCollections($id: ID!) {
+          product(id: $id) {
+            category {
+              id
+            }
+            collections(first: 20) {
+              edges {
+                node {
+                  title
+                }
+              }
+            }
+          }
+        }
+      `, { variables: { id: masterProductId } });
+      
+      const edges = sourceProductResponse?.data?.product?.collections?.edges || [];
+      actualMasterCollections = edges.map((e: any) => e.node.title);
+      payload.category_id = sourceProductResponse?.data?.product?.category?.id || null;
+    } catch (err) {
+      console.error(`[ProductSync] Failed to fetch master collections for ${payload.id}:`, err);
+    }
+
+    const tagsFromPayload = payload.tags ? payload.tags.split(',').map((t: string) => t.trim()) : [];
+    const combinedTagsAndCollections = Array.from(new Set([...tagsFromPayload, ...actualMasterCollections])).join(',');
+    
+    // Override payload.tags so everything downstream uses the true combined collections list
+    payload.tags = combinedTagsAndCollections;
+
     for (const targetStore of targetStores) {
       if (!targetStore.autoSyncEnabled) continue;
 
@@ -515,6 +562,10 @@ export async function processProductCreate(shopDomain: string, payload: any, web
         productType: payload.product_type || "",
         status: payload.status ? payload.status.toUpperCase() : "ACTIVE",
       };
+
+      if (payload.category_id) {
+        productInput.category = payload.category_id;
+      }
 
       if (payload.options && payload.options.length > 0) {
         productInput.productOptions = payload.options.map((opt: any) => ({
@@ -631,6 +682,7 @@ export async function processProductCreate(shopDomain: string, payload: any, web
               shopifyProductId: createdProduct.id,
               price: parseFloat(variant.price || "0"),
               imageUrl,
+              tags: payload.tags || null,
             },
             create: {
               storeId: targetStore.id,
@@ -641,6 +693,7 @@ export async function processProductCreate(shopDomain: string, payload: any, web
               inventoryQuantity: initialQuantity,
               price: parseFloat(variant.price || "0"),
               imageUrl,
+              tags: payload.tags || null,
             },
           });
 
@@ -754,6 +807,41 @@ export async function processProductUpdate(shopDomain: string, payload: any, web
         isActive: true
       },
     });
+
+    // --- FETCH ACTUAL COLLECTIONS AND CATEGORY FROM MASTER STORE ---
+    let actualMasterCollections: string[] = [];
+    try {
+      const sourceClient = await getAdminClient(shopDomain);
+      const masterProductId = payload.admin_graphql_api_id || `gid://shopify/Product/${payload.id}`;
+      const sourceProductResponse: any = await sourceClient.request(`
+        query getProductCollections($id: ID!) {
+          product(id: $id) {
+            category {
+              id
+            }
+            collections(first: 20) {
+              edges {
+                node {
+                  title
+                }
+              }
+            }
+          }
+        }
+      `, { variables: { id: masterProductId } });
+      
+      const edges = sourceProductResponse?.data?.product?.collections?.edges || [];
+      actualMasterCollections = edges.map((e: any) => e.node.title);
+      payload.category_id = sourceProductResponse?.data?.product?.category?.id || null;
+    } catch (err) {
+      console.error(`[ProductSync] Failed to fetch master collections for ${payload.id}:`, err);
+    }
+
+    const tagsFromPayload = payload.tags ? payload.tags.split(',').map((t: string) => t.trim()) : [];
+    const combinedTagsAndCollections = Array.from(new Set([...tagsFromPayload, ...actualMasterCollections])).join(',');
+    
+    // Override payload.tags so everything downstream uses the true combined collections list
+    payload.tags = combinedTagsAndCollections;
 
     for (const targetStore of targetStores) {
       if (!targetStore.autoSyncEnabled) continue;
@@ -987,6 +1075,10 @@ export async function processProductUpdate(shopDomain: string, payload: any, web
         variants: variantsInput,
       };
 
+      if (payload.category_id) {
+        productInput.category = payload.category_id;
+      }
+
       if (payload.options && payload.options.length > 0) {
         productInput.productOptions = payload.options.map((opt: any) => ({
           name: opt.name,
@@ -1166,6 +1258,7 @@ export async function processProductUpdate(shopDomain: string, payload: any, web
               title: `${updatedProduct.title}${variant.title && variant.title !== 'Default Title' ? ` - ${variant.title}` : ''}`,
               price: parseFloat(variant.price || "0"),
               imageUrl,
+              tags: payload.tags || null,
             },
             create: {
               storeId: targetStore.id,
@@ -1176,6 +1269,7 @@ export async function processProductUpdate(shopDomain: string, payload: any, web
               inventoryQuantity,
               price: parseFloat(variant.price || "0"),
               imageUrl,
+              tags: payload.tags || null,
             },
           });
 
@@ -1263,7 +1357,7 @@ export async function processProductDelete(shopDomain: string, payload: any, web
       where: { shopDomain: { not: shopDomain }, isActive: true },
     });
 
-    const masterProductIdStr = String(payload.id);
+    const masterProductIdStr = `gid://shopify/Product/${payload.id}`;
     const masterMapping = await prisma.productMapping.findFirst({
       where: { storeId: sourceStore.id, shopifyProductId: masterProductIdStr }
     });

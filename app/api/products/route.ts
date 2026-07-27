@@ -23,7 +23,8 @@ export async function GET(req: NextRequest) {
       }
     });
 
-    const totalProducts = products.length;
+    const uniqueProducts = new Set(products.map(p => p.shopifyProductId)).size;
+    const totalProducts = uniqueProducts;
     const totalInventory = products.reduce((sum, p) => sum + p.inventoryQuantity, 0);
     const activeProducts = products.filter((p) => p.inventoryQuantity > 0).length;
     const lowStock = products.filter((p) => p.inventoryQuantity <= store.lowStockThreshold).length;
@@ -113,7 +114,7 @@ export async function GET(req: NextRequest) {
         updatedTime: p.updatedAt.toLocaleTimeString('en-US'),
       };
 
-      let categoryTitles: string[] = [];
+      let rawCategories: string[] = [];
       
       const TAG_MAP: Record<string, string> = {
         'inner': 'INNERS',
@@ -128,26 +129,31 @@ export async function GET(req: NextRequest) {
       };
       
       if (p.collections && p.collections.length > 0) {
-        categoryTitles = categoryTitles.concat(p.collections.map(cp => cp.collection.title));
+        rawCategories = rawCategories.concat(p.collections.map(cp => cp.collection.title));
       }
       if (p.sku && skuCategories[p.sku] && skuCategories[p.sku].length > 0) {
-        categoryTitles = categoryTitles.concat(skuCategories[p.sku]);
+        rawCategories = rawCategories.concat(skuCategories[p.sku]);
       }
       if (p.tags) {
-        const tagList = p.tags.split(',').map((t: string) => t.trim().toUpperCase()).filter(Boolean);
+        const tagList = p.tags.split(',').map((t: string) => t.trim()).filter(Boolean);
+        rawCategories = rawCategories.concat(tagList);
+      }
+      
+      let categoryTitles: string[] = [];
+      const existingUpperCategories: string[] = [];
+      
+      for (let rawCat of rawCategories) {
+        const lowerCat = rawCat.toLowerCase();
+        let finalCat = TAG_MAP[lowerCat] ? TAG_MAP[lowerCat] : rawCat.toUpperCase();
         
-        // Deduplicate tags that match existing collections case-insensitively
-        const existingUpperCategories = categoryTitles.map(c => c.toUpperCase());
-        for (const tag of tagList) {
-          if (!existingUpperCategories.includes(tag)) {
-            categoryTitles.push(tag);
-            existingUpperCategories.push(tag); // Prevent duplicates within tags themselves
-          }
+        if (!existingUpperCategories.includes(finalCat)) {
+          categoryTitles.push(finalCat);
+          existingUpperCategories.push(finalCat);
         }
       }
       
       if (categoryTitles.length === 0) {
-        categoryTitles = ['Uncategorized'];
+        categoryTitles = ['UNCATEGORIZED'];
       }
 
         // Deduplicate category titles to prevent pushing the same item multiple times

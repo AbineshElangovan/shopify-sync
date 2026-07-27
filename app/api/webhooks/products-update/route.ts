@@ -72,6 +72,10 @@ export async function POST(req: NextRequest) {
           currentPayload = latestPayload;
         }
 
+        // Run the SKU generator to detect any variant option changes and regenerate SKUs if needed
+        const { generateSkusForProductIfNeeded } = require('@/services/sku/generator');
+        currentPayload = await generateSkusForProductIfNeeded(shop, currentPayload);
+
         await updateLocalProductCache(shop, currentPayload, topic);
         await processProductUpdate(shop, currentPayload, webhookId);
         
