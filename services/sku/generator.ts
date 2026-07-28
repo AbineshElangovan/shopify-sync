@@ -49,10 +49,18 @@ export async function generateSkusForProductIfNeeded(shopDomain: string, payload
     }
 
     const paddedSequence = variantBase.baseSequence.toString().padStart(4, '0');
-    const baseSku = `STB-${prefix}-${paddedSequence}`;
+    
+    let optionsStr = "";
+    if (variant.title && variant.title !== 'Default Title') {
+      optionsStr = "-" + variant.title.toUpperCase().replace(/[\s\/]+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+    } else {
+      const opts = [variant.option1, variant.option2, variant.option3].filter(Boolean);
+      if (opts.length > 0 && opts[0] !== 'Default Title') {
+        optionsStr = "-" + opts.map((o: any) => o.toString().toUpperCase().replace(/[\s\/]+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '')).join('-');
+      }
+    }
 
-    // Do not append variant options; use the exact base SKU so it acts like a Unique ID
-    const expectedSku = baseSku;
+    const expectedSku = `${prefix}-${paddedSequence}${optionsStr}`;
 
     // Detect if the variant's SKU needs to be generated or regenerated
     if (variant.sku !== expectedSku) {

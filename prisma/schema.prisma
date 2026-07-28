@@ -241,3 +241,27 @@ model VariantBaseSku {
   @@map("variant_base_skus")
 }
 
+enum WebhookStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+model WebhookQueue {
+  id          String        @id @default(uuid())
+  webhookId   String        @unique // From X-Shopify-Webhook-Id to prevent duplicates
+  topic       String
+  shopDomain  String
+  apiVersion  String?
+  payload     Json
+  status      WebhookStatus @default(PENDING)
+  attempts    Int           @default(0)
+  error       String?       @db.Text
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@index([status, createdAt])
+  @@index([shopDomain, topic])
+  @@map("webhook_queue")
+}

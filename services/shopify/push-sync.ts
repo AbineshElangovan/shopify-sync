@@ -3,6 +3,7 @@ import { getAdminClient } from "@/lib/shopify/admin";
 import { GET_PRODUCTS_QUERY } from "./graphql";
 import { fetchLatestShopifyProduct } from "./product-fetcher";
 import { processProductCreate } from "./product-sync";
+import { cleanupOrphanedProducts } from "./sync/cleanup";
 
 export async function pushProductsToDestinations(sourceStoreId: string, targetStoreIds: string[]) {
   console.log(`[PushSync] Starting push sync from source: ${sourceStoreId} to targets:`, targetStoreIds);
@@ -18,6 +19,15 @@ export async function pushProductsToDestinations(sourceStoreId: string, targetSt
 
   const sourceClient = await getAdminClient(sourceStore.shopDomain);
   
+  // 0. Garbage Collection: Self-Healing Cleanup for all involved stores
+  console.log(`[PushSync] Running pre-sync Garbage Collection for source store...`);
+  await cleanupOrphanedProducts(sourceStore.id);
+  
+  for (const targetStore of targetStores) {
+    console.log(`[PushSync] Running pre-sync Garbage Collection for target store ${targetStore.shopDomain}...`);
+    await cleanupOrphanedProducts(targetStore.id);
+  }
+
   // 1. Fetch Source Products
   let hasNextPage = true;
   let cursor: string | null = null;
