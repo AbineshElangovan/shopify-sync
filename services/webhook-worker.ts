@@ -42,7 +42,7 @@ export async function processWebhookQueue() {
       // 2. Lock the job (Transaction to prevent double processing)
       // We update it to PROCESSING. If another worker already took it, this will fail or return 0 records.
       try {
-        const lockedJob = await prisma.webhookQueue.update({
+        const result = await prisma.webhookQueue.updateMany({
           where: { 
             id: job.id, 
             status: WebhookStatus.PENDING 
@@ -53,12 +53,11 @@ export async function processWebhookQueue() {
           }
         });
 
-        if (!lockedJob) {
+        if (result.count === 0) {
           console.log(`[WebhookWorker] Job ${job.id} already picked up by another worker. Skipping.`);
           continue;
         }
       } catch (lockError) {
-         // Prisma throws if the record with PENDING status is not found (meaning it was updated by another worker)
          console.log(`[WebhookWorker] Could not lock job ${job.id}. Skipping.`);
          continue;
       }
@@ -256,13 +255,31 @@ async function handleProductsUpdate(shop: string, payload: any, webhookId: strin
 }
 
 async function handleProductsDelete(shop: string, payload: any, webhookId: string) {
-  // Guard: Only allow synchronization from the Master Store
   const store = await prisma.store.findUnique({
     where: { shopDomain: shop },
   });
 
+  if (!store) return;
+
   if (!(store as any)?.isMaster) {
-    console.log(`[Worker:products/delete] Ignored event from Sub Store: ${shop}`);
+    console.log(`[Worker:products/delete] Ignored sync propagation from Sub Store, but cleaning up local cache: ${shop}`);
+    const deletedGid = `gid://shopify/Product/${payload.id}`;
+    
+    await prisma.variantMap.deleteMany({
+      where: { storeId: store.id, shopifyProductId: deletedGid },
+    });
+
+    const caches = await prisma.productCache.findMany({
+      where: { storeId: store.id, shopifyProductId: deletedGid },
+      select: { id: true }
+    });
+    for (const c of caches) {
+      await prisma.collectionProduct.deleteMany({ where: { productCacheId: c.id } });
+    }
+
+    await prisma.productCache.deleteMany({
+      where: { storeId: store.id, shopifyProductId: deletedGid },
+    });
     return;
   }
 

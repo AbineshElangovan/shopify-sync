@@ -4,9 +4,21 @@ export async function generateSkusForProductIfNeeded(shopDomain: string, payload
   const store = await prisma.store.findUnique({ where: { shopDomain } });
   if (!store) return payload;
 
-  const setting = await prisma.storeSetting.findUnique({ where: { storeId: store.id } });
-  if (!setting || !setting.isSkuGenerationEnabled) {
-    return payload; // SKU generation is disabled or not configured
+  let setting = await prisma.storeSetting.findUnique({ where: { storeId: store.id } });
+
+  if (!setting) {
+    setting = await prisma.storeSetting.create({
+      data: {
+        storeId: store.id,
+        skuPrefix: "SKU",
+        skuSequence: 1,
+        isSkuGenerationEnabled: true,
+      }
+    });
+  }
+
+  if (!setting.isSkuGenerationEnabled) {
+    return payload;
   }
 
   const prefix = setting.skuPrefix || "SKU";
@@ -20,7 +32,6 @@ export async function generateSkusForProductIfNeeded(shopDomain: string, payload
       ? variant.admin_graphql_api_id.replace('gid://shopify/ProductVariant/', '')
       : variant.id.toString();
 
-    // Retrieve or create the Variant Base SKU
     let variantBase = await prisma.variantBaseSku.findUnique({
       where: {
         storeId_shopifyVariantId: {
@@ -29,6 +40,12 @@ export async function generateSkusForProductIfNeeded(shopDomain: string, payload
         }
       }
     });
+
+    // If it doesn't have a variant base in this store, but ALREADY has a valid SKU, 
+    // it was likely synced from a previous master store. We should keep the existing SKU.
+    if (!variantBase && variant.sku && variant.sku !== "N/A" && variant.sku.trim() !== "") {
+      continue;
+    }
 
     if (!variantBase) {
       // Increment global sequence for this new variant exactly once
@@ -49,7 +66,7 @@ export async function generateSkusForProductIfNeeded(shopDomain: string, payload
     }
 
     const paddedSequence = variantBase.baseSequence.toString().padStart(4, '0');
-    
+
     let optionsStr = "";
     if (variant.title && variant.title !== 'Default Title') {
       optionsStr = "-" + variant.title.toUpperCase().replace(/[\s\/]+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');

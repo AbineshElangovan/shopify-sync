@@ -23,6 +23,8 @@ export const sessionStorage = {
           locale: user?.locale || null,
           collaborator: user?.collaborator || null,
           emailVerified: user?.email_verified || null,
+          refreshToken: session.refreshToken || null,
+          refreshTokenExpires: session.refreshTokenExpires || null,
         },
         create: {
           id: session.id,
@@ -40,6 +42,8 @@ export const sessionStorage = {
           locale: user?.locale || null,
           collaborator: user?.collaborator || null,
           emailVerified: user?.email_verified || null,
+          refreshToken: session.refreshToken || null,
+          refreshTokenExpires: session.refreshTokenExpires || null,
         },
       });
       return true;
@@ -79,6 +83,8 @@ export const sessionStorage = {
         scope: dbSession.scope || undefined,
         expires: dbSession.expires || undefined,
         accessToken: dbSession.accessToken,
+        refreshToken: dbSession.refreshToken || undefined,
+        refreshTokenExpires: dbSession.refreshTokenExpires || undefined,
         onlineAccessInfo,
       });
       return session;
@@ -142,6 +148,8 @@ export const sessionStorage = {
             scope: dbSession.scope || undefined,
             expires: dbSession.expires || undefined,
             accessToken: dbSession.accessToken,
+            refreshToken: dbSession.refreshToken || undefined,
+            refreshTokenExpires: dbSession.refreshTokenExpires || undefined,
             onlineAccessInfo,
           });
         }

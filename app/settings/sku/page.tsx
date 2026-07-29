@@ -9,6 +9,7 @@ export default function SkuSettingsPage() {
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [isMaster, setIsMaster] = useState(true);
   const [toastMessage, setToastMessage] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [inlineError, setInlineError] = useState<string | null>(null);
 
@@ -27,6 +28,7 @@ export default function SkuSettingsPage() {
         // Ensure sequence displays nicely as 4 digits minimum
         const seq = data.setting.skuSequence || 1;
         setSkuSequence(seq.toString().padStart(4, '0'));
+        setIsMaster(data.isMaster !== false);
       }
     } catch (err) {
       console.error(err);
@@ -84,6 +86,12 @@ export default function SkuSettingsPage() {
         </div>
       )}
 
+      {!isMaster && (
+        <div className="mb-6 p-4 rounded-md font-medium shadow-sm border bg-yellow-50 text-yellow-800 border-yellow-200">
+          ⚠ Only the Master Store can configure SKU settings. These settings are read-only for this store.
+        </div>
+      )}
+
       <Layout>
         <Layout.Section>
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
@@ -106,6 +114,7 @@ export default function SkuSettingsPage() {
                   value={skuPrefix}
                   onChange={(val) => setSkuPrefix(val.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10))}
                   autoComplete="off"
+                  disabled={!isMaster}
                 />
               </Box>
 
@@ -116,6 +125,7 @@ export default function SkuSettingsPage() {
                   onChange={(val) => setSkuSequence(val.replace(/[^0-9]/g, '').slice(0, 6))}
                   autoComplete="off"
                   error={inlineError || undefined}
+                  disabled={!isMaster}
                 />
               </Box>
 
@@ -124,7 +134,7 @@ export default function SkuSettingsPage() {
               </div>
 
               <div className="mt-4 pt-4 border-t border-gray-100 flex justify-end">
-                <Button variant="primary" onClick={handleSave} loading={saving}>
+                <Button variant="primary" onClick={handleSave} loading={saving} disabled={!isMaster}>
                   Save
                 </Button>
               </div>

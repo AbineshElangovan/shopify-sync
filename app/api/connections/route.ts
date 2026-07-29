@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { authenticate, handleApiError } from "@/lib/shopify/authenticate";
 import { prisma } from "@/lib/db/prisma";
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(req: NextRequest) {
   try {
     const { store } = await authenticate(req);
@@ -12,11 +14,24 @@ export async function GET(req: NextRequest) {
       include: { targetStore: true }
     });
 
-    // Fetch incoming connections
+    // Fetch incoming connections (the master store)
     const incoming = await prisma.storeConnection.findMany({
       where: { targetStoreId: store.id },
       include: { sourceStore: true }
     });
+    
+    // Fetch sibling connections (other sub-stores connected to our master)
+    const masterStoreIds = incoming.map(c => c.sourceStoreId);
+    let siblings: any[] = [];
+    if (masterStoreIds.length > 0) {
+      siblings = await prisma.storeConnection.findMany({
+        where: { 
+          sourceStoreId: { in: masterStoreIds },
+          targetStoreId: { not: store.id } // Exclude ourselves
+        },
+        include: { targetStore: true }
+      });
+    }
 
     // Map them into a unified list for the frontend
     const connections = [
@@ -28,6 +43,7 @@ export async function GET(req: NextRequest) {
           shopDomain: c.targetStore.shopDomain,
           label: c.targetStore.label,
           uniqueStoreId: c.targetStore.uniqueStoreId,
+          isActive: c.targetStore.isActive,
         }
       })),
       ...incoming.map(c => ({
@@ -38,6 +54,18 @@ export async function GET(req: NextRequest) {
           shopDomain: c.sourceStore.shopDomain,
           label: c.sourceStore.label,
           uniqueStoreId: c.sourceStore.uniqueStoreId,
+          isActive: c.sourceStore.isActive,
+        }
+      })),
+      ...siblings.map(c => ({
+        targetStoreId: c.targetStoreId,
+        direction: 'sibling',
+        targetStore: {
+          id: c.targetStore.id,
+          shopDomain: c.targetStore.shopDomain,
+          label: c.targetStore.label,
+          uniqueStoreId: c.targetStore.uniqueStoreId,
+          isActive: c.targetStore.isActive,
         }
       }))
     ];

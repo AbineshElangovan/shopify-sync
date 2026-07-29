@@ -32,7 +32,7 @@ api_version = "2026-10"
   uri = "/api/webhooks/inventory-levels-update"
 [access_scopes]
 # Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
-scopes = "read_inventory,read_products,read_publications,write_inventory,write_products,write_publications"
+scopes = "read_inventory,read_products,read_publications,write_inventory,write_products,write_publications,read_locations"
 
 [auth]
 redirect_urls = [ "https://dz50mdfc-3000.inc1.devtunnels.ms/api/auth/callback" ]

@@ -108,20 +108,27 @@ export default function SyncPage() {
           headerColor="#7c3aed"
           columns={[
             { title: 'Date', key: 'date' },
+            { title: 'Type', key: 'type' },
             { title: 'SKU', key: 'sku' },
-            { title: 'Source Store', key: 'source' },
-            { title: 'Target Store', key: 'target' },
-            { title: 'Quantity', key: 'quantity' },
-            { title: 'Status', key: 'status', type: 'status', badgeRules: { 'SUCCESS': 'success', 'FAILED': 'critical', 'PENDING': 'warning' } }
+            { title: 'Source', key: 'source' },
+            { title: 'Target', key: 'target' },
+            { title: 'Duration (ms)', key: 'duration' },
+            { title: 'Retries', key: 'retries' },
+            { title: 'Status', key: 'status', type: 'status', badgeRules: { 'SUCCESS': 'success', 'FAILED': 'critical', 'PENDING': 'warning', 'RETRYING': 'warning' } }
           ]}
           items={(data?.logs || []).map((log: any) => ({
             id: log.id,
             date: new Date(log.createdAt).toLocaleString(),
-            sku: log.sku,
+            type: log.syncType || 'UNKNOWN',
+            sku: log.sku || '-',
             source: log.sourceStore?.label || log.sourceStore?.shopDomain || 'Unknown',
             target: log.destinationStore?.label || log.destinationStore?.shopDomain || 'Unknown',
-            quantity: `${log.previousQuantity} → ${log.updatedQuantity}`,
-            status: log.status
+            duration: log.durationMs ? `${log.durationMs}ms` : '-',
+            retries: log.retryCount > 0 ? log.retryCount : '-',
+            status: log.status === 'SUCCESS' && log.retryCount > 0 
+                    ? `SUCCESS (after ${log.retryCount} retries)`
+                    : log.status,
+            _subtitle: log.errorMessage ? `Error: [${log.errorCode || 'ERR'}] ${log.errorMessage}` : (log.requestId ? `Request ID: ${log.requestId}` : undefined)
           }))}
           emptyState={
             <EmptyState 

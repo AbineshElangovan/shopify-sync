@@ -100,7 +100,8 @@ export async function handleAuthCallback(req: NextRequest) {
   console.log("[OAuthCallback] Validating auth callback...");
   const callbackResponse = await shopify.auth.callback({
     rawRequest: cleanRequest,
-  });
+    expiring: true,
+  } as any);
   console.log("[OAuthCallback] OAuth validation succeeded.");
 
   const { session, headers } = callbackResponse;

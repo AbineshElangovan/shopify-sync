@@ -127,10 +127,19 @@ export async function syncStoreProducts(shopDomain: string) {
 
   const client = new shopify.clients.Graphql({ session });
 
-  const response = await client.request(GET_PRODUCTS_SYNC_QUERY, { variables: { first: 250 } });
-
-  const products = response?.data?.products?.edges ?? [];
-  console.log(`[SyncService] Fetched ${products.length} products to sync.`);
+  let products = [];
+  try {
+    const response = await client.request(GET_PRODUCTS_SYNC_QUERY, { variables: { first: 250 } });
+    products = response?.data?.products?.edges ?? [];
+    console.log(`[SyncService] Fetched ${products.length} products to sync.`);
+  } catch (error: any) {
+    if (error.message?.includes('Forbidden')) {
+      console.log(`[SyncService] 403 Forbidden for ${shopDomain}. Disabling store.`);
+      await prisma.store.update({ where: { id: store.id }, data: { isActive: false } });
+      return { syncedProducts: 0, syncedVariants: 0, error: 'Store token forbidden' };
+    }
+    throw error;
+  }
 
   await prisma.collection.deleteMany({ where: { storeId: store.id } });
   await prisma.variantMap.deleteMany({ where: { storeId: store.id } });

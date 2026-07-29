@@ -502,9 +502,30 @@ export default function SettingsPage() {
 
                   <div style={{ marginTop: '8px' }}>
                     <InlineStack gap="300" align="space-between">
-                      <Button variant="primary" loading={saving} onClick={handleSave}>
-                        Save
-                      </Button>
+                      <InlineStack gap="300">
+                        <Button variant="primary" loading={saving} onClick={handleSave}>
+                          Save
+                        </Button>
+                        <Button 
+                          onClick={async () => {
+                            setSaving(true);
+                            try {
+                              const res = await shopifyFetch('/api/admin/force-sync');
+                              if (res.ok) {
+                                setToastMessage({ message: '✅ Sync forced successfully.', type: 'success' });
+                              } else {
+                                setToastMessage({ message: '❌ Failed to force sync.', type: 'error' });
+                              }
+                            } catch (e) {
+                              setToastMessage({ message: '❌ Failed to force sync.', type: 'error' });
+                            } finally {
+                              setSaving(false);
+                            }
+                          }}
+                        >
+                          Force Sync
+                        </Button>
+                      </InlineStack>
                       {saveSuccess && (
                         <span style={{ color: '#16a34a', fontSize: '13px', fontWeight: 500, alignSelf: 'center' }}>
                           ✓ Settings Saved!

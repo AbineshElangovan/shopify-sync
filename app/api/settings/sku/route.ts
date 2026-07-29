@@ -16,7 +16,7 @@ export async function GET(req: NextRequest) {
       }
     });
 
-    return NextResponse.json({ success: true, setting });
+    return NextResponse.json({ success: true, setting, isMaster: (store as any).isMaster });
   } catch (err: any) {
     console.error("[SKU Settings API] GET Error:", err.message);
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });
@@ -26,6 +26,11 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const { store } = await authenticate(req);
+    
+    if (!(store as any).isMaster) {
+      return NextResponse.json({ success: false, error: "Only the Master Store can configure SKU settings." }, { status: 403 });
+    }
+
     const body = await req.json();
     const { skuPrefix, skuSequence } = body;
 

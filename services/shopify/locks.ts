@@ -1,16 +1,3 @@
-import { prisma } from '@/lib/db/prisma';
-import { getAdminClient } from '@/lib/shopify/admin';
-import { setInventoryQuantity } from '@/lib/shopify/inventory';
-import { createSyncLog } from '@/lib/shopify/sync-log';
-import { linkConnectedProductMapping, findMappingByVariantId } from '@/services/product-mapping';
-import {
-  PRODUCT_SET_MUTATION, PRODUCT_DELETE_MUTATION, PRODUCT_VARIANTS_DELETE_MUTATION,
-  GET_VARIANT_BY_SKU_QUERY, GET_PRODUCT_BY_ID_QUERY, LOCATIONS_QUERY,
-  GET_PRODUCT_COLLECTIONS_QUERY, GET_COLLECTIONS_BY_TITLE_QUERY, CREATE_COLLECTION_MUTATION,
-  ADD_PRODUCT_TO_COLLECTION_MUTATION, GET_PUBLICATIONS_QUERY, PUBLISH_MUTATION
-} from './graphql';
-import { syncProductCollectionsByTags } from './collection-sync';
-
 const globalShared: any = global;
 globalShared.syncLocks = globalShared.syncLocks || new Set<string>();
 

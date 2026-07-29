@@ -16,8 +16,8 @@ model Store {
   scope             String
   label             String?
   masterLabel       String?  @unique
-  isActive          Boolean  @default(true)
-  lowStockThreshold Int      @default(15)
+  isActive                  Boolean   @default(true)
+  lowStockThreshold         Int       @default(10)
   autoSyncEnabled          Boolean  @default(true)
   priceAdjustmentValue     Float    @default(0.0)
   priceAdjustmentType      String   @default("PERCENTAGE") 
@@ -70,6 +70,8 @@ model Session {
   locale        String?
   collaborator  Boolean?  @default(false)
   emailVerified Boolean?  @default(false)
+  refreshToken  String?
+  refreshTokenExpires DateTime?
 
   @@map("session")
 }
@@ -116,15 +118,23 @@ model ProductCache {
 
 model SyncLog {
   id                 String   @id @default(uuid())
-  sku                String
+  sku                String?
   sourceStoreId      String
   destinationStoreId String
-  previousQuantity   Int
-  updatedQuantity    Int
+  previousQuantity   Int      @default(0)
+  updatedQuantity    Int      @default(0)
   status             String
-  failureReason      String?
+  failureReason      String?  @db.Text
   triggerType        String   @default("WEBHOOK")
   webhookEventId     String?
+  syncType           String   @default("UNKNOWN")
+  webhookTopic       String?
+  retryCount         Int      @default(0)
+  nextRetryAt        DateTime?
+  errorCode          String?
+  errorMessage       String?  @db.Text
+  requestId          String?
+  durationMs         Int?
   createdAt          DateTime @default(now())
 
   sourceStore        Store    @relation("SourceStore", fields: [sourceStoreId], references: [id])
@@ -133,6 +143,7 @@ model SyncLog {
   @@index([sku])
   @@index([status])
   @@index([createdAt])
+  @@unique([webhookEventId, syncType, destinationStoreId])
   @@map("sync_logs")
 }
 

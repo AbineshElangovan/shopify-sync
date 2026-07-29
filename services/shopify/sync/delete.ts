@@ -15,6 +15,7 @@ import { withLock, acquireSyncLock, hasSyncLock, releaseSyncLock } from '../lock
 import { calculateAdjustedPrice } from '../pricing';
 import { fetchDefaultLocation, publishProductToAllChannels, findTargetProductBySku } from '../api-helpers';
 import { updateLocalProductCache } from '../../product-cache';
+import { executeWithRetry } from './retry-handler';
 
 export async function processProductDelete(shopDomain: string, payload: any, webhookId?: string) {
   try {
@@ -57,9 +58,12 @@ export async function processProductDelete(shopDomain: string, payload: any, web
     // Extract title from source ProductCache or payload for null-SKU fallback
     const sourceTitle = sourceProductCaches[0]?.title || payload.title || null;
 
-    const targetStores = await prisma.store.findMany({
-      where: { shopDomain: { not: shopDomain }, isActive: true },
+    let targetStores: any[] = [];
+    const connections = await prisma.storeConnection.findMany({
+      where: { sourceStoreId: sourceStore.id },
+      include: { targetStore: true }
     });
+    targetStores = connections.map((c: any) => c.targetStore).filter((s: any) => s.isActive);
 
     const masterProductIdStr = `gid://shopify/Product/${payload.id}`;
     const masterMapping = await prisma.productMapping.findFirst({
@@ -68,6 +72,22 @@ export async function processProductDelete(shopDomain: string, payload: any, web
 
     for (const targetStore of targetStores) {
       if (!targetStore.autoSyncEnabled) continue;
+
+      // 0. Deduplication (Idempotency)
+      if (webhookId) {
+        const existingSync = await prisma.syncLog.findFirst({
+          where: {
+            webhookEventId: webhookId,
+            syncType: "PRODUCT_DELETE",
+            destinationStoreId: targetStore.id,
+            status: { in: ["SUCCESS", "PROCESSING", "PENDING", "RETRYING"] }
+          }
+        });
+        if (existingSync) {
+          console.log(`[ProductSync:Delete] Skipping duplicate webhook ${webhookId} for ${targetStore.shopDomain}`);
+          continue;
+        }
+      }
 
       let targetProductId: string | null = null;
       let targetMappingId: string | null = null;
@@ -138,14 +158,17 @@ export async function processProductDelete(shopDomain: string, payload: any, web
       acquireSyncLock(targetStore.shopDomain, targetProductId, "DELETE");
 
       // Controls whether local DB records are removed after the Shopify API call.
-      // Only true when we are confident the product is gone from Shopify:
-      //   ✅ Shopify delete succeeded
-      //   ✅ Shopify returned "does not exist" / "not found" (already deleted externally)
-      // ❌ Never true for network errors, auth errors, rate limits, or server errors —
-      //    in those cases the product may still exist in Shopify and we must not corrupt local data.
       let shouldCleanupLocal = false;
 
-      try {
+      const syncResult = await executeWithRetry({
+        targetStoreDomain: targetStore.shopDomain,
+        targetStoreId: targetStore.id,
+        sourceStoreId: sourceStore.id,
+        webhookEventId: webhookId,
+        syncType: "PRODUCT_DELETE",
+        webhookTopic: "products/delete",
+        sku: skus[0] || "UNKNOWN"
+      }, async () => {
         const response: any = await client.request(PRODUCT_DELETE_MUTATION, {
           variables: {
             input: { id: targetProductId }
@@ -154,57 +177,33 @@ export async function processProductDelete(shopDomain: string, payload: any, web
         const userErrors = response?.data?.productDelete?.userErrors || [];
 
         if (userErrors.length > 0) {
-          // Shopify returns userErrors (not a thrown exception) for "product does not exist".
-          // This means the product is already gone — safe to clean up locally.
           const isAlreadyDeleted = userErrors.every((e: any) =>
             (e.message || '').toLowerCase().includes('does not exist') ||
             (e.message || '').toLowerCase().includes('not found')
           );
           if (isAlreadyDeleted) {
             console.log(`[ProductSync:Delete] Product ${targetProductId} already deleted from Shopify. Cleaning up local DB only.`);
-            shouldCleanupLocal = true;
+            return { alreadyDeleted: true };
           } else {
-            // Real business logic error from Shopify (e.g. permission issue) — do not clean up
             throw new Error(userErrors.map((e: any) => `${e.field}: ${e.message}`).join(', '));
           }
+        }
+        return { success: true };
+      });
+
+      try {
+        if (!syncResult.success) {
+           console.error(`[ProductSync:Delete] Failed to delete product in ${targetStore.shopDomain} after ${syncResult.retryCount} retries:`, syncResult.errorMessage);
+           // Do NOT set shouldCleanupLocal = true here.
+           // The product may still exist in Shopify — preserving local data is safer.
         } else {
-          // Shopify delete succeeded
-          console.log(`[ProductSync:Delete] Successfully deleted matching product ${targetProductId} in target store ${targetStore.shopDomain}`);
-          shouldCleanupLocal = true;
+           // Shopify delete succeeded or it was already deleted
+           console.log(`[ProductSync:Delete] Successfully deleted matching product ${targetProductId} in target store ${targetStore.shopDomain} (Request ID: ${syncResult.requestId}, Duration: ${syncResult.durationMs}ms)`);
+           shouldCleanupLocal = true;
         }
 
-        for (const sku of skus) {
-          await createSyncLog({
-            sku,
-            sourceStoreId: sourceStore.id,
-            destinationStoreId: targetStore.id,
-            previousQuantity: 0,
-            updatedQuantity: 0,
-            status: 'SUCCESS',
-            webhookEventId: webhookId,
-          });
-        }
       } catch (err: any) {
-        syncStatus = 'FAILED';
-        failureReason = err.message || 'Unknown error during deletion';
-        console.error(`[ProductSync:Delete] Failed to delete product in ${targetStore.shopDomain}:`, failureReason);
-
-        // Do NOT set shouldCleanupLocal = true here.
-        // This catch handles real failures: network errors, auth errors, rate limits, server errors.
-        // The product may still exist in Shopify — preserving local data is safer.
-
-        for (const sku of skus) {
-          await createSyncLog({
-            sku,
-            sourceStoreId: sourceStore.id,
-            destinationStoreId: targetStore.id,
-            previousQuantity: 0,
-            updatedQuantity: 0,
-            status: 'FAILED',
-            failureReason,
-            webhookEventId: webhookId,
-          });
-        }
+        console.error(`[ProductSync:Delete] Uncaught error handling deletion cleanup in ${targetStore.shopDomain}:`, err.message);
       } finally {
         // Always release the sync lock, regardless of outcome.
         releaseSyncLock(targetStore.shopDomain, targetProductId, "DELETE");

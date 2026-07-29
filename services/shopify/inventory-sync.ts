@@ -3,14 +3,6 @@ import { createSyncLog } from '@/lib/shopify/sync-log';
 import { setInventoryQuantity, adjustInventoryQuantity } from '@/lib/shopify/inventory';
 import { syncLock } from '@/lib/shopify/sync-lock';
 import { getAdminClient } from '@/lib/shopify/admin';
-import fs from 'fs';
-
-function logDebug(msg: string) {
-  try {
-    fs.appendFileSync('c:/Users/eabin/OneDrive/Desktop/next task/shopify-sync/webhook_debug.txt', msg + '\n');
-  } catch(e){}
-  console.log(msg);
-}
 
 async function fetchDefaultLocation(shopDomain: string): Promise<string | null> {
   try {
@@ -28,7 +20,7 @@ async function fetchDefaultLocation(shopDomain: string): Promise<string | null> 
     `);
     return response?.data?.locations?.edges?.[0]?.node?.id || null;
   } catch (error) {
-    logDebug(`[SyncService] Failed to fetch default location for ${shopDomain}: ${error}`);
+    console.log(`[SyncService] Failed to fetch default location for ${shopDomain}: ${error}`);
     return null;
   }
 }
@@ -41,14 +33,14 @@ export async function processInventoryUpdate(
   webhookId?: string
 ) {
   const tsEntry = new Date().toISOString();
-  logDebug(`[${tsEntry}] [SyncService] ENTER processInventoryUpdate for ${shopDomain}`);
+  console.log(`[${tsEntry}] [SyncService] ENTER processInventoryUpdate for ${shopDomain}`);
   try {
     const sourceStore = await prisma.store.findUnique({
       where: { shopDomain },
     });
 
     if (!sourceStore || !sourceStore.isActive) {
-      logDebug(`[${new Date().toISOString()}] [SyncService] Source store ${shopDomain} not found or inactive. Skipping.`);
+      console.log(`[${new Date().toISOString()}] [SyncService] Source store ${shopDomain} not found or inactive. Skipping.`);
       return;
     }
 
@@ -68,22 +60,22 @@ export async function processInventoryUpdate(
       });
       
       if (!sourceVariantMap) {
-        logDebug(`[${new Date().toISOString()}] [SyncService] VariantMap not found for ${gidInventoryItemId}. Retrying in 2 seconds... (${retries + 1}/5)`);
+        console.log(`[${new Date().toISOString()}] [SyncService] VariantMap not found for ${gidInventoryItemId}. Retrying in 2 seconds... (${retries + 1}/5)`);
         await new Promise(resolve => setTimeout(resolve, 2000));
         retries++;
       }
     }
 
     if (!sourceVariantMap) {
-      logDebug(`[${new Date().toISOString()}] [SyncService] VariantMap lookup failed after retries for inventory item ${gidInventoryItemId} in store ${shopDomain}. Skipping.`);
+      console.log(`[${new Date().toISOString()}] [SyncService] VariantMap lookup failed after retries for inventory item ${gidInventoryItemId} in store ${shopDomain}. Skipping.`);
       return;
     }
 
     const { sku, shopifyProductId, shopifyVariantId } = sourceVariantMap;
-    logDebug(`[${new Date().toISOString()}] [SyncService] VariantMap lookup SUCCESS. SKU: ${sku}, Product ID: ${shopifyProductId}, Variant ID: ${shopifyVariantId}`);
+    console.log(`[${new Date().toISOString()}] [SyncService] VariantMap lookup SUCCESS. SKU: ${sku}, Product ID: ${shopifyProductId}, Variant ID: ${shopifyVariantId}`);
 
     if (!sku) {
-      logDebug(`[${new Date().toISOString()}] [SyncService] Variant ${shopifyVariantId} has no SKU. Skipping target replication.`);
+      console.log(`[${new Date().toISOString()}] [SyncService] Variant ${shopifyVariantId} has no SKU. Skipping target replication.`);
       return;
     }
 
@@ -95,17 +87,17 @@ export async function processInventoryUpdate(
       },
     });
 
-    logDebug(`[${new Date().toISOString()}] [SyncService] Delta calculation START for SKU ${sku}`);
+    console.log(`[${new Date().toISOString()}] [SyncService] Delta calculation START for SKU ${sku}`);
     const previousQuantity = sourceCachedProduct ? sourceCachedProduct.inventoryQuantity : trueTotalInventory;
     const delta = trueTotalInventory - previousQuantity;
 
-    logDebug(`[${new Date().toISOString()}] [SyncService:Webhook] SKU: ${sku} | Shop: ${shopDomain}`);
-    logDebug(`[${new Date().toISOString()}] [SyncService:Webhook] [Cached Quantity]: ${previousQuantity}`);
-    logDebug(`[${new Date().toISOString()}] [SyncService:Webhook] [True Total Quantity]: ${trueTotalInventory}`);
-    logDebug(`[${new Date().toISOString()}] [SyncService:Webhook] [Calculated Delta]: ${delta}`);
+    console.log(`[${new Date().toISOString()}] [SyncService:Webhook] SKU: ${sku} | Shop: ${shopDomain}`);
+    console.log(`[${new Date().toISOString()}] [SyncService:Webhook] [Cached Quantity]: ${previousQuantity}`);
+    console.log(`[${new Date().toISOString()}] [SyncService:Webhook] [True Total Quantity]: ${trueTotalInventory}`);
+    console.log(`[${new Date().toISOString()}] [SyncService:Webhook] [Calculated Delta]: ${delta}`);
 
     if (delta !== 0) {
-      logDebug(`[${new Date().toISOString()}] [SyncService] Updating ProductCache for source store ${shopDomain}`);
+      console.log(`[${new Date().toISOString()}] [SyncService] Updating ProductCache for source store ${shopDomain}`);
       await prisma.productCache.updateMany({
         where: {
           storeId: sourceStore.id,
@@ -115,16 +107,16 @@ export async function processInventoryUpdate(
           inventoryQuantity: trueTotalInventory,
         },
       });
-      logDebug(`[${new Date().toISOString()}] [SyncService] ProductCache updated for source store ${shopDomain}`);
+      console.log(`[${new Date().toISOString()}] [SyncService] ProductCache updated for source store ${shopDomain}`);
     }
 
     if (!sourceStore.autoSyncEnabled) {
-      logDebug(`[SyncService] Auto-sync is disabled for source store ${shopDomain}. Skipping target replication.`);
+      console.log(`[SyncService] Auto-sync is disabled for source store ${shopDomain}. Skipping target replication.`);
       return;
     }
 
     if (delta === 0) {
-      logDebug(`[SyncService] Delta is 0 for SKU ${sku} in store ${shopDomain}. Skipping target replication.`);
+      console.log(`[SyncService] Delta is 0 for SKU ${sku} in store ${shopDomain}. Skipping target replication.`);
       return;
     }
 
@@ -138,10 +130,10 @@ export async function processInventoryUpdate(
       },
     });
 
-    logDebug(`[${new Date().toISOString()}] [SyncService] Found ${targetVariantMaps.length} target store(s) for SKU ${sku}`);
+    console.log(`[${new Date().toISOString()}] [SyncService] Found ${targetVariantMaps.length} target store(s) for SKU ${sku}`);
 
     if (targetVariantMaps.length === 0) {
-      logDebug(`[${new Date().toISOString()}] [SyncService] SKU ${sku} is not mapped in any other stores. Finished.`);
+      console.log(`[${new Date().toISOString()}] [SyncService] SKU ${sku} is not mapped in any other stores. Finished.`);
       return;
     }
 
@@ -149,7 +141,7 @@ export async function processInventoryUpdate(
       if (!target.store.isActive) continue;
 
       if (!target.store.autoSyncEnabled) {
-        logDebug(`[SyncService] Auto-sync is disabled for target store ${target.store.shopDomain}. Skipping.`);
+        console.log(`[SyncService] Auto-sync is disabled for target store ${target.store.shopDomain}. Skipping.`);
         continue;
       }
 
@@ -176,7 +168,7 @@ export async function processInventoryUpdate(
               where: { id: target.id },
               data: { locationId: effectiveLocationId }
             });
-            logDebug(`[${new Date().toISOString()}] [SyncService] Self-healed missing locationId for ${target.store.shopDomain}: ${effectiveLocationId}`);
+            console.log(`[${new Date().toISOString()}] [SyncService] Self-healed missing locationId for ${target.store.shopDomain}: ${effectiveLocationId}`);
           }
         }
 
@@ -215,7 +207,7 @@ export async function processInventoryUpdate(
           }
         }
       } catch (err: any) {
-        logDebug(`[${new Date().toISOString()}] [SyncService] Failed to fetch target location quantity: ${err.message}`);
+        console.log(`[${new Date().toISOString()}] [SyncService] Failed to fetch target location quantity: ${err.message}`);
       }
 
       // In a Hub-and-Spoke model, the Master Store is the absolute source of truth.
@@ -224,24 +216,24 @@ export async function processInventoryUpdate(
       const targetNewQuantity = trueTotalInventory;
       const targetNewTotalQuantity = trueTotalInventory;
 
-      logDebug(`[${new Date().toISOString()}] [SyncService:Sync] [Target Store Before Update]: ${targetLocationQuantity} (Store: ${target.store.shopDomain})`);
-      logDebug(`[${new Date().toISOString()}] [SyncService:Sync] [Target Store After Update]: ${targetNewQuantity} (Store: ${target.store.shopDomain})`);
+      console.log(`[${new Date().toISOString()}] [SyncService:Sync] [Target Store Before Update]: ${targetLocationQuantity} (Store: ${target.store.shopDomain})`);
+      console.log(`[${new Date().toISOString()}] [SyncService:Sync] [Target Store After Update]: ${targetNewQuantity} (Store: ${target.store.shopDomain})`);
 
       try {
         if (!effectiveLocationId) {
           throw new Error('Target location ID not mapped for this variant and could not be dynamically fetched.');
         }
 
-        logDebug(`[${new Date().toISOString()}] [SyncService] Requesting Shopify inventory set for ${target.store.shopDomain}...`);
+        console.log(`[${new Date().toISOString()}] [SyncService] Requesting Shopify inventory set for ${target.store.shopDomain}...`);
         await setInventoryQuantity(
           target.store.shopDomain,
           target.inventoryItemId,
           effectiveLocationId,
           targetNewQuantity
         );
-        logDebug(`[${new Date().toISOString()}] [SyncService] Shopify inventory update response SUCCESS for ${target.store.shopDomain}`);
+        console.log(`[${new Date().toISOString()}] [SyncService] Shopify inventory update response SUCCESS for ${target.store.shopDomain}`);
 
-        logDebug(`[${new Date().toISOString()}] [SyncService] Updating target ProductCache for ${target.store.shopDomain}...`);
+        console.log(`[${new Date().toISOString()}] [SyncService] Updating target ProductCache for ${target.store.shopDomain}...`);
         await prisma.productCache.updateMany({
           where: {
             storeId: target.store.id,
@@ -251,13 +243,13 @@ export async function processInventoryUpdate(
             inventoryQuantity: targetNewTotalQuantity,
           },
         });
-        logDebug(`[${new Date().toISOString()}] [SyncService] Target ProductCache updated for ${target.store.shopDomain}`);
+        console.log(`[${new Date().toISOString()}] [SyncService] Target ProductCache updated for ${target.store.shopDomain}`);
 
-        logDebug(`[${new Date().toISOString()}] [SyncService] Delta-synced SKU ${sku} to ${target.store.shopDomain}: ${targetPrevQuantity} -> ${targetNewQuantity} (delta: ${delta})`);
+        console.log(`[${new Date().toISOString()}] [SyncService] Delta-synced SKU ${sku} to ${target.store.shopDomain}: ${targetPrevQuantity} -> ${targetNewQuantity} (delta: ${delta})`);
       } catch (error: any) {
         syncStatus = 'FAILED';
         failureReason = error.message || 'Unknown error';
-        logDebug(`[SyncService] Failed to sync SKU ${sku} to ${target.store.shopDomain}: ${error.message}`);
+        console.log(`[SyncService] Failed to sync SKU ${sku} to ${target.store.shopDomain}: ${error.message}`);
       }
 
       await createSyncLog({
@@ -271,11 +263,11 @@ export async function processInventoryUpdate(
         webhookEventId: webhookId,
       });
       
-      logDebug(`[${new Date().toISOString()}] [SyncService] Synchronization COMPLETION for target store ${target.store.shopDomain}`);
+      console.log(`[${new Date().toISOString()}] [SyncService] Synchronization COMPLETION for target store ${target.store.shopDomain}`);
     }
-    logDebug(`[${new Date().toISOString()}] [SyncService] Synchronization COMPLETION for all target stores`);
+    console.log(`[${new Date().toISOString()}] [SyncService] Synchronization COMPLETION for all target stores`);
   } catch (error: any) {
-    logDebug(`[${new Date().toISOString()}] [SyncService] processInventoryUpdate error: ${error.message}`);
+    console.log(`[${new Date().toISOString()}] [SyncService] processInventoryUpdate error: ${error.message}`);
     throw error;
   }
 }

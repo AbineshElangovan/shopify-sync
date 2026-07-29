@@ -1,9 +1,9 @@
 "use client";
 import React, { useState, useEffect } from 'react';
 import { Table } from '@/components/common';
-import { 
-  TextField, 
-  Button, 
+import {
+  TextField,
+  Button,
   BlockStack,
   InlineStack,
   Box,
@@ -13,7 +13,7 @@ import {
 import { Checkbox } from '@/components/forms';
 import { shopifyFetch } from '@/lib/shopify/Client';
 import { Icon } from '@shopify/polaris';
-import { DeleteIcon } from '@shopify/polaris-icons';
+import { DeleteIcon, AlertTriangleIcon } from '@shopify/polaris-icons';
 
 const ThemedSection = ({
   title,
@@ -53,17 +53,17 @@ export default function ConnectionsPage() {
   const [installedStores, setInstalledStores] = useState<any[]>([]);
   const [connections, setConnections] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  
+
   // Store Pairing State
   const [storeIdInput, setStoreIdInput] = useState('');
   const [connecting, setConnecting] = useState(false);
   const [currentStoreUniqueId, setCurrentStoreUniqueId] = useState('');
   const [isMaster, setIsMaster] = useState(false);
-  
+
   // Manual Sync State
   const [syncing, setSyncing] = useState(false);
   const [selectedStores, setSelectedStores] = useState<string[]>([]);
-  
+
   // Manual Store Generation State
   const [generatingStore, setGeneratingStore] = useState(false);
 
@@ -85,17 +85,17 @@ export default function ConnectionsPage() {
   const fetchData = async () => {
     try {
       setLoading(true);
-      
+
       const [storesRes, connectionsRes] = await Promise.all([
-        shopifyFetch('/api/stores?active=false'),
-        shopifyFetch('/api/connections')
+        shopifyFetch('/api/stores?active=false', { cache: 'no-store' }),
+        shopifyFetch('/api/connections', { cache: 'no-store' })
       ]);
-      
+
       if (storesRes.ok) {
         const storesJson = await storesRes.json();
         setInstalledStores(storesJson.stores || []);
       }
-      
+
       const data = await connectionsRes.json();
       if (data.success) {
         setConnections(data.connections || []);
@@ -119,7 +119,7 @@ export default function ConnectionsPage() {
     if (!storeIdInput.trim()) return;
     setConnecting(true);
     setToastMessage(null);
-    
+
     try {
       const res = await shopifyFetch('/api/connections', {
         method: 'POST',
@@ -127,7 +127,7 @@ export default function ConnectionsPage() {
         body: JSON.stringify({ uniqueStoreId: storeIdInput.trim() })
       });
       const data = await res.json();
-      
+
       if (data.success) {
         setToastMessage({ message: 'Store connected successfully!', type: 'success' });
         setStoreIdInput('');
@@ -150,7 +150,7 @@ export default function ConnectionsPage() {
         method: 'POST',
       });
       const data = await res.json();
-      
+
       if (data.success) {
         setToastMessage({ message: `Manual store generated! Unique ID: ${data.store.uniqueStoreId}`, type: 'success' });
         // Automatically paste it in the input to make it easy for them
@@ -185,13 +185,13 @@ export default function ConnectionsPage() {
   };
 
   const handleToggleSyncSelection = (storeId: string) => {
-    setSelectedStores(prev => 
-      prev.includes(storeId) 
+    setSelectedStores(prev =>
+      prev.includes(storeId)
         ? prev.filter(id => id !== storeId)
         : [...prev, storeId]
     );
   };
-  
+
   const handleSelectAllSync = () => {
     if (selectedStores.length === connections.length) {
       setSelectedStores([]);
@@ -205,13 +205,13 @@ export default function ConnectionsPage() {
     try {
       setSyncing(true);
       setToastMessage({ message: 'Sync initiated in the background. Check the Sync logs for progress.', type: 'success' });
-      
+
       const res = await shopifyFetch('/api/sync/manual', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ selectedTargetStoreIds: selectedStores })
       });
-      
+
       const data = await res.json();
       if (!data.success) {
         setToastMessage({ message: 'Error starting sync: ' + data.error, type: 'error' });
@@ -234,28 +234,38 @@ export default function ConnectionsPage() {
   const tableColumns = [
     { title: 'Store Name', key: 'name', type: 'bold' as const },
     { title: 'Store ID', key: 'storeId' },
-    { title: 'Status', key: 'status', type: 'status' as const, badgeRules: { 'Connected': 'success' as const } },
+    { title: 'Status', key: 'status', type: 'status' as const, badgeRules: { 'Connected': 'success' as const, 'Disconnected': 'critical' as const } },
     { title: 'Action', key: 'action' }
   ];
 
-  const tableItems = connections.map(conn => ({
-    id: conn.targetStoreId,
-    name: conn.targetStore.label || conn.targetStore.shopDomain,
-    storeId: conn.targetStore.uniqueStoreId,
-    status: 'Connected',
-    action: (
-      <button 
-        onClick={() => handleRemoveStore(conn.targetStoreId)}
-        className="flex items-center gap-1.5 text-red-500 hover:text-red-700 hover:bg-red-50 px-2 py-1.5 rounded transition-colors cursor-pointer bg-transparent border-none font-medium text-xs"
-        title="Remove Connection"
-      >
-        <div style={{ width: '16px', height: '16px' }}>
-          <Icon source={DeleteIcon} tone="critical" />
+  const tableItems = connections.map(conn => {
+    const isInactive = conn.targetStore.isActive === false;
+
+    return {
+      id: conn.targetStoreId,
+      name: (
+        <div className="flex flex-col gap-1">
+          <span>{conn.targetStore.label || conn.targetStore.shopDomain}</span>
         </div>
-        Remove
-      </button>
-    )
-  }));
+      ),
+      storeId: conn.targetStore.uniqueStoreId,
+      status: isInactive ? 'Disconnected' : 'Connected',
+      action: (
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => handleRemoveStore(conn.targetStoreId)}
+            className="flex items-center gap-1.5 text-red-500 hover:text-red-700 hover:bg-red-50 px-2 py-1.5 rounded transition-colors cursor-pointer bg-transparent border-none font-medium text-xs"
+            title="Remove Connection"
+          >
+            <div style={{ width: '16px', height: '16px' }}>
+              <Icon source={DeleteIcon} tone="critical" />
+            </div>
+            Remove
+          </button>
+        </div>
+      )
+    };
+  });
 
   if (loading && connections.length === 0) {
     return (
@@ -273,7 +283,7 @@ export default function ConnectionsPage() {
       <Layout>
         <Layout.Section>
           <BlockStack gap="500">
-            
+
 
 
             {/* Store Pairing Section (Blue/Indigo Theme) */}
@@ -289,11 +299,11 @@ export default function ConnectionsPage() {
               <BlockStack gap="400">
                 {currentStoreUniqueId && (
                   <div className="mb-2 text-sm text-blue-900 flex items-center gap-2">
-                    Your Unique Store ID: 
+                    Your Unique Store ID:
                     <strong className="bg-blue-200 px-2 py-1 rounded text-blue-900 shadow-sm">
                       {currentStoreUniqueId}
                     </strong>
-                    <button 
+                    <button
                       onClick={() => {
                         navigator.clipboard.writeText(currentStoreUniqueId);
                         setToastMessage({ message: 'Copied to clipboard!', type: 'success' });
@@ -318,9 +328,9 @@ export default function ConnectionsPage() {
                           autoComplete="off"
                         />
                       </Box>
-                      <Button 
-                        variant="primary" 
-                        onClick={handleAddStore} 
+                      <Button
+                        variant="primary"
+                        onClick={handleAddStore}
                         disabled={connecting || !storeIdInput.trim()}
                         loading={connecting}
                       >
@@ -332,7 +342,7 @@ export default function ConnectionsPage() {
                       <div className="mt-4 pt-4 border-t border-blue-200">
                         <h3 className="font-semibold text-blue-900 mb-2">Create a Manual Store</h3>
                         <p className="text-sm text-blue-800 mb-3">If you need a store ID for an external or manual store that isn't connected via Shopify, you can generate a new one here.</p>
-                        <Button 
+                        <Button
                           variant="primary"
                           onClick={handleGenerateManualStore}
                           loading={generatingStore}
@@ -350,15 +360,15 @@ export default function ConnectionsPage() {
                   </h3>
                   {connections.length === 0 ? (
                     <div className="p-4 bg-white bg-opacity-60 border border-blue-100 rounded-lg text-blue-800 text-sm">
-                      {isMaster 
+                      {isMaster
                         ? "No connected stores found. Enter a destination store's Unique Store ID above to pair them."
                         : "This store is not currently connected to a Master store."}
                     </div>
                   ) : (
                     <div className="bg-white rounded-lg shadow-sm overflow-hidden border border-blue-100">
-                      <Table 
-                        columns={tableColumns} 
-                        items={tableItems} 
+                      <Table
+                        columns={tableColumns}
+                        items={tableItems}
                         searchable={false}
                         filterable={false}
                         paginate={false}
@@ -381,41 +391,40 @@ export default function ConnectionsPage() {
                 titleColor="#14532d"
                 descColor="#166534"
               >
-                  <BlockStack gap="400">
-                    <div className="bg-white rounded-lg border border-green-200 p-4 shadow-sm">
-                      <h3 className="font-semibold text-green-900 mb-3 text-sm uppercase tracking-wide">Select Targets</h3>
-                      <BlockStack gap="300">
-                        {connections.map((conn) => (
-                          <Checkbox
-                            key={conn.targetStoreId}
-                            label={conn.targetStore.label || conn.targetStore.shopDomain}
-                            checked={selectedStores.includes(conn.targetStoreId)}
-                            onChange={() => handleToggleSyncSelection(conn.targetStoreId)}
-                          />
-                        ))}
-                      </BlockStack>
-                    </div>
-                    
-                    <InlineStack gap="300">
-                      <button 
-                        onClick={handleSelectAllSync}
-                        className="px-4 py-2 bg-white border border-green-300 text-green-800 font-medium rounded-lg hover:bg-green-50 transition-colors shadow-sm"
-                      >
-                        {selectedStores.length === connections.length ? 'Deselect All' : 'Select All'}
-                      </button>
-                      <button 
-                        onClick={handleSync}
-                        disabled={selectedStores.length === 0 || syncing}
-                        className={`px-4 py-2 font-medium rounded-lg transition-all shadow-sm ${
-                          selectedStores.length === 0 || syncing 
-                            ? 'bg-green-200 text-green-500 cursor-not-allowed' 
-                            : 'bg-green-600 text-white hover:bg-green-700'
+                <BlockStack gap="400">
+                  <div className="bg-white rounded-lg border border-green-200 p-4 shadow-sm">
+                    <h3 className="font-semibold text-green-900 mb-3 text-sm uppercase tracking-wide">Select Targets</h3>
+                    <BlockStack gap="300">
+                      {connections.map((conn) => (
+                        <Checkbox
+                          key={conn.targetStoreId}
+                          label={conn.targetStore.label || conn.targetStore.shopDomain}
+                          checked={selectedStores.includes(conn.targetStoreId)}
+                          onChange={() => handleToggleSyncSelection(conn.targetStoreId)}
+                        />
+                      ))}
+                    </BlockStack>
+                  </div>
+
+                  <InlineStack gap="300">
+                    <button
+                      onClick={handleSelectAllSync}
+                      className="px-4 py-2 bg-white border border-green-300 text-green-800 font-medium rounded-lg hover:bg-green-50 transition-colors shadow-sm"
+                    >
+                      {selectedStores.length === connections.length ? 'Deselect All' : 'Select All'}
+                    </button>
+                    <button
+                      onClick={handleSync}
+                      disabled={selectedStores.length === 0 || syncing}
+                      className={`px-4 py-2 font-medium rounded-lg transition-all shadow-sm ${selectedStores.length === 0 || syncing
+                          ? 'bg-green-200 text-green-500 cursor-not-allowed'
+                          : 'bg-green-600 text-white hover:bg-green-700'
                         }`}
-                      >
-                        {syncing ? 'Syncing...' : 'Sync Selected Stores'}
-                      </button>
-                    </InlineStack>
-                  </BlockStack>
+                    >
+                      {syncing ? 'Syncing...' : 'Sync Selected Stores'}
+                    </button>
+                  </InlineStack>
+                </BlockStack>
               </ThemedSection>
             )}
 

@@ -16,6 +16,7 @@ import { withLock, acquireSyncLock, hasSyncLock, releaseSyncLock } from '../lock
 import { calculateAdjustedPrice } from '../pricing';
 import { fetchDefaultLocation, publishProductToAllChannels, findTargetProductBySku } from '../api-helpers';
 import { updateLocalProductCache } from '../../product-cache';
+import { executeWithRetry } from './retry-handler';
 
 export async function processProductUpdate(shopDomain: string, payload: any, webhookId?: string, targetStoreDomains?: string[]) {
   try {
@@ -43,12 +44,18 @@ export async function processProductUpdate(shopDomain: string, payload: any, web
       return;
     }
 
-    const targetStores = await prisma.store.findMany({
-      where: {
-        shopDomain: targetStoreDomains ? { in: targetStoreDomains } : { not: shopDomain },
-        isActive: true
-      },
-    });
+    let targetStores: any[] = [];
+    if (targetStoreDomains) {
+      targetStores = await prisma.store.findMany({
+        where: { shopDomain: { in: targetStoreDomains }, isActive: true },
+      });
+    } else {
+      const connections = await prisma.storeConnection.findMany({
+        where: { sourceStoreId: sourceStore.id },
+        include: { targetStore: true }
+      });
+      targetStores = connections.map((c: any) => c.targetStore).filter((s: any) => s.isActive);
+    }
 
     // --- FETCH ACTUAL COLLECTIONS AND CATEGORY FROM MASTER STORE ---
     let actualMasterCollections: string[] = [];
@@ -94,6 +101,22 @@ export async function processProductUpdate(shopDomain: string, payload: any, web
       console.log(`\n------------------------------------------------------`);
       console.log(`≡ƒöä [Target Store Sync (UPDATE)] -> ${targetStore.shopDomain}`);
       console.log(`------------------------------------------------------\n`);
+
+      // 0. Deduplication (Idempotency)
+      if (webhookId) {
+        const existingSync = await prisma.syncLog.findFirst({
+          where: {
+            webhookEventId: webhookId,
+            syncType: "PRODUCT_UPDATE",
+            destinationStoreId: targetStore.id,
+            status: { in: ["SUCCESS", "PROCESSING", "PENDING", "RETRYING"] }
+          }
+        });
+        if (existingSync) {
+          console.log(`[ProductSync:Update] Skipping duplicate webhook ${webhookId} for ${targetStore.shopDomain}`);
+          continue;
+        }
+      }
 
       // 1. PRIMARY LOOKUP: Product Unique ID
       let matchingVariantMap: any = null;
@@ -372,19 +395,34 @@ export async function processProductUpdate(shopDomain: string, payload: any, web
 
       acquireSyncLock(targetStore.shopDomain, targetProductId, mergedTitle);
 
-      let syncStatus: 'SUCCESS' | 'FAILED' = 'SUCCESS';
-      let failureReason = '';
+      let updatedProduct: any = null;
 
-      try {
+      const syncResult = await executeWithRetry({
+        targetStoreDomain: targetStore.shopDomain,
+        targetStoreId: targetStore.id,
+        sourceStoreId: sourceStore.id,
+        webhookEventId: webhookId,
+        syncType: "PRODUCT_UPDATE",
+        webhookTopic: "products/update",
+        sku: skus[0] || "UNKNOWN"
+      }, async () => {
         const response: any = await client.request(PRODUCT_SET_MUTATION, { variables: { input: productInput } });
         const userErrors = response?.data?.productSet?.userErrors || [];
 
         if (userErrors.length > 0) {
           throw new Error(userErrors.map((e: any) => `${e.field}: ${e.message}`).join(', '));
         }
+        return response;
+      });
 
-        const updatedProduct = response?.data?.productSet?.product;
-        const updatedVariants = updatedProduct?.variants?.edges || [];
+      if (!syncResult.success) {
+        console.error(`[ProductSync:Update] Failed to update product in ${targetStore.shopDomain} after ${syncResult.retryCount} retries:`, syncResult.errorMessage);
+        releaseSyncLock(targetStore.shopDomain, targetProductId, mergedTitle);
+        continue;
+      }
+
+      updatedProduct = syncResult.payload?.data?.productSet?.product;
+      const updatedVariants = updatedProduct?.variants?.edges || [];
 
         let targetLocationId: string | null = null;
 
@@ -500,14 +538,8 @@ export async function processProductUpdate(shopDomain: string, payload: any, web
         // Auto-publish to all sales channels during update as well
         await publishProductToAllChannels(targetStore.shopDomain, targetProductId);
 
-        console.log(`[ProductSync:Update] Successfully updated product "${mergedTitle}" in target store ${targetStore.shopDomain}`);
-      } catch (err: any) {
-        syncStatus = 'FAILED';
-        failureReason = err.message || 'Unknown error during update';
-        console.error(`[ProductSync:Update] Failed to update product in ${targetStore.shopDomain}:`, failureReason);
-
+        console.log(`[ProductSync:Update] Successfully updated product "${mergedTitle}" in target store ${targetStore.shopDomain} (Request ID: ${syncResult.requestId}, Duration: ${syncResult.durationMs}ms)`);
         releaseSyncLock(targetStore.shopDomain, targetProductId, mergedTitle);
-      }
     }
 
   } catch (error: any) {

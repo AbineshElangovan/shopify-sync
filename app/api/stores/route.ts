@@ -17,8 +17,26 @@ export async function GET(req: NextRequest) {
       where: { sourceStoreId: store.id }
     });
     
+    const masterConnections = await (prisma as any).storeConnection.findMany({
+      where: { targetStoreId: store.id }
+    });
+    
+    const masterStoreIds = masterConnections.map((c: any) => c.sourceStoreId);
+
+    // If we are a sub-store, fetch all other sub-stores connected to our master(s)
+    const siblingConnections = await (prisma as any).storeConnection.findMany({
+      where: { sourceStoreId: { in: masterStoreIds.length ? masterStoreIds : [] } }
+    });
+    
     const connectedStoreIds = connections.map((c: any) => c.targetStoreId);
-    const visibleStoreIds = [store.id, ...connectedStoreIds];
+    const siblingStoreIds = siblingConnections.map((c: any) => c.targetStoreId);
+    
+    const visibleStoreIds = [...new Set([
+      store.id, 
+      ...connectedStoreIds, 
+      ...masterStoreIds,
+      ...siblingStoreIds
+    ])];
 
     const whereClause: any = { id: { in: visibleStoreIds } };
     if (activeOnly) {

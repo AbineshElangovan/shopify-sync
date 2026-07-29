@@ -16,6 +16,7 @@ import { withLock, acquireSyncLock, hasSyncLock, releaseSyncLock } from '../lock
 import { calculateAdjustedPrice } from '../pricing';
 import { fetchDefaultLocation, publishProductToAllChannels, findTargetProductBySku } from '../api-helpers';
 import { updateLocalProductCache } from '../../product-cache';
+import { executeWithRetry } from './retry-handler';
 
 export async function processProductCreate(shopDomain: string, payload: any, webhookId?: string, targetStoreDomains?: string[]) {
   try {
@@ -27,6 +28,8 @@ export async function processProductCreate(shopDomain: string, payload: any, web
       return;
     }
     (global as any)._syncLoopDepth = loopDepth + 1;
+
+    try {
 
     const sourceStore = await prisma.store.findUnique({
       where: { shopDomain },
@@ -43,12 +46,18 @@ export async function processProductCreate(shopDomain: string, payload: any, web
       return;
     }
 
-    const targetStores = await prisma.store.findMany({
-      where: {
-        shopDomain: targetStoreDomains ? { in: targetStoreDomains } : { not: shopDomain },
-        isActive: true
-      },
-    });
+    let targetStores: any[] = [];
+    if (targetStoreDomains) {
+      targetStores = await prisma.store.findMany({
+        where: { shopDomain: { in: targetStoreDomains }, isActive: true },
+      });
+    } else {
+      const connections = await prisma.storeConnection.findMany({
+        where: { sourceStoreId: sourceStore.id },
+        include: { targetStore: true }
+      });
+      targetStores = connections.map((c: any) => c.targetStore).filter((s: any) => s.isActive);
+    }
 
     // --- FETCH ACTUAL COLLECTIONS AND CATEGORY FROM MASTER STORE ---
     let actualMasterCollections: string[] = [];
@@ -94,6 +103,22 @@ export async function processProductCreate(shopDomain: string, payload: any, web
       console.log(`\n------------------------------------------------------`);
       console.log(`≡ƒÜÇ [Target Store Sync] -> ${targetStore.shopDomain}`);
       console.log(`------------------------------------------------------\n`);
+
+      // 0. Deduplication (Idempotency)
+      if (webhookId) {
+        const existingSync = await prisma.syncLog.findFirst({
+          where: {
+            webhookEventId: webhookId,
+            syncType: "PRODUCT_CREATE",
+            destinationStoreId: targetStore.id,
+            status: { in: ["SUCCESS", "PROCESSING", "PENDING", "RETRYING"] }
+          }
+        });
+        if (existingSync) {
+          console.log(`[ProductSync:Create] Skipping duplicate webhook ${webhookId} for ${targetStore.shopDomain}`);
+          continue;
+        }
+      }
 
       // 1. PRIMARY LOOKUP: Product Unique ID
       let existingMapping: any = null;
@@ -263,19 +288,33 @@ export async function processProductCreate(shopDomain: string, payload: any, web
         });
       }
 
-      let syncStatus: 'SUCCESS' | 'FAILED' = 'SUCCESS';
-      let failureReason = '';
+      let createdProduct: any = null;
 
-      try {
+      const syncResult = await executeWithRetry({
+        targetStoreDomain: targetStore.shopDomain,
+        targetStoreId: targetStore.id,
+        sourceStoreId: sourceStore.id,
+        webhookEventId: webhookId,
+        syncType: "PRODUCT_CREATE",
+        webhookTopic: "products/create",
+        sku: skus[0] || "UNKNOWN"
+      }, async () => {
         const response: any = await client.request(PRODUCT_SET_MUTATION, { variables: { input: productInput } });
         const userErrors = response?.data?.productSet?.userErrors || [];
 
         if (userErrors.length > 0) {
           throw new Error(userErrors.map((e: any) => `${e.field}: ${e.message}`).join(', '));
         }
+        return response;
+      });
 
-        const createdProduct = response?.data?.productSet?.product;
-        const createdVariants = createdProduct?.variants?.edges || [];
+      if (!syncResult.success) {
+        console.error(`[ProductSync:Create] Failed to create product in ${targetStore.shopDomain} after ${syncResult.retryCount} retries:`, syncResult.errorMessage);
+        continue;
+      }
+
+      createdProduct = syncResult.payload?.data?.productSet?.product;
+      const createdVariants = createdProduct?.variants?.edges || [];
 
         acquireSyncLock(targetStore.shopDomain, createdProduct.id, payload.title);
 
@@ -413,16 +452,12 @@ export async function processProductCreate(shopDomain: string, payload: any, web
         // Auto-publish to all sales channels so the product appears on the storefront
         await publishProductToAllChannels(targetStore.shopDomain, createdProduct.id);
 
-        console.log(`[ProductSync:Create] Successfully created product "${payload.title}" in target store ${targetStore.shopDomain}`);
-      } catch (err: any) {
-        syncStatus = 'FAILED';
-        failureReason = err.message || 'Unknown error during creation';
-        console.error(`[ProductSync:Create] Failed to create product in ${targetStore.shopDomain}:`, failureReason);
+        console.log(`[ProductSync:Create] Successfully created product "${payload.title}" in target store ${targetStore.shopDomain} (Request ID: ${syncResult.requestId}, Duration: ${syncResult.durationMs}ms)`);
       }
+    } finally {
+      (global as any)._syncLoopDepth = Math.max(0, ((global as any)._syncLoopDepth || 1) - 1);
     }
-
   } catch (error: any) {
     console.error(`[ProductSync:Create] Fatal error:`, error.message);
   }
 }
-
