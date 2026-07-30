@@ -7,6 +7,10 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// -----------------------------------------------------------------------------
+// CORE INFRASTRUCTURE
+// -----------------------------------------------------------------------------
+
 model Store {
   id                String   @id @default(uuid())
   uniqueStoreId     String   @unique @default(uuid())
@@ -35,6 +39,7 @@ model Store {
   variantMaps  VariantMap[]
   productCaches ProductCache[]
   collections   Collection[]
+  collectionPriceAdjustments CollectionPriceAdjustment[]
   sourceLogs   SyncLog[]    @relation("SourceStore")
   destLogs     SyncLog[]    @relation("DestinationStore")
   sourceConnections StoreConnection[] @relation("SourceConnections")
@@ -82,6 +87,10 @@ model Session {
   @@map("session")
 }
 
+// -----------------------------------------------------------------------------
+// PRODUCT CACHING & MAPPING
+// -----------------------------------------------------------------------------
+
 model VariantMap {
   id               String   @id @default(uuid())
   sku              String
@@ -121,6 +130,10 @@ model ProductCache {
   @@index([sku])
   @@map("product_cache")
 }
+
+// -----------------------------------------------------------------------------
+// LOGGING & WEBHOOK EVENTS
+// -----------------------------------------------------------------------------
 
 model SyncLog {
   id                 String   @id @default(uuid())
@@ -163,6 +176,10 @@ model WebhookEvent {
   @@map("webhook_events")
 }
 
+// -----------------------------------------------------------------------------
+// COLLECTIONS
+// -----------------------------------------------------------------------------
+
 model Collection {
   id                  String              @id @default(uuid())
   storeId             String
@@ -174,6 +191,7 @@ model Collection {
 
   store               Store               @relation(fields: [storeId], references: [id], onDelete: Cascade)
   products            CollectionProduct[]
+  priceAdjustments    CollectionPriceAdjustment[]
 
   @@unique([storeId, shopifyCollectionId])
   @@map("collections")
@@ -191,6 +209,10 @@ model CollectionProduct {
   @@map("collection_products")
 }
 
+// -----------------------------------------------------------------------------
+// STORE CONFIGURATION
+// -----------------------------------------------------------------------------
+
 model StoreSetting {
   id          String   @id @default(uuid())
   storeId     String   @unique
@@ -204,6 +226,10 @@ model StoreSetting {
 
   @@map("store_settings")
 }
+
+// -----------------------------------------------------------------------------
+// SKU GENERATION & TRACKING
+// -----------------------------------------------------------------------------
 
 model ProductMapping {
   id                 String   @id @default(cuid())
@@ -258,6 +284,10 @@ model VariantBaseSku {
   @@map("variant_base_skus")
 }
 
+// -----------------------------------------------------------------------------
+// SYSTEM QUEUES & AUDITS
+// -----------------------------------------------------------------------------
+
 enum WebhookStatus {
   PENDING
   PROCESSING
@@ -269,6 +299,9 @@ enum AuthStatus {
   AUTHENTICATED
   REQUIRES_REAUTH
   INVALID_TOKEN
+  UNINSTALLED
+  PENDING
+  SUSPENDED
 }
 
 model WebhookQueue {
@@ -314,4 +347,30 @@ model DeadLetterQueue {
   
   @@index([storeId])
   @@map("dead_letter_queue")
+}
+
+// -----------------------------------------------------------------------------
+// COLLECTION RULES & PRICING
+// -----------------------------------------------------------------------------
+
+enum PriceAdjustmentType {
+  PERCENTAGE
+  FIXED
+}
+
+model CollectionPriceAdjustment {
+  id              String              @id @default(uuid())
+  storeId         String
+  collectionId    String
+  enabled         Boolean             @default(false)
+  adjustmentType  PriceAdjustmentType @default(PERCENTAGE)
+  adjustmentValue Int                 @default(0) 
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  store           Store               @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  collection      Collection          @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+
+  @@unique([storeId, collectionId])
+  @@map("collection_price_adjustments")
 }

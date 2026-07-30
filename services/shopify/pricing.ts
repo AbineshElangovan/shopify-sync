@@ -11,30 +11,100 @@ import {
 } from './graphql';
 import { syncProductCollectionsByTags } from './collection-sync';
 
-export function calculateAdjustedPrice(sourcePriceStr: string, sourceStore: any, targetStore: any): string {
+export async function calculateAdjustedPrice(
+  sourcePriceStr: string, 
+  sourceStore: any, 
+  targetStore: any,
+  productCollections: string[] = []
+): Promise<string> {
   const sourcePrice = parseFloat(sourcePriceStr || "0");
   if (isNaN(sourcePrice)) return sourcePriceStr;
 
-  // Reverse source adjustment to get base price
+  // 1. Calculate Base Price (Reverse source adjustment)
   let basePrice = sourcePrice;
-  if (sourceStore && sourceStore.isPriceAdjustmentEnabled) {
-    const value = sourceStore.priceAdjustmentValue || 0;
-    if (sourceStore.priceAdjustmentType === 'PERCENTAGE' && value !== -100) {
-      basePrice = sourcePrice / (1 + value / 100);
-    } else if (sourceStore.priceAdjustmentType === 'FIXED') {
-      basePrice = sourcePrice - value;
+  
+  // Find applicable collection rules for SOURCE store to reverse them
+  const sourceRules = await prisma.collectionPriceAdjustment.findMany({
+    where: {
+      storeId: sourceStore?.id,
+      enabled: true,
+      collection: { title: { in: productCollections } }
+    },
+    include: { collection: true }
+  });
+
+  if (sourceRules.length > 0) {
+    if (sourceRules.length > 1) {
+      console.warn(`[Pricing] Source store ${sourceStore?.shopDomain} has multiple conflicting collection rules for product. Falling back to Store rule.`);
+      if (sourceStore && sourceStore.isPriceAdjustmentEnabled) {
+        const value = sourceStore.priceAdjustmentValue || 0;
+        if (sourceStore.priceAdjustmentType === 'PERCENTAGE' && value !== -100) {
+          basePrice = sourcePrice / (1 + value / 100);
+        } else if (sourceStore.priceAdjustmentType === 'FIXED') {
+          basePrice = sourcePrice - value;
+        }
+      }
+    } else {
+      const rule = sourceRules[0];
+      if (rule.adjustmentType === 'PERCENTAGE' && rule.adjustmentValue !== -100) {
+        basePrice = sourcePrice / (1 + rule.adjustmentValue / 100);
+      } else if (rule.adjustmentType === 'FIXED') {
+        basePrice = sourcePrice - rule.adjustmentValue;
+      }
+    }
+  } else {
+    // Fallback to source store rule
+    if (sourceStore && sourceStore.isPriceAdjustmentEnabled) {
+      const value = sourceStore.priceAdjustmentValue || 0;
+      if (sourceStore.priceAdjustmentType === 'PERCENTAGE' && value !== -100) {
+        basePrice = sourcePrice / (1 + value / 100);
+      } else if (sourceStore.priceAdjustmentType === 'FIXED') {
+        basePrice = sourcePrice - value;
+      }
     }
   }
 
-  // Apply target adjustment on base price
+  // 2. Apply Target Adjustment
   let adjusted = basePrice;
-  if (targetStore && targetStore.isPriceAdjustmentEnabled) {
-    const value = targetStore.priceAdjustmentValue || 0;
+  
+  const targetRules = await prisma.collectionPriceAdjustment.findMany({
+    where: {
+      storeId: targetStore?.id,
+      enabled: true,
+      collection: { title: { in: productCollections } }
+    },
+    include: { collection: true }
+  });
 
-    if (targetStore.priceAdjustmentType === 'PERCENTAGE') {
-      adjusted = basePrice * (1 + value / 100);
-    } else if (targetStore.priceAdjustmentType === 'FIXED') {
-      adjusted = basePrice + value;
+  if (targetRules.length > 0) {
+    if (targetRules.length > 1) {
+      console.warn(`[Pricing] Target store ${targetStore?.shopDomain} has multiple conflicting collection rules for product. Falling back to Store rule.`);
+      if (targetStore && targetStore.isPriceAdjustmentEnabled) {
+        const value = targetStore.priceAdjustmentValue || 0;
+        if (targetStore.priceAdjustmentType === 'PERCENTAGE') {
+          adjusted = basePrice * (1 + value / 100);
+        } else if (targetStore.priceAdjustmentType === 'FIXED') {
+          adjusted = basePrice + value;
+        }
+      }
+    } else {
+      const rule = targetRules[0];
+      console.log(`[Pricing] Applying Collection Rule for ${rule.collection.title}: ${rule.adjustmentType} ${rule.adjustmentValue}`);
+      if (rule.adjustmentType === 'PERCENTAGE') {
+        adjusted = basePrice * (1 + rule.adjustmentValue / 100);
+      } else if (rule.adjustmentType === 'FIXED') {
+        adjusted = basePrice + rule.adjustmentValue;
+      }
+    }
+  } else {
+    // Fallback to target store rule
+    if (targetStore && targetStore.isPriceAdjustmentEnabled) {
+      const value = targetStore.priceAdjustmentValue || 0;
+      if (targetStore.priceAdjustmentType === 'PERCENTAGE') {
+        adjusted = basePrice * (1 + value / 100);
+      } else if (targetStore.priceAdjustmentType === 'FIXED') {
+        adjusted = basePrice + value;
+      }
     }
   }
 
@@ -112,33 +182,19 @@ export async function applyPriceAdjustmentToStore(storeId: string) {
         continue;
       }
 
-      // Calculate the true base price by reversing the source store's adjustment
-      const sourcePrice = sourceCache.price;
-      let basePrice = sourcePrice;
-      if (sourceStore.isPriceAdjustmentEnabled) {
-        const sourceVal = sourceStore.priceAdjustmentValue || 0;
-        if (sourceStore.priceAdjustmentType === 'PERCENTAGE' && sourceVal !== -100) {
-          basePrice = sourcePrice / (1 + sourceVal / 100);
-        } else if (sourceStore.priceAdjustmentType === 'FIXED') {
-          basePrice = sourcePrice - sourceVal;
-        }
-      }
+      // Get collections for this product cache
+      const productCollections = await prisma.collectionProduct.findMany({
+        where: { productCacheId: sourceCache.id },
+        include: { collection: true }
+      });
+      const collectionTitles = productCollections.map(pc => pc.collection.title);
 
-      // Calculate the new target price based on the true base price
-      let newPrice = basePrice;
-      if (targetStore.isPriceAdjustmentEnabled) {
-        const targetVal = targetStore.priceAdjustmentValue || 0;
-        if (targetStore.priceAdjustmentType === 'PERCENTAGE') {
-          newPrice = basePrice * (1 + targetVal / 100);
-        } else if (targetStore.priceAdjustmentType === 'FIXED') {
-          newPrice = basePrice + targetVal;
-        }
-        if (newPrice < 0) newPrice = 0;
-      }
+      const newPriceStr = await calculateAdjustedPrice(sourceCache.price.toString(), sourceStore, targetStore, collectionTitles);
+      const newPrice = parseFloat(newPriceStr);
 
       variantsUpdateInput.push({
         id: map.shopifyVariantId,
-        price: newPrice.toFixed(2)
+        price: newPriceStr
       });
 
       cacheUpdates.push({

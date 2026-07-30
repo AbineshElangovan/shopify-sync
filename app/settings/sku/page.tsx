@@ -17,6 +17,16 @@ export default function SkuSettingsPage() {
     fetchSettings();
   }, []);
 
+  // Automatically hide any toast message after 3 seconds
+  useEffect(() => {
+    if (toastMessage) {
+      const timer = setTimeout(() => {
+        setToastMessage(null);
+      }, 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [toastMessage]);
+
   const fetchSettings = async () => {
     try {
       setLoading(true);
@@ -79,12 +89,7 @@ export default function SkuSettingsPage() {
     <div className="p-8 max-w-xl mx-auto mb-16">
       <h1 className="text-3xl font-bold mb-8 text-gray-900">SKU Configuration</h1>
 
-      {toastMessage && (
-        <div className={`mb-6 p-4 rounded-md font-medium shadow-sm border ${toastMessage.type === 'success' ? 'bg-green-50 text-green-800 border-green-200' : 'bg-red-50 text-red-800 border-red-200'
-          }`}>
-          {toastMessage.message}
-        </div>
-      )}
+
 
       {!isMaster && (
         <div className="mb-6 p-4 rounded-md font-medium shadow-sm border bg-yellow-50 text-yellow-800 border-yellow-200">
@@ -133,7 +138,12 @@ export default function SkuSettingsPage() {
                 Generated SKU Example: <Text as="span" fontWeight="bold">STB-{skuPrefix || "SHOE"}-{skuSequence ? skuSequence.toString().padStart(4, '0') : "0001"}</Text>
               </div>
 
-              <div className="mt-4 pt-4 border-t border-gray-100 flex justify-end">
+              <div className="mt-4 pt-4 border-t border-gray-100 flex justify-end items-center gap-4">
+                {toastMessage && (
+                  <span className={`text-sm font-medium ${toastMessage.type === 'success' ? 'text-green-600' : 'text-red-600'}`}>
+                    {toastMessage.message}
+                  </span>
+                )}
                 <Button variant="primary" onClick={handleSave} loading={saving} disabled={!isMaster}>
                   Save
                 </Button>

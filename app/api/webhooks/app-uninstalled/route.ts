@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyWebhook } from "@/lib/shopify/webhooks";
 import { prisma } from "@/lib/db/prisma";
+import { AuthStatus } from "@prisma/client";
 import { logAuthEvent } from "@/lib/auth/audit";
 
 export async function POST(req: NextRequest) {
@@ -51,7 +52,7 @@ export async function POST(req: NextRequest) {
         data: { 
           isActive: false,
           uniqueStoreId: invalidatedId,
-          authStatus: 'UNINSTALLED'
+          authStatus: AuthStatus.UNINSTALLED
         },
       });
 

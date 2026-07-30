@@ -6,6 +6,7 @@ import { BlockStack, Layout, Button, ChoiceList, InlineStack } from '@shopify/po
 import { shopifyFetch } from '@/lib/shopify/Client';
 import { useRouter } from 'next/navigation';
 import { Input, Checkbox, Select } from '@/components/forms';
+import CollectionPriceAdjustment from '@/components/stores/CollectionPriceAdjustment';
 
 const ThemedSection = ({
   title,
@@ -76,8 +77,7 @@ export default function SettingsPage() {
         loadedStores.forEach((store: any) => {
           let initialVal = '0';
           if (store.priceAdjustmentValue !== undefined && store.priceAdjustmentValue !== null) {
-            const sign = store.priceAdjustmentValue > 0 ? '+' : '';
-            initialVal = `${sign}${store.priceAdjustmentValue}`;
+            initialVal = store.priceAdjustmentValue.toString();
           }
           initialAdjustments[store.id] = initialVal;
           initialMasterLabels[store.id] = store.masterLabel || '';
@@ -129,20 +129,26 @@ export default function SettingsPage() {
     };
   }, []);
 
-  // Automatically hide any toast message after 15 seconds
+  // Automatically hide any toast message after 3 seconds
   useEffect(() => {
     if (toastMessage) {
       const timer = setTimeout(() => {
         setToastMessage(null);
-      }, 15000);
+      }, 3000);
       return () => clearTimeout(timer);
     }
   }, [toastMessage]);
 
   const handleStoreAdjustmentChange = (storeId: string, val: string) => {
+    let numericValue = val.replace(/[^0-9]/g, '');
+    if (numericValue.length > 1 && numericValue.startsWith('0')) {
+      numericValue = numericValue.replace(/^0+/, '');
+    }
+    if (numericValue === '') numericValue = '0';
+    
     setStoreAdjustments(prev => ({
       ...prev,
-      [storeId]: val
+      [storeId]: numericValue
     }));
   };
 
@@ -166,20 +172,20 @@ export default function SettingsPage() {
         setToastMessage({ message: '✅ Master changed.', type: 'success' });
         setTimeout(() => {
           setToastMessage(prev => prev?.message === '✅ Master changed.' ? null : prev);
-        }, 15000);
+        }, 3000);
         await loadData();
         router.refresh();
       } else {
         setToastMessage({ message: `❌ Failed: ${data.error}`, type: 'error' });
         setTimeout(() => {
           setToastMessage(prev => prev?.message === `❌ Failed: ${data.error}` ? null : prev);
-        }, 15000);
+        }, 3000);
       }
     } catch (err: any) {
       setToastMessage({ message: '❌ Failed to change Master.', type: 'error' });
       setTimeout(() => {
         setToastMessage(prev => prev?.message === '❌ Failed to change Master.' ? null : prev);
-      }, 15000);
+      }, 3000);
     } finally {
       setMasterSaving(false);
     }
@@ -434,6 +440,9 @@ export default function SettingsPage() {
                           >
                             Set
                           </Button>
+                        </div>
+                        <div style={{ width: '100%' }}>
+                          <CollectionPriceAdjustment storeId={s.id} storeName={s.label || s.shopDomain} />
                         </div>
                       </div>
                     ))

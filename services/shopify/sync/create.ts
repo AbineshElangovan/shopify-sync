@@ -251,9 +251,10 @@ export async function processProductCreate(shopDomain: string, payload: any, web
       }
 
       if (payload.variants && payload.variants.length > 0) {
-        productInput.variants = payload.variants.map((v: any) => {
+        const productCollections = payload.tags ? payload.tags.split(',').map((t: string) => t.trim()) : [];
+        productInput.variants = await Promise.all(payload.variants.map(async (v: any) => {
           const variantInput: any = {
-            price: calculateAdjustedPrice(v.price, sourceStore, targetStore),
+            price: await calculateAdjustedPrice(v.price, sourceStore, targetStore, productCollections),
             sku: v.sku?.trim() || "",
             inventoryItem: { tracked: true }
           };
@@ -271,7 +272,7 @@ export async function processProductCreate(shopDomain: string, payload: any, web
             variantInput.optionValues = [{ optionName: "Title", name: "Default Title" }];
           }
           return variantInput;
-        });
+        }));
       }
 
       const imagesToSync = (payload.images && payload.images.length > 0) ? payload.images : (payload.image ? [payload.image] : []);

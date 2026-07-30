@@ -226,8 +226,9 @@ export async function processProductUpdate(shopDomain: string, payload: any, web
 
         const matchingTargetVar = targetVariants.find((tv: any) => tv.sku?.trim().toLowerCase() === sku.toLowerCase());
 
+        const productCollections = payload.tags ? payload.tags.split(',').map((t: string) => t.trim()) : [];
         const variantInput: any = {
-          price: calculateAdjustedPrice(sourceVar.price, sourceStore, targetStore),
+          price: await calculateAdjustedPrice(sourceVar.price, sourceStore, targetStore, productCollections),
           sku: sku,
           inventoryItem: { tracked: true }
         };
