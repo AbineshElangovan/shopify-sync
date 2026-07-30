@@ -112,11 +112,14 @@ export default function ProductsPage() {
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: '#111827', margin: 0 }}>
-              Products
+              Products & Collections
             </h1>
             <p style={{ marginTop: 4, color: '#6b7280', fontSize: '0.875rem' }}>
-              Products and collections for your connected store
+              Products and collections for your connected store. 
             </p>
+            <div style={{ marginTop: 8, padding: '8px 12px', backgroundColor: '#eff6ff', borderLeft: '4px solid #3b82f6', borderRadius: '4px', fontSize: '0.875rem', color: '#1e3a8a' }}>
+              <strong>Note:</strong> Collections are managed in Shopify Admin. This page is read-only and automatically syncs changes from Shopify.
+            </div>
           </div>
           
           {/* Overall Search Bar */}

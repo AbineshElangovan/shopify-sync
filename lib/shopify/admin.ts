@@ -50,7 +50,13 @@ async function handleGraphQLError(error: any, shopDomain: string) {
   }
 
  
-  if (error.response?.code === 401 || error.response?.status === 401 || error.statusCode === 401) {
+  if (
+    error.response?.code === 401 || 
+    error.response?.status === 401 || 
+    error.statusCode === 401 || 
+    error.networkStatusCode === 401 ||
+    error.message?.includes("Unauthorized")
+  ) {
     console.warn(`Access token invalid for ${shopDomain}. Marking store as inactive.`);
     await prisma.store.update({
       where: { shopDomain },

@@ -54,8 +54,15 @@ export default function SyncPage() {
   };
 
   return (
-    <div className="p-8 max-w-7xl mx-auto">
-      <h1 className="text-3xl font-bold mb-8">Inventory Synchronization Dashboard</h1>
+    <div className="p-8 max-w-7xl mx-auto mb-16">
+      <div className="mb-6 border-b border-gray-200 pb-4">
+        <h1 style={{ fontSize: '1.5rem', fontWeight: 400, color: '#111827', margin: 0, letterSpacing: '-0.025em' }}>
+          Inventory Synchronization Dashboard
+        </h1>
+        <p style={{ fontSize: '0.8rem', color: '#4b5563', marginTop: '8px' }}>
+          Monitor your cross-store product replication and automated inventory syncing.
+        </p>
+      </div>
 
       {/* Stats Section */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">

@@ -54,7 +54,7 @@ export default function CollectionPriceAdjustment({ storeId, storeName }: { stor
     }
   }, [storeId]);
 
-  // Click outside listener to close dropdown
+  
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (!(e.target as Element).closest('.collection-dropdown-container')) {
@@ -134,57 +134,57 @@ export default function CollectionPriceAdjustment({ storeId, storeName }: { stor
         </div>
       </div>
       
-      <BlockStack gap="400">
-
-        {collections.filter(c => c.title.toLowerCase().includes(searchQuery.toLowerCase())).map((col) => (
-          <div key={col.id} style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            padding: '12px',
-            border: '1px solid #f3f4f6',
-            borderRadius: '8px',
-            backgroundColor: '#ffffff',
-            flexWrap: 'wrap',
-            gap: '12px'
-          }}>
-            <div style={{ minWidth: '150px' }}>
-              <Checkbox
-                label={col.title}
-                checked={enabledMap[col.id]}
-                onChange={(val) => setEnabledMap(prev => ({ ...prev, [col.id]: val }))}
-              />
-            </div>
-            
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', opacity: enabledMap[col.id] ? 1 : 0.5, pointerEvents: enabledMap[col.id] ? 'auto' : 'none' }}>
-              <span style={{ fontSize: '13px', color: '#374151', fontWeight: 500 }}>Adjustment:</span>
-              <div style={{ width: '80px' }}>
-                <Input
-                  type="text"
-                  label="Value"
-                  labelHidden
-                  value={valueMap[col.id]}
-                  onChange={(val) => {
-                    let numericValue = val.replace(/[^0-9]/g, '');
-                    if (numericValue.length > 1 && numericValue.startsWith('0')) {
-                      numericValue = numericValue.replace(/^0+/, '');
-                    }
-                    if (numericValue === '') numericValue = '0';
-                    setValueMap(prev => ({ ...prev, [col.id]: numericValue }));
-                  }}
-                  autoComplete="off"
+      <div className="border border-emerald-200 rounded-md bg-emerald-50/30 max-h-64 overflow-y-auto">
+        {collections.filter(c => c.title.toLowerCase().includes(searchQuery.toLowerCase())).map((col) => {
+          const isEnabled = enabledMap[col.id];
+          return (
+            <div key={col.id} 
+              className={`p-3 border-b border-emerald-100 last:border-b-0 transition-colors ${isEnabled ? 'bg-emerald-100 hover:bg-emerald-200' : 'bg-white hover:bg-emerald-50'}`}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: '12px'
+              }}>
+              <div style={{ minWidth: '150px' }}>
+                <Checkbox
+                  label={col.title}
+                  checked={isEnabled}
+                  onChange={(val) => setEnabledMap(prev => ({ ...prev, [col.id]: val }))}
                 />
               </div>
-              <span style={{ fontSize: '13px', color: '#374151', fontWeight: 500 }}>%</span>
+              
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', opacity: isEnabled ? 1 : 0.5, pointerEvents: isEnabled ? 'auto' : 'none' }}>
+                <span style={{ fontSize: '13px', color: '#374151', fontWeight: 500 }}>Adjustment:</span>
+                <div style={{ width: '80px' }}>
+                  <Input
+                    type="text"
+                    label="Value"
+                    labelHidden
+                    value={valueMap[col.id]}
+                    onChange={(val) => {
+                      let numericValue = val.replace(/[^0-9]/g, '');
+                      if (numericValue.length > 1 && numericValue.startsWith('0')) {
+                        numericValue = numericValue.replace(/^0+/, '');
+                      }
+                      if (numericValue === '') numericValue = '0';
+                      setValueMap(prev => ({ ...prev, [col.id]: numericValue }));
+                    }}
+                    autoComplete="off"
+                  />
+                </div>
+                <span style={{ fontSize: '13px', color: '#374151', fontWeight: 500 }}>%</span>
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
         {collections.filter(c => c.title.toLowerCase().includes(searchQuery.toLowerCase())).length === 0 && (
-           <div style={{ padding: '20px', textAlign: 'center', color: '#6b7280', fontSize: '13px', backgroundColor: '#f9fafb', borderRadius: '8px', border: '1px dashed #e5e7eb' }}>
+           <div style={{ padding: '20px', textAlign: 'center', color: '#6b7280', fontSize: '13px', backgroundColor: '#f9fafb' }}>
              No collections match your search.
            </div>
         )}
-      </BlockStack>
+      </div>
 
       <div style={{ marginTop: '16px', display: 'flex', alignItems: 'center', gap: '12px', justifyContent: 'flex-end' }}>
         {message && (

@@ -119,12 +119,22 @@ export async function GET(req: NextRequest) {
       const TAG_MAP: Record<string, string> = {
         'inner': 'INNERS',
         'inners': 'INNERS',
+        'pant': 'PANTS',
         'pants': 'PANTS',
+        'shirt': 'SHIRTS',
         'shirts': 'SHIRTS',
+        'tshirt': 'T-SHIRTS',
+        'tshirts': 'T-SHIRTS',
         't-shirt': 'T-SHIRTS',
+        't-shirts': 'T-SHIRTS',
+        'accessory': 'MENS ACCESSORIES',
         'accessories': 'MENS ACCESSORIES',
+        'mens accessories': 'MENS ACCESSORIES',
+        'shoe': 'SHOES',
         'shoes': 'SHOES',
+        'sock': 'SOCKS',
         'socks': 'SOCKS',
+        'trouser': 'TROUSERS',
         'trousers': 'TROUSERS',
       };
       
@@ -151,12 +161,8 @@ export async function GET(req: NextRequest) {
           existingUpperCategories.push(finalCat);
         }
       }
-      
-      if (categoryTitles.length === 0) {
-        categoryTitles = ['UNCATEGORIZED'];
-      }
 
-        // Deduplicate category titles to prevent pushing the same item multiple times
+      // Deduplicate category titles to prevent pushing the same item multiple times
       categoryTitles = Array.from(new Set(categoryTitles));
 
       categoryTitles.forEach((title) => {

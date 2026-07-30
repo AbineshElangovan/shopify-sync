@@ -16,7 +16,12 @@ export async function GET(req: NextRequest) {
       }
     });
 
-    return NextResponse.json({ success: true, setting, isMaster: (store as any).isMaster });
+    return NextResponse.json({ 
+      success: true, 
+      setting, 
+      isMaster: (store as any).isMaster,
+      storeName: store.label || store.shopDomain
+    });
   } catch (err: any) {
     console.error("[SKU Settings API] GET Error:", err.message);
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });

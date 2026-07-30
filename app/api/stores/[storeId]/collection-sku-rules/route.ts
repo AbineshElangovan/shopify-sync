@@ -21,7 +21,7 @@ export async function GET(
       }
     }
 
-    // 2. Fetch all collections from Target Store Shopify API
+    // 2. Fetch all collections from Target Store Shopify API to ensure fresh sync
     let shopifyCollections: any[] = [];
     try {
       const client = await getAdminClient(targetStore.shopDomain);
@@ -40,7 +40,7 @@ export async function GET(
       `);
       shopifyCollections = response?.data?.collections?.edges?.map((e: any) => e.node) || [];
     } catch (err: any) {
-      console.warn("[CollectionAdjustments:GET] Failed to fetch from Shopify, falling back to DB.", err.message);
+      console.warn("[CollectionSkuRules:GET] Failed to fetch from Shopify, falling back to DB.", err.message);
     }
 
     // 3. Sync to local database under the Target Store's ID
@@ -62,26 +62,26 @@ export async function GET(
       orderBy: { title: "asc" },
     });
 
-    // 5. Fetch the target store's adjustments
-    const storeAdjustments = await prisma.collectionPriceAdjustment.findMany({
+    // 5. Fetch the target store's SKU rules
+    const skuRules = await prisma.collectionSkuRule.findMany({
       where: { storeId: storeId }
     });
     
-    const adjMap = new Map();
-    storeAdjustments.forEach(adj => adjMap.set(adj.collectionId, adj));
+    const ruleMap = new Map();
+    skuRules.forEach(rule => ruleMap.set(rule.collectionId, rule));
 
     // 6. Merge them for the response
     const payload = allCollections.map(col => {
-      const adj = adjMap.get(col.id);
+      const rule = ruleMap.get(col.id);
       return {
         ...col,
-        priceAdjustment: adj || null
+        skuRule: rule || null
       };
     });
 
     return NextResponse.json(payload);
   } catch (error: any) {
-    console.error("[CollectionAdjustments:GET] Error:", error.message);
+    console.error("[CollectionSkuRules:GET] Error:", error.message);
     return new NextResponse("Internal Server Error", { status: 500 });
   }
 }
@@ -93,41 +93,53 @@ export async function PUT(
   try {
     const { storeId } = await params;
     const body = await req.json();
-    const { adjustments } = body; // Array of { collectionId, enabled, adjustmentType, adjustmentValue }
+    const { rules } = body; // Array of { collectionId, enabled, skuPrefix, startSequence }
 
-    if (!Array.isArray(adjustments)) {
+    if (!Array.isArray(rules)) {
       return new NextResponse("Invalid payload", { status: 400 });
     }
 
-    const updatedAdjustments = [];
+    const updatedRules = [];
 
-    // Use a transaction for bulk update
     await prisma.$transaction(async (tx) => {
-      for (const adj of adjustments) {
-        const { collectionId, enabled, adjustmentType, adjustmentValue } = adj;
+      for (const rule of rules) {
+        const { collectionId, enabled, skuPrefix, startSequence } = rule;
         
-        const record = await tx.collectionPriceAdjustment.upsert({
+        const existingRule = await tx.collectionSkuRule.findUnique({
+          where: { storeId_collectionId: { storeId, collectionId } }
+        });
+
+        let newStart = parseInt(startSequence, 10) || 1;
+        let updateData: any = {
+          enabled,
+          skuPrefix: skuPrefix || "",
+          startSequence: newStart,
+        };
+
+        // If they increased the start sequence past the current sequence, update currentSequence too.
+        if (existingRule && newStart > existingRule.currentSequence) {
+          updateData.currentSequence = newStart;
+        }
+
+        const record = await tx.collectionSkuRule.upsert({
           where: { storeId_collectionId: { storeId, collectionId } },
-          update: {
-            enabled,
-            adjustmentType,
-            adjustmentValue: parseInt(adjustmentValue, 10) || 0,
-          },
+          update: updateData,
           create: {
             storeId,
             collectionId,
             enabled,
-            adjustmentType,
-            adjustmentValue: parseInt(adjustmentValue, 10) || 0,
+            skuPrefix: skuPrefix || "",
+            startSequence: newStart,
+            currentSequence: newStart,
           }
         });
-        updatedAdjustments.push(record);
+        updatedRules.push(record);
       }
     });
 
-    return NextResponse.json({ success: true, count: updatedAdjustments.length });
+    return NextResponse.json({ success: true, count: updatedRules.length });
   } catch (error: any) {
-    console.error("[CollectionAdjustments:PUT] Error:", error.message);
+    console.error("[CollectionSkuRules:PUT] Error:", error.message);
     return new NextResponse("Internal Server Error", { status: 500 });
   }
 }

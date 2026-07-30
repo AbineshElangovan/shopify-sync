@@ -94,17 +94,8 @@ export async function syncProductCollectionsByTags(targetShopDomain: string, pro
 
       // Create if missing
       if (!collectionId) {
-        console.log(`[CollectionSync] Creating missing collection "${title}" in ${targetShopDomain}`);
-        const createResponse: any = await client.request(CREATE_COLLECTION_MUTATION, {
-          variables: { input: { title } }
-        });
-        const userErrors = createResponse?.data?.collectionCreate?.userErrors || [];
-        if (userErrors.length > 0) {
-          console.error(`[CollectionSync] Error creating collection "${title}":`, userErrors);
-          continue;
-        }
-        collectionId = createResponse?.data?.collectionCreate?.collection?.id;
-        collectionHandle = createResponse?.data?.collectionCreate?.collection?.handle || title.toLowerCase().replace(/\s+/g, '-');
+        console.log(`[CollectionSync] Collection "${title}" does not exist in ${targetShopDomain}. Skipping (auto-create disabled by merchant request).`);
+        continue;
       }
 
       if (collectionId) {

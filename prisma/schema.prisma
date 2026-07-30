@@ -12,76 +12,77 @@ datasource db {
 // -----------------------------------------------------------------------------
 
 model Store {
-  id                String   @id @default(uuid())
-  uniqueStoreId     String   @unique @default(uuid())
-  shopDomain        String   @unique
-  shopifyStoreId    String?
-  accessToken       String
-  scope             String
-  label             String?
-  masterLabel       String?  @unique
-  isActive                 Boolean   @default(true)
-  lowStockThreshold         Int       @default(10)
-  autoSyncEnabled          Boolean  @default(true)
-  priceAdjustmentValue     Float    @default(0.0)
-  priceAdjustmentType      String   @default("PERCENTAGE") 
-  isPriceAdjustmentEnabled Boolean  @default(false)
-  isMaster                 Boolean  @default(false)
-  
-  authStatus               AuthStatus @default(AUTHENTICATED)
-  lastAuthFailure          DateTime?
-  authFailureReason        String?
-  tokenVersion             Int        @default(1)
+  id                       String  @id @default(uuid())
+  uniqueStoreId            String  @unique @default(uuid())
+  shopDomain               String  @unique
+  shopifyStoreId           String?
+  accessToken              String
+  scope                    String
+  label                    String?
+  masterLabel              String? @unique
+  isActive                 Boolean @default(true)
+  lowStockThreshold        Int     @default(10)
+  autoSyncEnabled          Boolean @default(true)
+  priceAdjustmentValue     Float   @default(0.0)
+  priceAdjustmentType      String  @default("PERCENTAGE")
+  isPriceAdjustmentEnabled Boolean @default(false)
+  isMaster                 Boolean @default(false)
 
-  installedAt              DateTime @default(now())
-  updatedAt                DateTime @updatedAt
+  authStatus        AuthStatus @default(AUTHENTICATED)
+  lastAuthFailure   DateTime?
+  authFailureReason String?
+  tokenVersion      Int        @default(1)
 
-  variantMaps  VariantMap[]
-  productCaches ProductCache[]
-  collections   Collection[]
+  installedAt DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  variantMaps                VariantMap[]
+  productCaches              ProductCache[]
+  collections                Collection[]
   collectionPriceAdjustments CollectionPriceAdjustment[]
-  sourceLogs   SyncLog[]    @relation("SourceStore")
-  destLogs     SyncLog[]    @relation("DestinationStore")
-  sourceConnections StoreConnection[] @relation("SourceConnections")
-  targetConnections StoreConnection[] @relation("TargetConnections")
-  storeSettings     StoreSetting?
-  productMappings   ProductMapping[]
-  productBaseSkus   ProductBaseSku[]
-  variantBaseSkus   VariantBaseSku[]
+  collectionSkuRules         CollectionSkuRule[]
+  sourceLogs                 SyncLog[]                   @relation("SourceStore")
+  destLogs                   SyncLog[]                   @relation("DestinationStore")
+  sourceConnections          StoreConnection[]           @relation("SourceConnections")
+  targetConnections          StoreConnection[]           @relation("TargetConnections")
+  storeSettings              StoreSetting?
+  productMappings            ProductMapping[]
+  productBaseSkus            ProductBaseSku[]
+  variantBaseSkus            VariantBaseSku[]
 
   @@map("stores")
 }
 
 model StoreConnection {
-  id              String   @id @default(uuid())
-  sourceStoreId   String
-  targetStoreId   String
-  createdAt       DateTime @default(now())
+  id            String   @id @default(uuid())
+  sourceStoreId String
+  targetStoreId String
+  createdAt     DateTime @default(now())
 
-  sourceStore     Store    @relation("SourceConnections", fields: [sourceStoreId], references: [id], onDelete: Cascade)
-  targetStore     Store    @relation("TargetConnections", fields: [targetStoreId], references: [id], onDelete: Cascade)
+  sourceStore Store @relation("SourceConnections", fields: [sourceStoreId], references: [id], onDelete: Cascade)
+  targetStore Store @relation("TargetConnections", fields: [targetStoreId], references: [id], onDelete: Cascade)
 
   @@unique([sourceStoreId, targetStoreId])
   @@map("store_connections")
 }
 
 model Session {
-  id            String    @id
-  shop          String
-  state         String
-  isOnline      Boolean   @default(false)
-  scope         String?
-  expires       DateTime?
-  accessToken   String
-  userId        BigInt?
-  firstName     String?
-  lastName      String?
-  email         String?
-  accountOwner  Boolean   @default(false)
-  locale        String?
-  collaborator  Boolean?  @default(false)
-  emailVerified Boolean?  @default(false)
-  refreshToken  String?
+  id                  String    @id
+  shop                String
+  state               String
+  isOnline            Boolean   @default(false)
+  scope               String?
+  expires             DateTime?
+  accessToken         String
+  userId              BigInt?
+  firstName           String?
+  lastName            String?
+  email               String?
+  accountOwner        Boolean   @default(false)
+  locale              String?
+  collaborator        Boolean?  @default(false)
+  emailVerified       Boolean?  @default(false)
+  refreshToken        String?
   refreshTokenExpires DateTime?
 
   @@map("session")
@@ -102,7 +103,7 @@ model VariantMap {
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
-  store            Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
 
   @@unique([storeId, shopifyVariantId])
   @@index([sku])
@@ -123,8 +124,8 @@ model ProductCache {
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
-  store             Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
-  collections       CollectionProduct[]
+  store       Store               @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  collections CollectionProduct[]
 
   @@unique([storeId, shopifyVariantId])
   @@index([sku])
@@ -136,33 +137,33 @@ model ProductCache {
 // -----------------------------------------------------------------------------
 
 model SyncLog {
-  id                 String   @id @default(uuid())
+  id                 String    @id @default(uuid())
   sku                String?
   sourceStoreId      String
   destinationStoreId String
-  previousQuantity   Int      @default(0)
-  updatedQuantity    Int      @default(0)
+  previousQuantity   Int       @default(0)
+  updatedQuantity    Int       @default(0)
   status             String
-  failureReason      String?  @db.Text
-  triggerType        String   @default("WEBHOOK")
+  failureReason      String?   @db.Text
+  triggerType        String    @default("WEBHOOK")
   webhookEventId     String?
-  syncType           String   @default("UNKNOWN")
+  syncType           String    @default("UNKNOWN")
   webhookTopic       String?
-  retryCount         Int      @default(0)
+  retryCount         Int       @default(0)
   nextRetryAt        DateTime?
   errorCode          String?
-  errorMessage       String?  @db.Text
+  errorMessage       String?   @db.Text
   requestId          String?
   durationMs         Int?
-  createdAt          DateTime @default(now())
+  createdAt          DateTime  @default(now())
 
-  sourceStore        Store    @relation("SourceStore", fields: [sourceStoreId], references: [id])
-  destinationStore   Store    @relation("DestinationStore", fields: [destinationStoreId], references: [id])
+  sourceStore      Store @relation("SourceStore", fields: [sourceStoreId], references: [id])
+  destinationStore Store @relation("DestinationStore", fields: [destinationStoreId], references: [id])
 
+  @@unique([webhookEventId, syncType, destinationStoreId])
   @@index([sku])
   @@index([status])
   @@index([createdAt])
-  @@unique([webhookEventId, syncType, destinationStoreId])
   @@map("sync_logs")
 }
 
@@ -180,30 +181,36 @@ model WebhookEvent {
 // COLLECTIONS
 // -----------------------------------------------------------------------------
 
+enum CollectionSource {
+  SHOPIFY
+}
+
 model Collection {
-  id                  String              @id @default(uuid())
+  id                  String           @id @default(uuid())
   storeId             String
   shopifyCollectionId String
   title               String
   handle              String
-  createdAt           DateTime            @default(now())
-  updatedAt           DateTime            @updatedAt
+  source              CollectionSource @default(SHOPIFY)
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
 
-  store               Store               @relation(fields: [storeId], references: [id], onDelete: Cascade)
-  products            CollectionProduct[]
-  priceAdjustments    CollectionPriceAdjustment[]
+  store            Store                       @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  products         CollectionProduct[]
+  priceAdjustments CollectionPriceAdjustment[]
+  skuRules         CollectionSkuRule[]
 
   @@unique([storeId, shopifyCollectionId])
   @@map("collections")
 }
 
 model CollectionProduct {
-  id             String       @id @default(uuid())
+  id             String @id @default(uuid())
   collectionId   String
   productCacheId String
 
-  collection     Collection   @relation(fields: [collectionId], references: [id], onDelete: Cascade)
-  productCache   ProductCache @relation(fields: [productCacheId], references: [id], onDelete: Cascade)
+  collection   Collection   @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  productCache ProductCache @relation(fields: [productCacheId], references: [id], onDelete: Cascade)
 
   @@unique([collectionId, productCacheId])
   @@map("collection_products")
@@ -214,15 +221,15 @@ model CollectionProduct {
 // -----------------------------------------------------------------------------
 
 model StoreSetting {
-  id          String   @id @default(uuid())
-  storeId     String   @unique
+  id                     String   @id @default(uuid())
+  storeId                String   @unique
   skuPrefix              String   @default("SKU")
   skuSequence            Int      @default(1)
   isSkuGenerationEnabled Boolean  @default(true)
   createdAt              DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  updatedAt              DateTime @updatedAt
 
-  store       Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
 
   @@map("store_settings")
 }
@@ -232,18 +239,18 @@ model StoreSetting {
 // -----------------------------------------------------------------------------
 
 model ProductMapping {
-  id                 String   @id @default(cuid())
-  productUniqueId    String
-  storeId            String
-  storeName          String?
-  shopifyProductId   String
-  shopifyVariantId   String
-  inventoryItemId    String?
-  sku                String?
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  id               String   @id @default(cuid())
+  productUniqueId  String
+  storeId          String
+  storeName        String?
+  shopifyProductId String
+  shopifyVariantId String
+  inventoryItemId  String?
+  sku              String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
-  store              Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
 
   @@unique([storeId, shopifyVariantId])
   @@index([productUniqueId])
@@ -253,32 +260,31 @@ model ProductMapping {
 model ProductUniqueIdSequence {
   id              String @id @default("product")
   currentSequence Int    @default(1)
-  
+
   @@map("product_unique_id_sequence")
 }
 
 model ProductBaseSku {
-  id                String   @id @default(uuid())
-  shopifyProductId  String
-  storeId           String
-  baseSequence      Int
-  createdAt         DateTime @default(now())
+  id               String   @id @default(uuid())
+  shopifyProductId String
+  storeId          String
+  baseSequence     Int
+  createdAt        DateTime @default(now())
 
-  store             Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
 
   @@unique([storeId, shopifyProductId])
   @@map("product_base_skus")
 }
 
-
 model VariantBaseSku {
-  id                String   @id @default(uuid())
-  shopifyVariantId  String
-  storeId           String
-  baseSequence      Int
-  createdAt         DateTime @default(now())
+  id               String   @id @default(uuid())
+  shopifyVariantId String
+  storeId          String
+  baseSequence     Int
+  createdAt        DateTime @default(now())
 
-  store             Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
 
   @@unique([storeId, shopifyVariantId])
   @@map("variant_base_skus")
@@ -305,17 +311,17 @@ enum AuthStatus {
 }
 
 model WebhookQueue {
-  id          String        @id @default(uuid())
-  webhookId   String        @unique // From X-Shopify-Webhook-Id to prevent duplicates
-  topic       String
-  shopDomain  String
-  apiVersion  String?
-  payload     Json
-  status      WebhookStatus @default(PENDING)
-  attempts    Int           @default(0)
-  error       String?       @db.Text
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
+  id         String        @id @default(uuid())
+  webhookId  String        @unique // From X-Shopify-Webhook-Id to prevent duplicates
+  topic      String
+  shopDomain String
+  apiVersion String?
+  payload    Json
+  status     WebhookStatus @default(PENDING)
+  attempts   Int           @default(0)
+  error      String?       @db.Text
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
 
   @@index([status, createdAt])
   @@index([shopDomain, topic])
@@ -336,15 +342,15 @@ model AuthAudit {
 }
 
 model DeadLetterQueue {
-  id              String   @id @default(cuid())
-  storeId         String
-  jobType         String   // e.g. "webhook", "sync"
-  payload         Json
-  error           String?  @db.Text
-  failedAttempts  Int
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  
+  id             String   @id @default(cuid())
+  storeId        String
+  jobType        String // e.g. "webhook", "sync"
+  payload        Json
+  error          String?  @db.Text
+  failedAttempts Int
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
   @@index([storeId])
   @@map("dead_letter_queue")
 }
@@ -364,13 +370,31 @@ model CollectionPriceAdjustment {
   collectionId    String
   enabled         Boolean             @default(false)
   adjustmentType  PriceAdjustmentType @default(PERCENTAGE)
-  adjustmentValue Int                 @default(0) 
+  adjustmentValue Int                 @default(0)
   createdAt       DateTime            @default(now())
   updatedAt       DateTime            @updatedAt
 
-  store           Store               @relation(fields: [storeId], references: [id], onDelete: Cascade)
-  collection      Collection          @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  store      Store      @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
 
   @@unique([storeId, collectionId])
   @@map("collection_price_adjustments")
+}
+
+model CollectionSkuRule {
+  id              String   @id @default(uuid())
+  storeId         String
+  collectionId    String
+  enabled         Boolean  @default(false)
+  skuPrefix       String   @default("")
+  startSequence   Int      @default(1)
+  currentSequence Int      @default(1)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  store      Store      @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+
+  @@unique([storeId, collectionId])
+  @@map("collection_sku_rules")
 }

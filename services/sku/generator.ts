@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db/prisma";
+import { getAdminClient } from "@/lib/shopify/admin";
 
 export async function generateSkusForProductIfNeeded(shopDomain: string, payload: any) {
   const store = await prisma.store.findUnique({ where: { shopDomain } });
@@ -21,9 +22,53 @@ export async function generateSkusForProductIfNeeded(shopDomain: string, payload
     return payload;
   }
 
-  const prefix = setting.skuPrefix || "SKU";
+  const globalPrefix = "STB"; // The application prefix is read-only "STB" as requested
   const variants = payload.variants || [];
   if (variants.length === 0) return payload;
+
+  const numericProductId = payload.admin_graphql_api_id
+    ? payload.admin_graphql_api_id.replace('gid://shopify/Product/', '')
+    : payload.id.toString();
+  const graphqlProductId = `gid://shopify/Product/${numericProductId}`;
+
+  // 1. Fetch active collection rules for this store
+  const activeRules = await prisma.collectionSkuRule.findMany({
+    where: { storeId: store.id, enabled: true },
+    include: { collection: true }
+  });
+
+  let appliedRule: any = null;
+
+  if (activeRules.length > 0) {
+    try {
+      // 2. Fetch the product's collections from Shopify GraphQL to be absolutely sure we have the latest
+      const client = await getAdminClient(shopDomain);
+      const colResponse: any = await client.request(`
+        query getProductCollections($id: ID!) {
+          product(id: $id) {
+            collections(first: 10) {
+              edges { node { id title } }
+            }
+          }
+        }
+      `, { variables: { id: graphqlProductId } });
+
+      const productCollections = colResponse?.data?.product?.collections?.edges?.map((e: any) => e.node.id) || [];
+      
+      // Find the first rule that matches one of the product's collections
+      // Sorting rules by collection title alphabetically for deterministic priority
+      activeRules.sort((a, b) => a.collection.title.localeCompare(b.collection.title));
+      
+      for (const rule of activeRules) {
+        if (productCollections.includes(rule.collection.shopifyCollectionId)) {
+          appliedRule = rule;
+          break;
+        }
+      }
+    } catch (err: any) {
+      console.error("[SKU Generator] Failed to fetch collections for product:", err.message);
+    }
+  }
 
   const variantsToUpdate = [];
 
@@ -41,21 +86,21 @@ export async function generateSkusForProductIfNeeded(shopDomain: string, payload
       }
     });
 
-    // If it doesn't have a variant base in this store, but ALREADY has a valid SKU, 
-    // it was likely synced from a previous master store. We should keep the existing SKU.
     if (!variantBase && variant.sku && variant.sku !== "N/A" && variant.sku.trim() !== "") {
-      continue;
+      continue; // keep existing valid SKU
     }
 
+    let sequenceToUse = 1;
+
     if (!variantBase) {
-      // Increment global sequence for this new variant exactly once
+      // ALWAYS increment global sequence, even if a collection rule is applied
       const updatedSetting = await prisma.storeSetting.update({
         where: { storeId: store.id },
         data: { skuSequence: { increment: 1 } },
         select: { skuSequence: true }
       });
+      sequenceToUse = updatedSetting.skuSequence - 1;
 
-      const sequenceToUse = updatedSetting.skuSequence - 1;
       variantBase = await prisma.variantBaseSku.create({
         data: {
           storeId: store.id,
@@ -63,23 +108,53 @@ export async function generateSkusForProductIfNeeded(shopDomain: string, payload
           baseSequence: sequenceToUse
         }
       });
+    } else {
+      sequenceToUse = variantBase.baseSequence;
     }
 
-    const paddedSequence = variantBase.baseSequence.toString().padStart(4, '0');
+    const paddedSequence = sequenceToUse.toString().padStart(4, '0');
 
     let optionsStr = "";
     if (variant.title && variant.title !== 'Default Title') {
-      optionsStr = "-" + variant.title.toUpperCase().replace(/[\s\/]+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+      optionsStr = variant.title.toUpperCase().replace(/[\s\/]+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
     } else {
       const opts = [variant.option1, variant.option2, variant.option3].filter(Boolean);
       if (opts.length > 0 && opts[0] !== 'Default Title') {
-        optionsStr = "-" + opts.map((o: any) => o.toString().toUpperCase().replace(/[\s\/]+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '')).join('-');
+        optionsStr = opts.map((o: any) => o.toString().toUpperCase().replace(/[\s\/]+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '')).join('-');
       }
     }
 
-    const expectedSku = `${prefix}-${paddedSequence}${optionsStr}`;
+    let expectedSku = "";
+    
+    // Format: STB-HELLO-COLLECTION-L-0023 or STB-HELLO-COLLECTION-0023
+    if (appliedRule) {
+      const globPrefix = setting.skuPrefix || "SKU";
+      
+      const words = appliedRule.collection.title.trim().split(/[\s\-]+/).filter((w: string) => w.length > 0);
+      let colPrefix = '';
+      if (words.length === 1) {
+        colPrefix = words[0].substring(0, 3).toUpperCase();
+      } else if (words.length === 2) {
+        colPrefix = (words[0][0] + words[1].substring(0, 2)).toUpperCase();
+      } else if (words.length >= 3) {
+        colPrefix = (words[0][0] + words[1][0] + words[2][0]).toUpperCase();
+      }
+      colPrefix = (colPrefix || 'COL').padEnd(3, 'X').substring(0, 3);
+      
+      if (optionsStr) {
+        expectedSku = `${globalPrefix}-${globPrefix}-${colPrefix}-${optionsStr}-${paddedSequence}`;
+      } else {
+        expectedSku = `${globalPrefix}-${globPrefix}-${colPrefix}-${paddedSequence}`;
+      }
+    } else {
+      const globPrefix = setting.skuPrefix || "SKU";
+      if (optionsStr) {
+        expectedSku = `${globalPrefix}-${globPrefix}-${optionsStr}-${paddedSequence}`;
+      } else {
+        expectedSku = `${globalPrefix}-${globPrefix}-${paddedSequence}`;
+      }
+    }
 
-    // Detect if the variant's SKU needs to be generated or regenerated
     if (variant.sku !== expectedSku) {
       variant.sku = expectedSku;
       variantsToUpdate.push(variant);
@@ -87,15 +162,8 @@ export async function generateSkusForProductIfNeeded(shopDomain: string, payload
   }
 
   if (variantsToUpdate.length > 0) {
-    // Push the updated SKUs back to Shopify Admin in bulk
     try {
-      const { getAdminClient } = require('@/lib/shopify/admin');
       const client = await getAdminClient(shopDomain);
-
-      const numericProductId = payload.admin_graphql_api_id
-        ? payload.admin_graphql_api_id
-        : `gid://shopify/Product/${payload.id}`;
-
       const formattedVariants = variantsToUpdate.map(v => {
         const numericVariantId = v.admin_graphql_api_id
           ? v.admin_graphql_api_id
@@ -115,13 +183,13 @@ export async function generateSkusForProductIfNeeded(shopDomain: string, payload
       `;
       await client.request(updateMutation, {
         variables: {
-          productId: numericProductId,
+          productId: graphqlProductId,
           variants: formattedVariants
         }
       });
-      console.log(`[SKU Generator] Successfully updated ${variantsToUpdate.length} variant SKUs for Product ${numericProductId}`);
+      console.log(`[SKU Generator] Successfully updated ${variantsToUpdate.length} variant SKUs for Product ${graphqlProductId}`);
     } catch (err: any) {
-      console.error(`[SKU Generator] Failed to push SKUs back to Master Store:`, err.message);
+      console.error(`[SKU Generator] Failed to push SKUs back to Shopify:`, err.message);
     }
   }
 
