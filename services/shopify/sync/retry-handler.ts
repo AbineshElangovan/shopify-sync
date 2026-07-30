@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/db/prisma';
+import { logAuthEvent } from '@/lib/auth/audit';
 
 export interface RetryContext {
   targetStoreDomain: string;
@@ -99,21 +100,48 @@ export async function executeWithRetry(
       const is429 = errorMessage.includes('429') || errorMessage.includes('Too Many Requests');
       const is5xx = errorMessage.match(/50\d/);
       
+      const isInvalidToken = errorMessage.includes('CRITICAL') || errorMessage.includes('empty access token');
+
       let errorCode = "UNKNOWN";
       if (is403) errorCode = "403";
       else if (is401) errorCode = "401";
       else if (is404) errorCode = "404";
       else if (is429) errorCode = "429";
       else if (is5xx) errorCode = "5xx";
+      else if (isInvalidToken) errorCode = "INVALID_TOKEN";
       
-      const isRetriable = is429 || is5xx || (!is403 && !is401 && !is404);
+      const isRetriable = is429 || is5xx || (!is403 && !is401 && !is404 && !isInvalidToken);
 
-      if (is401 || is403) {
-        // Deactivate store
+      if (is401 || is403 || isInvalidToken) {
+        // Pause store, prevent further jobs, mark REQUIRES_REAUTH
         await prisma.store.update({
           where: { id: context.targetStoreId },
-          data: { isActive: false }
+          data: { 
+            isActive: false,
+            authStatus: 'REQUIRES_REAUTH',
+            lastAuthFailure: new Date(),
+            authFailureReason: errorMessage
+          }
         });
+
+        const store = await prisma.store.findUnique({ where: { id: context.targetStoreId } });
+        if (store) {
+          await logAuthEvent(
+            store.shopDomain,
+            "Worker Authentication Failed",
+            false,
+            `Job failed due to ${errorCode}: ${errorMessage}`
+          );
+        }
+
+        // Return immediately. Do not retry authentication failures.
+        return {
+          success: false,
+          errorCode,
+          errorMessage,
+          durationMs: Date.now() - startTime,
+          retryCount
+        };
       }
 
       if (isRetriable && retryCount < maxRetries) {
@@ -160,6 +188,17 @@ export async function executeWithRetry(
           errorMessage,
           durationMs,
           nextRetryAt: null
+        }
+      });
+
+      // Send to Dead Letter Queue (DLQ) for admin review
+      await prisma.deadLetterQueue.create({
+        data: {
+          storeId: context.targetStoreId,
+          jobType: context.syncType,
+          payload: { context, errorMessage, errorCode } as any,
+          error: errorMessage,
+          failedAttempts: retryCount + 1
         }
       });
 

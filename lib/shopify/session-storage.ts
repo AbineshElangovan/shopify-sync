@@ -6,6 +6,16 @@ export const sessionStorage = {
     try {
       const user = session.onlineAccessInfo?.associated_user;
 
+      // Ensure we don't accidentally wipe out an existing valid access token
+      const incomingToken = session.accessToken || "";
+      let finalToken = incomingToken;
+      
+      if (!incomingToken) {
+        const existingSession = await prisma.session.findUnique({ where: { id: session.id } });
+        finalToken = existingSession?.accessToken || "";
+        console.warn(`[CustomSessionStorage] Warning: SDK attempted to store session ${session.id} with blank token. Preserving existing token.`);
+      }
+
       await prisma.session.upsert({
         where: { id: session.id },
         update: {
@@ -14,7 +24,7 @@ export const sessionStorage = {
           isOnline: session.isOnline,
           scope: session.scope || null,
           expires: session.expires || null,
-          accessToken: session.accessToken || "",
+          accessToken: finalToken,
           userId: user?.id ? BigInt(user.id) : null,
           firstName: user?.first_name || null,
           lastName: user?.last_name || null,
@@ -33,7 +43,7 @@ export const sessionStorage = {
           isOnline: session.isOnline,
           scope: session.scope || null,
           expires: session.expires || null,
-          accessToken: session.accessToken || "",
+          accessToken: finalToken,
           userId: user?.id ? BigInt(user.id) : null,
           firstName: user?.first_name || null,
           lastName: user?.last_name || null,

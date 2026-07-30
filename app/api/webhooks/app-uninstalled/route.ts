@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyWebhook } from "@/lib/shopify/webhooks";
 import { prisma } from "@/lib/db/prisma";
+import { logAuthEvent } from "@/lib/auth/audit";
 
 export async function POST(req: NextRequest) {
   try {
@@ -49,7 +50,8 @@ export async function POST(req: NextRequest) {
         where: { id: store.id },
         data: { 
           isActive: false,
-          uniqueStoreId: invalidatedId
+          uniqueStoreId: invalidatedId,
+          authStatus: 'UNINSTALLED'
         },
       });
 
@@ -57,6 +59,8 @@ export async function POST(req: NextRequest) {
       await prisma.session.deleteMany({
         where: { shop },
       });
+
+      await logAuthEvent(shop, "App Uninstalled", true, "App uninstalled webhook processed");
     }
 
     return new NextResponse("Webhook processed successfully", { status: 200 });

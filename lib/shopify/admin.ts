@@ -14,87 +14,29 @@ export async function getAdminClient(shopDomain: string) {
     where: { shopDomain },
   });
 
-  console.log("[AdminClient] Store record query result:", {
-    found: Boolean(store),
-    isActive: store?.isActive,
-    hasAccessToken: Boolean(store?.accessToken),
-  });
-
   if (!store || !store.isActive) {
     throw new Error(`Store ${shopDomain} is not active or not found.`);
   }
 
-  const maskedToken = store.accessToken
-    ? `${store.accessToken.substring(0, 10)}...${store.accessToken.substring(store.accessToken.length - 4)}`
-    : "null";
-  console.log("[AdminClient] Instantiating offline Session with token:", maskedToken);
-
-  let session = await shopify.config.sessionStorage.loadSession(`offline_${shopDomain}`);
-
-  if (session && !session.isActive(shopify.config.scopes)) {
-    if (session.refreshToken) {
-      console.log(`[AdminClient] Session for ${shopDomain} is expired. Refreshing...`);
-      try {
-        const url = `https://${shopDomain}/admin/oauth/access_token`;
-        const body = JSON.stringify({
-          client_id: shopify.config.apiKey,
-          client_secret: shopify.config.apiSecretKey,
-          grant_type: "refresh_token",
-          refresh_token: session.refreshToken
-        });
-
-        const refreshRes = await fetch(url, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json'
-          },
-          body
-        });
-
-        if (!refreshRes.ok) {
-          const errText = await refreshRes.text();
-          throw new Error(`Shopify API error ${refreshRes.status}: ${errText}`);
-        }
-
-        const data = await refreshRes.json();
-        
-        if (data.access_token) {
-          session.accessToken = data.access_token;
-          if (data.expires_in) {
-            const expires = new Date();
-            expires.setSeconds(expires.getSeconds() + data.expires_in);
-            session.expires = expires;
-          }
-          if (data.refresh_token) {
-            session.refreshToken = data.refresh_token;
-          }
-
-          await shopify.config.sessionStorage.storeSession(session as Session);
-          
-          await prisma.store.update({
-            where: { shopDomain },
-            data: { accessToken: session.accessToken }
-          });
-          console.log(`[AdminClient] Token refreshed successfully.`);
-        } else {
-          throw new Error("No access_token in refresh response");
-        }
-      } catch (err) {
-        console.error(`[AdminClient] Failed to refresh token for ${shopDomain}:`, err);
-      }
-    }
+  // 1. Strict Validation
+  if (!store.accessToken || store.accessToken.trim() === "") {
+    console.error(`[AdminClient] CRITICAL: Store ${shopDomain} has an empty access token.`);
+    throw new Error(`CRITICAL: Store ${shopDomain} has an empty access token.`);
   }
 
-  if (!session) {
-    session = new Session({
-      id: `offline_${shopDomain}`,
-      shop: shopDomain,
-      state: "offline",
-      isOnline: false,
-      accessToken: store.accessToken!,
-    });
-  }
+  const maskedToken = `${store.accessToken.substring(0, 10)}...${store.accessToken.substring(store.accessToken.length - 4)}`;
+  console.log("[AdminClient] Instantiating offline Session with Store token:", maskedToken);
+
+  // 2. Single Source of Truth
+  // We construct an ephemeral Session object solely for the SDK to use.
+  // We DO NOT fetch from or write to the Shopify-managed Session table.
+  const session = new Session({
+    id: `offline_${shopDomain}`,
+    shop: shopDomain,
+    state: "offline",
+    isOnline: false,
+    accessToken: store.accessToken,
+  });
 
   const client = new shopify.clients.Graphql({ session: session as Session });
   console.log("[AdminClient] GraphQL client initialized successfully.");

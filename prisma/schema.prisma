@@ -16,13 +16,19 @@ model Store {
   scope             String
   label             String?
   masterLabel       String?  @unique
-  isActive                  Boolean   @default(true)
+  isActive                 Boolean   @default(true)
   lowStockThreshold         Int       @default(10)
   autoSyncEnabled          Boolean  @default(true)
   priceAdjustmentValue     Float    @default(0.0)
   priceAdjustmentType      String   @default("PERCENTAGE") 
   isPriceAdjustmentEnabled Boolean  @default(false)
   isMaster                 Boolean  @default(false)
+  
+  authStatus               AuthStatus @default(AUTHENTICATED)
+  lastAuthFailure          DateTime?
+  authFailureReason        String?
+  tokenVersion             Int        @default(1)
+
   installedAt              DateTime @default(now())
   updatedAt                DateTime @updatedAt
 
@@ -259,6 +265,12 @@ enum WebhookStatus {
   FAILED
 }
 
+enum AuthStatus {
+  AUTHENTICATED
+  REQUIRES_REAUTH
+  INVALID_TOKEN
+}
+
 model WebhookQueue {
   id          String        @id @default(uuid())
   webhookId   String        @unique // From X-Shopify-Webhook-Id to prevent duplicates
@@ -275,4 +287,31 @@ model WebhookQueue {
   @@index([status, createdAt])
   @@index([shopDomain, topic])
   @@map("webhook_queue")
+}
+
+model AuthAudit {
+  id         String   @id @default(cuid())
+  shopDomain String
+  event      String
+  success    Boolean
+  message    String?  @db.Text
+  createdAt  DateTime @default(now())
+
+  @@index([shopDomain])
+  @@index([createdAt])
+  @@map("auth_audits")
+}
+
+model DeadLetterQueue {
+  id              String   @id @default(cuid())
+  storeId         String
+  jobType         String   // e.g. "webhook", "sync"
+  payload         Json
+  error           String?  @db.Text
+  failedAttempts  Int
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  @@index([storeId])
+  @@map("dead_letter_queue")
 }

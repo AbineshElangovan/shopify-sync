@@ -5,6 +5,7 @@ import { NextRequest } from "next/server";
 import { redirect } from "next/navigation";
 import { syncStoreProducts } from "./bulk-sync";
 import { hasValidShopifyAccessToken } from "./utils";
+import { logAuthEvent } from "@/lib/auth/audit";
 
 export async function cleanupSeededData() {
   try {
@@ -192,21 +193,34 @@ export async function handleAuthCallback(req: NextRequest) {
     updateData.uniqueStoreId = `STORE-${Math.random().toString(36).substring(2, 10).toUpperCase()}`;
   }
 
-  const storedShop = await prisma.store.upsert({
-    where: { shopDomain: normalizedShop },
-    update: updateData,
-    create: {
-      shopDomain: normalizedShop,
-      shopifyStoreId: shopifyStoreId,
-      accessToken: accessToken,
-      scope: scope || "",
-      isActive: true,
-      label: shopLabel,
-      uniqueStoreId: `STORE-${Math.random().toString(36).substring(2, 10).toUpperCase()}`,
-    },
+  const storedShop = await prisma.$transaction(async (tx) => {
+    const store = await tx.store.upsert({
+      where: { shopDomain: normalizedShop },
+      update: updateData,
+      create: {
+        shopDomain: normalizedShop,
+        shopifyStoreId: shopifyStoreId,
+        accessToken: accessToken,
+        scope: scope || "",
+        isActive: true,
+        label: shopLabel,
+        uniqueStoreId: `STORE-${Math.random().toString(36).substring(2, 10).toUpperCase()}`,
+      },
+    });
+
+    await tx.authAudit.create({
+      data: {
+        shopDomain: normalizedShop,
+        event: "OAuth Completed",
+        success: true,
+        message: `App ${isReinstall ? "reinstalled" : "installed"} successfully.`,
+      }
+    });
+
+    return store;
   });
 
-  console.log("[OAuth] Store record persisted successfully:", {
+  console.log("[OAuth] Store record and audit log persisted successfully:", {
     id: storedShop.id,
     shopDomain: storedShop.shopDomain,
     label: storedShop.label,
