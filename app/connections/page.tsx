@@ -12,6 +12,8 @@ import {
 } from '@shopify/polaris';
 import { Checkbox } from '@/components/forms';
 import { shopifyFetch } from '@/lib/shopify/Client';
+import { useRouter } from 'next/navigation';
+import { LocalizedDate } from '@/components/common/LocalizedDate';
 import { Icon } from '@shopify/polaris';
 import { DeleteIcon, AlertTriangleIcon } from '@shopify/polaris-icons';
 
@@ -228,7 +230,7 @@ export default function ConnectionsPage() {
     domain: s.shopDomain,
     label: s.label || s.shopDomain,
     status: s.isActive ? 'CONNECTED' : 'DISCONNECTED',
-    installedAt: new Date(s.installedAt).toLocaleDateString(),
+    installedAt: <LocalizedDate date={s.installedAt} format="date" />,
   }));
 
   const tableColumns = [

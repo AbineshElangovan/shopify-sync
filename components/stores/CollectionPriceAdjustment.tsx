@@ -11,6 +11,7 @@ export default function CollectionPriceAdjustment({ storeId, storeName }: { stor
   const [saving, setSaving] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [message, setMessage] = useState<{ text: string, type: 'success' | 'error' } | null>(null);
+  const [bulkValue, setBulkValue] = useState('');
 
   const [showDropdown, setShowDropdown] = useState(false);
 
@@ -121,7 +122,7 @@ export default function CollectionPriceAdjustment({ storeId, storeName }: { stor
         <h3 style={{ fontSize: '14px', fontWeight: 600, color: '#111827' }}>
           Collection Price Adjustments for {storeName}
         </h3>
-        <div style={{ width: '250px' }}>
+        <div style={{ width: '220px' }}>
           <Input
             type="text"
             label="Search collections"
@@ -186,15 +187,72 @@ export default function CollectionPriceAdjustment({ storeId, storeName }: { stor
         )}
       </div>
 
-      <div style={{ marginTop: '16px', display: 'flex', alignItems: 'center', gap: '12px', justifyContent: 'flex-end' }}>
-        {message && (
-          <span style={{ color: message.type === 'success' ? '#16a34a' : '#dc2626', fontSize: '13px', fontWeight: 500 }}>
-            {message.text}
-          </span>
-        )}
-        <Button variant="primary" loading={saving} onClick={handleSave}>
-          Save Collection Rules
-        </Button>
+      <div style={{ marginTop: '16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <Button size="micro" onClick={() => {
+              const newMap = { ...enabledMap };
+              collections.forEach(c => {
+                if (c.title.toLowerCase().includes(searchQuery.toLowerCase())) {
+                  newMap[c.id] = true;
+                }
+              });
+              setEnabledMap(newMap);
+            }}>Select All</Button>
+            <Button size="micro" onClick={() => {
+              const newMap = { ...enabledMap };
+              collections.forEach(c => {
+                if (c.title.toLowerCase().includes(searchQuery.toLowerCase())) {
+                  newMap[c.id] = false;
+                }
+              });
+              setEnabledMap(newMap);
+            }}>Deselect All</Button>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', paddingLeft: '16px', borderLeft: '1px solid #e5e7eb' }}>
+            <span style={{ fontSize: '13px', color: '#374151', fontWeight: 500 }}>Bulk Apply:</span>
+            <div style={{ width: '70px' }}>
+              <Input
+                type="text"
+                label="Bulk Value"
+                labelHidden
+                placeholder="0"
+                value={bulkValue}
+                onChange={(val) => {
+                  let numericValue = val.replace(/[^0-9]/g, '');
+                  setBulkValue(numericValue);
+                }}
+                autoComplete="off"
+              />
+            </div>
+            <span style={{ fontSize: '13px', color: '#374151', fontWeight: 500 }}>%</span>
+            <Button size="micro" onClick={() => {
+              const newValueMap = { ...valueMap };
+              let appliedCount = 0;
+              collections.forEach(c => {
+                if (enabledMap[c.id]) {
+                  newValueMap[c.id] = bulkValue || '0';
+                  appliedCount++;
+                }
+              });
+              setValueMap(newValueMap);
+              setMessage({ text: `✓ Applied ${bulkValue || 0}% to ${appliedCount} selected collections.`, type: 'success' });
+              setTimeout(() => setMessage(null), 3000);
+            }}>Apply to Selected</Button>
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          {message && (
+            <span style={{ color: message.type === 'success' ? '#16a34a' : '#dc2626', fontSize: '13px', fontWeight: 500 }}>
+              {message.text}
+            </span>
+          )}
+          <Button variant="primary" loading={saving} onClick={handleSave}>
+            Save Collection
+          </Button>
+        </div>
       </div>
     </div>
   );

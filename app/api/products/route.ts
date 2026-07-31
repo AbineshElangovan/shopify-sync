@@ -110,8 +110,8 @@ export async function GET(req: NextRequest) {
             ? 'Low'
             : 'Healthy',
         status: p.inventoryQuantity > 0 ? 'Active' : 'Inactive',
-        updatedDate: p.updatedAt.toLocaleDateString('en-US'),
-        updatedTime: p.updatedAt.toLocaleTimeString('en-US'),
+        updatedDate: p.updatedAt.toISOString(),
+        updatedTime: p.updatedAt.toISOString(),
       };
 
       let rawCategories: string[] = [];

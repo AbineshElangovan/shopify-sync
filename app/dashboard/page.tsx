@@ -3,6 +3,7 @@ import { BlockStack, Layout } from '@shopify/polaris';
 import { DashboardCards } from '@/components/dashboard/DashboardCards';
 import { DashboardCharts } from '@/components/dashboard/DashboardCharts';
 import { Table, ColumnConfig } from '@/components/common/Table';
+import { LocalizedDate } from '@/components/common/LocalizedDate';
 
 export const dynamic = 'force-dynamic';
 
@@ -80,8 +81,8 @@ export default async function DashboardPage() {
     sku: p.sku || 'N/A',
     inventoryQuantity: p.inventoryQuantity,
     stockLevel: p.inventoryQuantity <= 5 ? 'Critical' : 'Low',
-    updatedDate: p.updatedAt.toLocaleDateString(),
-    updatedTime: p.updatedAt.toLocaleTimeString(),
+    updatedDate: <LocalizedDate date={p.updatedAt} format="date" />,
+    updatedTime: <LocalizedDate date={p.updatedAt} format="time" />,
   }));
 
   const lowStockColumns: ColumnConfig[] = [
@@ -109,8 +110,8 @@ export default async function DashboardPage() {
     sku: p.sku || 'N/A',
     inventoryQuantity: p.inventoryQuantity,
     status: 'Active',
-    addedDate: p.updatedAt.toLocaleDateString(),
-    addedTime: p.updatedAt.toLocaleTimeString(),
+    addedDate: <LocalizedDate date={p.updatedAt} format="date" />,
+    addedTime: <LocalizedDate date={p.updatedAt} format="time" />,
   }));
 
   const recentlyAddedColumns: ColumnConfig[] = [

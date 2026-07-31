@@ -5,6 +5,7 @@ import { Table, ColumnConfig } from '@/components/common/Table';
 import { BlockStack } from '@shopify/polaris';
 import { shopifyFetch } from '@/lib/shopify/Client';
 import { DashboardCards } from '@/components/dashboard/DashboardCards';
+import { LocalizedDate } from '@/components/common/LocalizedDate';
 
 export default function ProductsPage() {
   const [data, setData] = useState<any>(null);
@@ -146,7 +147,11 @@ export default function ProductsPage() {
             title="Search Results"
             headerColor="#6366f1"
             columns={columns}
-            items={filterProducts(allProducts)}
+            items={filterProducts(allProducts).map(item => ({
+              ...item,
+              updatedDate: <LocalizedDate date={item.updatedDate} format="date" />,
+              updatedTime: <LocalizedDate date={item.updatedTime} format="time" />
+            }))}
             searchable={false}
             filterable
             itemsPerPage={50}
@@ -180,7 +185,11 @@ export default function ProductsPage() {
                 title={collectionName}
                 headerColor={collectionName === 'Uncategorized' ? '#475569' : colors[index % colors.length]}
                 columns={columns}
-                items={filteredItems}
+                items={filteredItems.map(item => ({
+                  ...item,
+                  updatedDate: <LocalizedDate date={item.updatedDate} format="date" />,
+                  updatedTime: <LocalizedDate date={item.updatedTime} format="time" />
+                }))}
                 searchable={false}
                 filterable
                 itemsPerPage={50}

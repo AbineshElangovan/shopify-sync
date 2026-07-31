@@ -8,6 +8,7 @@ import { Suspense } from 'react';
 import NavBar from './NavBar';
 import Script from 'next/script';
 import { prisma } from '@/lib/db/prisma';
+import { TimezoneProvider } from '@/components/providers/TimezoneContext';
 
 const inter = Inter({ subsets: ['latin'] });
 
@@ -86,7 +87,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               </div>
             </header>
 
-            {children}
+            <TimezoneProvider>
+              {children}
+            </TimezoneProvider>
 
            
             <footer

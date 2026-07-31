@@ -7,6 +7,7 @@ import { shopifyFetch } from '@/lib/shopify/Client';
 import { useRouter } from 'next/navigation';
 import { Input, Checkbox, Select } from '@/components/forms';
 import CollectionPriceAdjustment from '@/components/stores/CollectionPriceAdjustment';
+import { LocalizedDate } from '@/components/common/LocalizedDate';
 
 const ThemedSection = ({
   title,
@@ -291,7 +292,7 @@ export default function SettingsPage() {
     domain: s.shopDomain,
     label: s.label || s.shopDomain,
     status: s.isActive ? 'CONNECTED' : 'DISCONNECTED',
-    installedAt: new Date(s.installedAt).toLocaleDateString(),
+    installedAt: <LocalizedDate date={s.installedAt} format="date" />,
   }));
 
   return (

@@ -86,6 +86,8 @@ export async function GET(
   }
 }
 
+import { applyPriceAdjustmentToStore } from "@/services/shopify/pricing";
+
 export async function PUT(
   req: NextRequest,
   { params }: { params: Promise<{ storeId: string }> }
@@ -111,19 +113,30 @@ export async function PUT(
           update: {
             enabled,
             adjustmentType,
-            adjustmentValue: parseInt(adjustmentValue, 10) || 0,
+            adjustmentValue: parseFloat(adjustmentValue) || 0,
           },
           create: {
             storeId,
             collectionId,
             enabled,
             adjustmentType,
-            adjustmentValue: parseInt(adjustmentValue, 10) || 0,
+            adjustmentValue: parseFloat(adjustmentValue) || 0,
           }
         });
         updatedAdjustments.push(record);
       }
     });
+
+    // Trigger price application asynchronously so it doesn't block the UI response
+    // We must apply adjustments to the TARGET store(s), because variant maps belong to target stores.
+    const activeStores = await prisma.store.findMany({ where: { isActive: true } });
+    const targetStores = activeStores.filter(s => !s.isMaster);
+    
+    for (const ts of targetStores) {
+      applyPriceAdjustmentToStore(ts.id).catch(err => {
+        console.error(`[CollectionAdjustments:PUT] Failed to apply price adjustments for target store ${ts.id}:`, err);
+      });
+    }
 
     return NextResponse.json({ success: true, count: updatedAdjustments.length });
   } catch (error: any) {

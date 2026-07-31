@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Card, Table, Badge, SearchBar, Filter, Pagination, EmptyState, StatCard } from '@/components/common';
-import { ChoiceList, IndexTable } from '@shopify/polaris';
+import { LocalizedDate } from '@/components/common/LocalizedDate';
 import { CheckCircleIcon, AlertTriangleIcon, ProductIcon } from '@shopify/polaris-icons';
 import { shopifyFetch } from '@/lib/shopify/Client';
 
@@ -125,7 +125,7 @@ export default function SyncPage() {
           ]}
           items={(data?.logs || []).map((log: any) => ({
             id: log.id,
-            date: new Date(log.createdAt).toLocaleString(),
+            date: <LocalizedDate date={log.createdAt} format="datetime" />,
             type: log.syncType || 'UNKNOWN',
             sku: log.sku || '-',
             source: log.sourceStore?.label || log.sourceStore?.shopDomain || 'Unknown',

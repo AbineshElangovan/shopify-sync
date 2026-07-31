@@ -78,23 +78,17 @@ export async function calculateAdjustedPrice(
 
   if (targetRules.length > 0) {
     if (targetRules.length > 1) {
-      console.warn(`[Pricing] Target store ${targetStore?.shopDomain} has multiple conflicting collection rules for product. Falling back to Store rule.`);
-      if (targetStore && targetStore.isPriceAdjustmentEnabled) {
-        const value = targetStore.priceAdjustmentValue || 0;
-        if (targetStore.priceAdjustmentType === 'PERCENTAGE') {
-          adjusted = basePrice * (1 + value / 100);
-        } else if (targetStore.priceAdjustmentType === 'FIXED') {
-          adjusted = basePrice + value;
-        }
-      }
-    } else {
-      const rule = targetRules[0];
-      console.log(`[Pricing] Applying Collection Rule for ${rule.collection.title}: ${rule.adjustmentType} ${rule.adjustmentValue}`);
-      if (rule.adjustmentType === 'PERCENTAGE') {
-        adjusted = basePrice * (1 + rule.adjustmentValue / 100);
-      } else if (rule.adjustmentType === 'FIXED') {
-        adjusted = basePrice + rule.adjustmentValue;
-      }
+      // Sort to prioritize the highest adjustment value
+      targetRules.sort((a, b) => b.adjustmentValue - a.adjustmentValue);
+      console.warn(`[Pricing] Target store ${targetStore?.shopDomain} has multiple conflicting collection rules for product. Picking the highest: ${targetRules[0].collection.title}`);
+    }
+    
+    const rule = targetRules[0];
+    console.log(`[Pricing] Applying Collection Rule for ${rule.collection.title}: ${rule.adjustmentType} ${rule.adjustmentValue}`);
+    if (rule.adjustmentType === 'PERCENTAGE') {
+      adjusted = basePrice * (1 + rule.adjustmentValue / 100);
+    } else if (rule.adjustmentType === 'FIXED') {
+      adjusted = basePrice + rule.adjustmentValue;
     }
   } else {
     // Fallback to target store rule

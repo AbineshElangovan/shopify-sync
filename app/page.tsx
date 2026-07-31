@@ -6,6 +6,7 @@ import { DashboardCards } from '@/components/dashboard/DashboardCards';
 import { DashboardCharts } from '@/components/dashboard/DashboardCharts';
 import { Table, ColumnConfig } from '@/components/common/Table';
 import { shopifyFetch } from '@/lib/shopify/Client';
+import { LocalizedDate } from '@/components/common/LocalizedDate';
 
 export default function DashboardPage() {
   const [data, setData] = useState<any>(null);
@@ -100,8 +101,8 @@ export default function DashboardPage() {
     sku: p.sku || 'N/A',
     inventoryQuantity: p.inventoryQuantity,
     stockLevel: p.inventoryQuantity <= 5 ? 'Critical' : 'Low',
-    updatedDate: new Date(p.updatedAt).toLocaleDateString('en-US'),
-    updatedTime: new Date(p.updatedAt).toLocaleTimeString('en-US'),
+    updatedDate: <LocalizedDate date={p.updatedAt} format="date" />,
+    updatedTime: <LocalizedDate date={p.updatedAt} format="time" />,
   }));
 
   const lowStockColumns: ColumnConfig[] = [
@@ -122,8 +123,8 @@ export default function DashboardPage() {
     sku: p.sku || 'N/A',
     inventoryQuantity: p.inventoryQuantity,
     status: 'Active',
-    addedDate: new Date(p.updatedAt).toLocaleDateString('en-US'),
-    addedTime: new Date(p.updatedAt).toLocaleTimeString('en-US'),
+    addedDate: <LocalizedDate date={p.updatedAt} format="date" />,
+    addedTime: <LocalizedDate date={p.updatedAt} format="time" />,
   }));
 
   const recentlyAddedColumns: ColumnConfig[] = [

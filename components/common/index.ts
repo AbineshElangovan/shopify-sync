@@ -11,3 +11,4 @@ export * from './Toast';
 export * from './BarChart';
 export * from './PageLoader';
 export * from './StatCard';
+export * from './LocalizedDate';
