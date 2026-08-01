@@ -27,6 +27,9 @@ export async function getAdminClient(shopDomain: string) {
   const maskedToken = `${store.accessToken.substring(0, 10)}...${store.accessToken.substring(store.accessToken.length - 4)}`;
   console.log("[AdminClient] Instantiating offline Session with Store token:", maskedToken);
 
+  console.log("Token starts with:", store.accessToken.substring(0, 20));
+  console.log("Token length:", store.accessToken.length);
+
   // 2. Single Source of Truth
   // We construct an ephemeral Session object solely for the SDK to use.
   // We DO NOT fetch from or write to the Shopify-managed Session table.
@@ -49,11 +52,11 @@ async function handleGraphQLError(error: any, shopDomain: string) {
     throw new Error(`Shopify GraphQL Error: ${error.message}`);
   }
 
- 
+
   if (
-    error.response?.code === 401 || 
-    error.response?.status === 401 || 
-    error.statusCode === 401 || 
+    error.response?.code === 401 ||
+    error.response?.status === 401 ||
+    error.statusCode === 401 ||
     error.networkStatusCode === 401 ||
     error.message?.includes("Unauthorized")
   ) {
@@ -73,7 +76,7 @@ export async function fetchShopInfo(shopDomain: string) {
 
   try {
     const response = await client.request(SHOP_INFO_QUERY);
-    
+
     return response.data?.shop;
   } catch (error) {
     return handleGraphQLError(error, shopDomain);

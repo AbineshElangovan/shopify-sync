@@ -4,16 +4,20 @@ import { getSessionToken } from "@shopify/app-bridge/utilities/session-token";
 
 export async function shopifyFetch(input: RequestInfo, init: RequestInit = {}) {
 
-  const maxRetries = 40;
+  const maxRetries = 20; // Fast fail if it's taking too long
   let retries = 0;
+  let delay = 100;
+
+  const hasHost = typeof window !== "undefined" && new URLSearchParams(window.location.search).has("host");
 
   while (
+    hasHost &&
     typeof window !== "undefined" &&
     !(window as any).shopifyApp &&
     !((window as any).shopify && typeof (window as any).shopify.idToken === "function") &&
     retries < maxRetries
   ) {
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    await new Promise((resolve) => setTimeout(resolve, delay));
     retries++;
   }
 
@@ -25,13 +29,12 @@ export async function shopifyFetch(input: RequestInfo, init: RequestInit = {}) {
   if (shopifyV4 && typeof shopifyV4.idToken === "function") {
     try {
       token = await shopifyV4.idToken();
-    } catch (err) {
-      // idToken can throw "host did not respond in time" when app is opened
-      // directly in the browser (not inside Shopify Admin iframe).
-      if (process.env.NODE_ENV === "development") {
+    } catch (err: any) {
+      if (process.env.NODE_ENV === "development" && err?.message?.includes("host did not respond")) {
         console.warn("[shopifyFetch] idToken unavailable (host did not respond). Falling back to dev_fallback_token.");
         token = "dev_fallback_token";
       } else {
+        console.warn("[shopifyFetch] App Bridge idToken failed:", err.message);
         throw err;
       }
     }

@@ -97,8 +97,8 @@ model VariantMap {
   sku              String
   storeId          String
   shopifyProductId String
-  shopifyVariantId String
-  inventoryItemId  String
+  shopifyVariantId String?
+  inventoryItemId  String?
   locationId       String?
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt

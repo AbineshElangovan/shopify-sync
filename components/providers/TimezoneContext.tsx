@@ -4,25 +4,40 @@ import React, { createContext, useContext, useEffect, useState } from "react";
 
 interface TimezoneContextType {
   timezone: string;
+  setTimezone: (timezone: string) => void;
 }
 
-const TimezoneContext = createContext<TimezoneContextType>({ timezone: "UTC" });
+const TimezoneContext = createContext<TimezoneContextType>({ 
+  timezone: "UTC",
+  setTimezone: () => {} 
+});
 
 export const TimezoneProvider = ({ children }: { children: React.ReactNode }) => {
-  const [timezone, setTimezone] = useState<string>("UTC");
+  const [timezone, setTimezoneState] = useState<string>("UTC");
   const [isClient, setIsClient] = useState(false);
 
   useEffect(() => {
     setIsClient(true);
     try {
-      const detectedTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-      if (detectedTimezone) {
-        setTimezone(detectedTimezone);
+      const savedTimezone = localStorage.getItem("preferred_timezone");
+      
+      if (savedTimezone) {
+        setTimezoneState(savedTimezone);
+      } else {
+        const detectedTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        if (detectedTimezone) {
+          setTimezoneState(detectedTimezone);
+        }
       }
     } catch (e) {
       console.warn("Could not detect timezone, falling back to UTC.", e);
     }
   }, []);
+
+  const setTimezone = (newTimezone: string) => {
+    setTimezoneState(newTimezone);
+    localStorage.setItem("preferred_timezone", newTimezone);
+  };
 
   if (!isClient) {
     // Avoid hydration mismatches by returning children with default or null
@@ -31,7 +46,7 @@ export const TimezoneProvider = ({ children }: { children: React.ReactNode }) =>
   }
 
   return (
-    <TimezoneContext.Provider value={{ timezone }}>
+    <TimezoneContext.Provider value={{ timezone, setTimezone }}>
       {children}
     </TimezoneContext.Provider>
   );

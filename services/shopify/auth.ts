@@ -107,6 +107,7 @@ export async function handleAuthCallback(req: NextRequest) {
 
   const { session, headers } = callbackResponse;
   const { shop, accessToken, scope } = session;
+  console.log("OAuth Session Scope:", scope);
 
   const maskedToken = accessToken
     ? `${accessToken.substring(0, 10)}...${accessToken.substring(accessToken.length - 4)}`
@@ -165,7 +166,7 @@ export async function handleAuthCallback(req: NextRequest) {
     } else {
       console.log("[OAuth] Shop query returned empty or missing name. Defaulting label to domain.");
     }
-    
+
     if (shopResponse.data?.shop?.id) {
       shopifyStoreId = shopResponse.data.shop.id;
     }
@@ -174,17 +175,17 @@ export async function handleAuthCallback(req: NextRequest) {
     console.log("[OAuth] Falling back to shop domain as label:", normalizedShop);
   }
   console.log("[OAuth] Upserting store record in database for shop:", normalizedShop);
-  
+
   const existingStore = await prisma.store.findUnique({ where: { shopDomain: normalizedShop } });
   const isReinstall = existingStore && !existingStore.isActive;
-  
+
   const updateData: any = {
     accessToken: accessToken,
     scope: scope || "",
     isActive: true,
     label: shopLabel,
   };
-  
+
   if (shopifyStoreId) {
     updateData.shopifyStoreId = shopifyStoreId;
   }
@@ -207,6 +208,22 @@ export async function handleAuthCallback(req: NextRequest) {
         uniqueStoreId: `STORE-${Math.random().toString(36).substring(2, 10).toUpperCase()}`,
       },
     });
+
+    const testClient = new shopify.clients.Graphql({ session });
+
+    try {
+      const result = await testClient.request(`
+    query {
+      shop {
+        name
+      }
+    }
+  `);
+
+      console.log("OAuth Test:", result.data.shop.name);
+    } catch (err) {
+      console.error("OAuth Test Failed:", err);
+    }
 
     await tx.authAudit.create({
       data: {
