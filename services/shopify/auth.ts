@@ -1,5 +1,6 @@
 import { shopify } from "@/lib/shopify";
 import { prisma } from "@/lib/db/prisma";
+import { AuthStatus } from "@prisma/client";
 import { registerWebhooks } from "@/lib/shopify/webhooks";
 import { NextRequest } from "next/server";
 import { redirect } from "next/navigation";
@@ -189,6 +190,7 @@ export async function handleAuthCallback(req: NextRequest) {
     scope: scope || "",
     isActive: true,
     label: shopLabel,
+    authStatus: AuthStatus.AUTHENTICATED,
   };
 
   if (shopifyStoreId) {
