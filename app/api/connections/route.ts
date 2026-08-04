@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { authenticate, handleApiError } from "@/lib/shopify/authenticate";
+import { fetchShopInfo } from "@/lib/shopify/admin";
 import { prisma } from "@/lib/db/prisma";
 
 export const dynamic = 'force-dynamic';
@@ -7,7 +8,7 @@ export const dynamic = 'force-dynamic';
 export async function GET(req: NextRequest) {
   try {
     const { store } = await authenticate(req);
-    
+
     // Fetch outgoing connections
     const outgoing = await prisma.storeConnection.findMany({
       where: { sourceStoreId: store.id },
@@ -19,13 +20,13 @@ export async function GET(req: NextRequest) {
       where: { targetStoreId: store.id },
       include: { sourceStore: true }
     });
-    
+
     // Fetch sibling connections (other sub-stores connected to our master)
     const masterStoreIds = incoming.map(c => c.sourceStoreId);
     let siblings: any[] = [];
     if (masterStoreIds.length > 0) {
       siblings = await prisma.storeConnection.findMany({
-        where: { 
+        where: {
           sourceStoreId: { in: masterStoreIds },
           targetStoreId: { not: store.id } // Exclude ourselves
         },
@@ -33,44 +34,92 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    // Map them into a unified list for the frontend
-    const connections = [
-      ...outgoing.map(c => ({
-        targetStoreId: c.targetStoreId,
-        direction: 'outgoing',
-        targetStore: {
-          id: c.targetStore.id,
-          shopDomain: c.targetStore.shopDomain,
-          label: c.targetStore.label,
-          uniqueStoreId: c.targetStore.uniqueStoreId,
-          isActive: c.targetStore.isActive,
-        }
-      })),
-      ...incoming.map(c => ({
-        targetStoreId: c.sourceStoreId, // mapped for frontend compatibility
-        direction: 'incoming',
-        targetStore: {
-          id: c.sourceStore.id,
-          shopDomain: c.sourceStore.shopDomain,
-          label: c.sourceStore.label,
-          uniqueStoreId: c.sourceStore.uniqueStoreId,
-          isActive: c.sourceStore.isActive,
-        }
-      })),
-      ...siblings.map(c => ({
-        targetStoreId: c.targetStoreId,
-        direction: 'sibling',
-        targetStore: {
-          id: c.targetStore.id,
-          shopDomain: c.targetStore.shopDomain,
-          label: c.targetStore.label,
-          uniqueStoreId: c.targetStore.uniqueStoreId,
-          isActive: c.targetStore.isActive,
-        }
-      }))
+    // We need to fetch extra metadata for each connection asynchronously
+    const connectionPromises = [
+      ...outgoing.map(async c => {
+        let shopInfo = null;
+        try { if (c.targetStore.isActive) shopInfo = await fetchShopInfo(c.targetStore.shopDomain); } catch (e) { }
+        const productCount = await prisma.productCache.count({ where: { storeId: c.targetStore.id } });
+        return {
+          targetStoreId: c.targetStoreId,
+          direction: 'outgoing',
+          lastSyncTime: c.targetStore.updatedAt,
+          targetStore: {
+            id: c.targetStore.id,
+            shopDomain: c.targetStore.shopDomain,
+            label: c.targetStore.label,
+            uniqueStoreId: c.targetStore.uniqueStoreId,
+            isActive: c.targetStore.isActive,
+            currency: shopInfo?.currencyCode,
+            region: shopInfo?.billingAddress?.country || 'N/A',
+            plan: shopInfo?.plan?.displayName || 'N/A',
+            productCount
+          }
+        };
+      }),
+      ...incoming.map(async c => {
+        let shopInfo = null;
+        try { if (c.sourceStore.isActive) shopInfo = await fetchShopInfo(c.sourceStore.shopDomain); } catch (e) { }
+        const productCount = await prisma.productCache.count({ where: { storeId: c.sourceStore.id } });
+        return {
+          targetStoreId: c.sourceStoreId, // mapped for frontend compatibility
+          direction: 'incoming',
+          lastSyncTime: c.sourceStore.updatedAt,
+          targetStore: {
+            id: c.sourceStore.id,
+            shopDomain: c.sourceStore.shopDomain,
+            label: c.sourceStore.label,
+            uniqueStoreId: c.sourceStore.uniqueStoreId,
+            isActive: c.sourceStore.isActive,
+            currency: shopInfo?.currencyCode || 'N/A',
+            region: shopInfo?.billingAddress?.country || 'N/A',
+            plan: shopInfo?.plan?.displayName || 'N/A',
+            productCount
+          }
+        };
+      }),
+      ...siblings.map(async c => {
+        let shopInfo = null;
+        try { if (c.targetStore.isActive) shopInfo = await fetchShopInfo(c.targetStore.shopDomain); } catch (e) { }
+        const productCount = await prisma.productCache.count({ where: { storeId: c.targetStore.id } });
+        return {
+          targetStoreId: c.targetStoreId,
+          direction: 'sibling',
+          lastSyncTime: c.targetStore.updatedAt,
+          targetStore: {
+            id: c.targetStore.id,
+            shopDomain: c.targetStore.shopDomain,
+            label: c.targetStore.label,
+            uniqueStoreId: c.targetStore.uniqueStoreId,
+            isActive: c.targetStore.isActive,
+            currency: shopInfo?.currencyCode || 'N/A',
+            region: shopInfo?.billingAddress?.country || 'N/A',
+            plan: shopInfo?.plan?.displayName || 'N/A',
+            productCount
+          }
+        };
+      })
     ];
 
-    return NextResponse.json({ success: true, store, connections });
+    const connections = await Promise.all(connectionPromises);
+
+    // Get Master Product count
+    const masterProductCount = incoming.length > 0
+      ? await prisma.productCache.count({ where: { storeId: incoming[0].sourceStore.id } })
+      : await prisma.productCache.count({ where: { storeId: store.id } });
+
+    // Also get metadata for the current store
+    let storeShopInfo = null;
+    try { storeShopInfo = await fetchShopInfo(store.shopDomain); } catch (e) { }
+
+    const storeMetadata = {
+      currency: storeShopInfo?.currencyCode || 'N/A',
+      region: storeShopInfo?.billingAddress?.country || 'N/A',
+      plan: storeShopInfo?.plan?.displayName || 'N/A',
+      productCount: await prisma.productCache.count({ where: { storeId: store.id } })
+    };
+
+    return NextResponse.json({ success: true, store: { ...store, ...storeMetadata }, connections, masterProductCount });
   } catch (err: any) {
     console.error("[Connections API] GET Error:", err.message);
     return handleApiError(err);

@@ -5,7 +5,7 @@ import { Badge, Text } from '@shopify/polaris';
 export interface ColumnConfig {
   title: string;
   key: string;
-  type?: 'text' | 'image' | 'badge' | 'bold' | 'status' | 'custom_html';
+  type?: 'text' | 'image' | 'badge' | 'bold' | 'status' | 'custom_html' | 'react_node';
   badgeRules?: { [key: string]: 'success' | 'critical' | 'warning' | 'info' };
 }
 
@@ -218,6 +218,8 @@ export function Table({
       }
       case 'custom_html':
         return <div dangerouslySetInnerHTML={{ __html: val }} />;
+      case 'react_node':
+        return val;
       default:
         return <span style={{ color: '#374151', fontSize: 13 }}>{val ?? '—'}</span>;
     }

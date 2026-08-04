@@ -55,6 +55,21 @@ export default function ConnectionsPage() {
   const [installedStores, setInstalledStores] = useState<any[]>([]);
   const [connections, setConnections] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [masterProductCount, setMasterProductCount] = useState<number>(0);
+  const [storeData, setStoreData] = useState<any>(null);
+
+  function timeAgo(dateString: string | Date | undefined) {
+    if (!dateString) return 'Never';
+    const now = new Date();
+    const past = new Date(dateString);
+    const diffInSeconds = Math.floor((now.getTime() - past.getTime()) / 1000);
+    if (diffInSeconds < 60) return `${diffInSeconds} seconds ago`;
+    const diffInMinutes = Math.floor(diffInSeconds / 60);
+    if (diffInMinutes < 60) return `${diffInMinutes} minutes ago`;
+    const diffInHours = Math.floor(diffInMinutes / 60);
+    if (diffInHours < 24) return `${diffInHours} hours ago`;
+    return `${Math.floor(diffInHours / 24)} days ago`;
+  }
 
   // Store Pairing State
   const [storeIdInput, setStoreIdInput] = useState('');
@@ -101,7 +116,9 @@ export default function ConnectionsPage() {
       const data = await connectionsRes.json();
       if (data.success) {
         setConnections(data.connections || []);
+        if (data.masterProductCount !== undefined) setMasterProductCount(data.masterProductCount);
         if (data.store) {
+          setStoreData(data.store);
           if (data.store.uniqueStoreId) {
             setCurrentStoreUniqueId(data.store.uniqueStoreId);
           }
@@ -131,9 +148,23 @@ export default function ConnectionsPage() {
       const data = await res.json();
 
       if (data.success) {
-        setToastMessage({ message: 'Store connected successfully!', type: 'success' });
+        setToastMessage({ message: 'Store connected successfully! Starting initial sync...', type: 'success' });
         setStoreIdInput('');
         fetchData();
+        
+        // Auto-trigger sync
+        setSyncing(true);
+        try {
+          await shopifyFetch('/api/sync/manual', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ selectedTargetStoreIds: [data.connection.targetStoreId] })
+          });
+        } catch (e) {
+          console.error('Initial sync error:', e);
+        } finally {
+          setSyncing(false);
+        }
       } else {
         setToastMessage({ message: data.error || 'Failed to connect store.', type: 'error' });
       }
@@ -279,204 +310,294 @@ export default function ConnectionsPage() {
   }
 
   return (
-    <div className="p-8 max-w-7xl mx-auto mb-16">
-      <h1 className="text-3xl font-bold mb-8">Store Connections Hub</h1>
+    <div className="p-8 max-w-6xl mx-auto mb-16">
+      <div className="flex justify-between items-start mb-8">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">Store connections</h1>
+          <p className="text-slate-500 mt-1">One master, unlimited connected stores</p>
+        </div>
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 bg-green-50 text-green-700 px-3 py-1.5 rounded-full text-sm font-medium border border-green-100">
+            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 11.08V12a10 10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+            Master live
+          </div>
+        </div>
+      </div>
 
-      <Layout>
-        <Layout.Section>
-          <BlockStack gap="500">
-
-
-
-            {/* Store Pairing Section (Blue/Indigo Theme) */}
-            <ThemedSection
-              title="Store Pairing"
-              description="Establish secure links with destination stores to allow inventory replication."
-              bgColor="#eff6ff"
-              borderColor="#bfdbfe"
-              stripeColor="#3b82f6"
-              titleColor="#1e3a8a"
-              descColor="#1e40af"
+      {!isMaster && currentStoreUniqueId && (
+        <div className="mb-8 p-6 bg-white border border-primary-200 rounded-2xl shadow-sm text-center">
+          <h2 className="text-lg font-semibold text-slate-900 mb-2">Connect to a Master Store</h2>
+          <p className="text-slate-500 mb-4">Provide this Unique Store ID to your Master Store administrator to link this catalog.</p>
+          <div className="inline-flex items-center gap-3 bg-slate-50 border border-slate-200 px-4 py-2 rounded-lg">
+            <span className="font-mono text-lg text-primary-DEFAULT font-bold">{currentStoreUniqueId}</span>
+            <button 
+              onClick={() => { navigator.clipboard.writeText(currentStoreUniqueId); setToastMessage({ message: 'Copied!', type: 'success' }); }}
+              className="text-slate-400 hover:text-primary-DEFAULT transition-colors"
             >
-              <BlockStack gap="400">
-                {currentStoreUniqueId && (
-                  <div className="mb-2 text-sm text-blue-900 flex items-center gap-2">
-                    Your Unique Store ID:
-                    <strong className="bg-blue-200 px-2 py-1 rounded text-blue-900 shadow-sm">
-                      {currentStoreUniqueId}
-                    </strong>
-                    <button
-                      onClick={() => {
-                        navigator.clipboard.writeText(currentStoreUniqueId);
-                        setToastMessage({ message: 'Copied to clipboard!', type: 'success' });
-                      }}
-                      className="ml-2 px-2 py-1 bg-white border border-blue-300 text-blue-700 text-xs rounded hover:bg-blue-50 transition-colors cursor-pointer"
-                    >
-                      Copy
-                    </button>
-                  </div>
-                )}
+              <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+            </button>
+          </div>
+        </div>
+      )}
 
-                {isMaster && (
-                  <>
-                    <InlineStack gap="300" blockAlign="start">
-                      <Box maxWidth="400px" width="100%">
-                        <TextField
-                          label="Unique Store ID"
-                          labelHidden
-                          value={storeIdInput}
-                          onChange={setStoreIdInput}
-                          placeholder="e.g. ESHAN-3B91C7E4"
-                          autoComplete="off"
-                        />
-                      </Box>
-                      <Button
-                        variant="primary"
-                        onClick={handleAddStore}
-                        disabled={connecting || !storeIdInput.trim()}
-                        loading={connecting}
-                      >
-                        + Add Store
-                      </Button>
-                    </InlineStack>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+          
+          {/* Render Master Store */}
+          {installedStores.filter(s => s.isMaster || s.id === installedStores.find(i=>i.isMaster)?.id).map(master => {
+            const currency = 'INR';
+            const region = 'India';
+            const plan = '-';
+            const productCount = storeData?.productCount || 0;
+            const lastSync = master.updatedAt || storeData?.updatedAt;
 
-                    {connections.length === 0 && (
-                      <div className="mt-4 pt-4 border-t border-blue-200">
-                        <h3 className="font-semibold text-blue-900 mb-2">Create a Manual Store</h3>
-                        <p className="text-sm text-blue-800 mb-3">If you need a store ID for an external or manual store that isn't connected via Shopify, you can generate a new one here.</p>
-                        <Button
-                          variant="primary"
-                          onClick={handleGenerateManualStore}
-                          loading={generatingStore}
-                        >
-                          Generate Test Store ID
-                        </Button>
-                      </div>
+            return (
+             <div key="master" className="ys-card p-5 flex flex-col">
+           <div className="flex justify-between items-start mb-4">
+             <div>
+               <h3 className="font-semibold text-lg flex items-center gap-2 text-slate-900">
+                 {master.label || master.shopDomain.split('.')[0]}
+                 <span className="bg-primary-50 text-primary-DEFAULT px-2 py-0.5 rounded-full text-xs font-semibold flex items-center gap-1 border border-primary-100">
+                   <svg className="w-3 h-3" viewBox="0 0 24 24" fill="currentColor"><path d="M2 22h20v-2H2v2zm9-5l5-4 4 4V5c0-1.1-.9-2-2-2H6c-1.1 0-2 .9-2 2v12l4-4 5 4z"/></svg>
+                   Master
+                 </span>
+               </h3>
+               <p className="text-slate-500 text-base mt-0.5">{master.shopDomain}</p>
+             </div>
+             <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${master.isActive ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>
+               {master.isActive ? 'healthy' : 'stale'}
+             </span>
+           </div>
+ 
+           <div className="grid grid-cols-2 gap-y-4 gap-x-2 text-sm mb-4 mt-6">
+              <div>
+                <p className="text-slate-500 mb-0.5 text-xs">Currency</p>
+                <p className="font-medium text-slate-900">{currency}</p>
+              </div>
+              <div>
+                <p className="text-slate-500 mb-0.5 text-xs">Region</p>
+                <p className="font-medium text-slate-900">{region}</p>
+              </div>
+              <div>
+                <p className="text-slate-500 mb-0.5 text-xs">Plan</p>
+                <p className="font-medium text-slate-900">{plan}</p>
+              </div>
+              <div>
+                <p className="text-slate-500 mb-0.5 text-xs">Last sync</p>
+                <p className="font-medium text-slate-900">{timeAgo(lastSync)}</p>
+              </div>
+            </div>
+
+
+          </div>
+        )})}
+
+        {/* Render Target Stores as Cards */}
+        {connections
+          .filter(conn => {
+            const masterId = installedStores.find(i => i.isMaster)?.id;
+            return conn.targetStore.id !== masterId;
+          })
+          .map((conn) => {
+          const store = conn.targetStore;
+          const currency = 'INR';
+          const region = 'India';
+          const plan = '-';
+          const productCount = store.productCount || 0;
+          const lastSync = conn.lastSyncTime;
+          
+          const coveragePercent = masterProductCount > 0 
+            ? Math.round((productCount / masterProductCount) * 100) 
+            : 0;
+
+          return (
+            <div key={conn.targetStoreId} className="ys-card p-5 flex flex-col">
+              <div className="flex justify-between items-start mb-4">
+                <div>
+                  <h3 className="font-semibold text-lg flex items-center gap-2 text-slate-900">
+                    {store.label || store.shopDomain.split('.')[0]}
+                    {conn.direction === 'incoming' && (
+                      <span className="bg-[#e6f4f1] text-[#0f766e] px-2 py-0.5 rounded-full text-xs font-semibold flex items-center gap-1">
+                        <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 22h20M2 18l4-10 4 6 2-8 2 8 4-6 4 10H2z"/></svg>
+                        Master
+                      </span>
                     )}
-                  </>
-                )}
-
-                <div className="mt-4 pt-4 border-t border-blue-200">
-                  <h3 className="font-semibold text-blue-900 mb-4">
-                    {isMaster ? 'Connected Destinations' : 'Connected Master Store'}
                   </h3>
-                  {connections.length === 0 ? (
-                    <div className="p-4 bg-white bg-opacity-60 border border-blue-100 rounded-lg text-blue-800 text-sm">
-                      {isMaster
-                        ? "No connected stores found. Enter a destination store's Unique Store ID above to pair them."
-                        : "This store is not currently connected to a Master store."}
-                    </div>
-                  ) : (
-                    <div className="bg-white rounded-lg shadow-sm overflow-hidden border border-blue-100">
-                      <Table
-                        columns={tableColumns}
-                        items={tableItems}
-                        searchable={false}
-                        filterable={false}
-                        paginate={false}
-                        headerColor="#3b82f6"
-                      />
-                    </div>
-                  )}
-                </div>
-              </BlockStack>
-            </ThemedSection>
-
-            {/* Manual Synchronization Section (Emerald/Green Theme) */}
-            {isMaster && connections.length > 0 && (
-              <ThemedSection
-                title="Manual Synchronization"
-                description="Force an immediate, full catalog push to your selected destination stores."
-                bgColor="#f0fdf4"
-                borderColor="#bbf7d0"
-                stripeColor="#22c55e"
-                titleColor="#14532d"
-                descColor="#166534"
-              >
-                <BlockStack gap="400">
-                  <div className="bg-white rounded-lg border border-green-200 p-4 shadow-sm">
-                    <h3 className="font-semibold text-green-900 mb-3 text-sm uppercase tracking-wide">Select Targets</h3>
-                    <BlockStack gap="300">
-                      {connections.map((conn) => (
-                        <Checkbox
-                          key={conn.targetStoreId}
-                          label={conn.targetStore.label || conn.targetStore.shopDomain}
-                          checked={selectedStores.includes(conn.targetStoreId)}
-                          onChange={() => handleToggleSyncSelection(conn.targetStoreId)}
-                        />
-                      ))}
-                    </BlockStack>
+                  <div className="mt-1 flex flex-col gap-0.5">
+                    <p className="text-slate-700 text-base font-medium">{store.uniqueStoreId || 'N/A'}</p>
+                    <p className="text-slate-500 text-sm">https://{store.shopDomain}</p>
                   </div>
+                </div>
+                <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${store.isActive ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>
+                  {store.isActive ? 'healthy' : 'stale'}
+                </span>
+              </div>
 
-                  <InlineStack gap="300">
-                    <button
-                      onClick={handleSelectAllSync}
-                      className="px-4 py-2 bg-white border border-green-300 text-green-800 font-medium rounded-lg hover:bg-green-50 transition-colors shadow-sm"
-                    >
-                      {selectedStores.length === connections.length ? 'Deselect All' : 'Select All'}
-                    </button>
-                    <button
-                      onClick={handleSync}
-                      disabled={selectedStores.length === 0 || syncing}
-                      className={`px-4 py-2 font-medium rounded-lg transition-all shadow-sm ${selectedStores.length === 0 || syncing
-                          ? 'bg-green-200 text-green-500 cursor-not-allowed'
-                          : 'bg-green-600 text-white hover:bg-green-700'
-                        }`}
-                    >
-                      {syncing ? 'Syncing...' : 'Sync Selected Stores'}
-                    </button>
-                  </InlineStack>
-                </BlockStack>
-              </ThemedSection>
-            )}
+              <div className="grid grid-cols-2 gap-y-4 gap-x-2 text-sm mb-4 mt-6">
+                <div>
+                  <p className="text-slate-500 mb-0.5 text-xs">Currency</p>
+                  <p className="font-medium text-slate-900">{currency}</p>
+                </div>
+                <div>
+                  <p className="text-slate-500 mb-0.5 text-xs">Region</p>
+                  <p className="font-medium text-slate-900">{region}</p>
+                </div>
+                <div>
+                  <p className="text-slate-500 mb-0.5 text-xs">Plan</p>
+                  <p className="font-medium text-slate-900">{plan}</p>
+                </div>
+                <div>
+                  <p className="text-slate-500 mb-0.5 text-xs">Last sync</p>
+                  <p className="font-medium text-slate-900">{timeAgo(lastSync)}</p>
+                </div>
+              </div>
 
-          </BlockStack>
-        </Layout.Section>
-      </Layout>
+
+            </div>
+          )
+        })}
+      </div>
+
+
+
+
+
+      {isMaster && (
+        <div className="bg-white rounded-2xl border-2 border-dashed border-slate-200 p-8 shadow-sm mb-6 flex flex-col md:flex-row items-center gap-6 hover:border-slate-300 transition-colors">
+          <div className="w-12 h-12 bg-primary-50 rounded-full flex items-center justify-center text-primary-DEFAULT shrink-0">
+            <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+          </div>
+          <div className="flex-1">
+            <h3 className="font-bold text-lg text-slate-900 mb-1">Pair New Store</h3>
+            <p className="text-slate-500 text-sm">Enter the Unique Store ID of the destination store to establish a connection.</p>
+          </div>
+          <div className="flex w-full md:w-auto gap-3 shrink-0">
+            <input 
+              type="text" 
+              placeholder="e.g. STORE-XYZ123" 
+              className="ys-input min-w-[250px]"
+              value={storeIdInput}
+              onChange={(e) => setStoreIdInput(e.target.value)}
+            />
+            <button 
+              className="ys-btn-primary whitespace-nowrap"
+              onClick={handleAddStore}
+              disabled={connecting || !storeIdInput.trim()}
+            >
+              {connecting ? 'Connecting...' : 'Connect Store'}
+            </button>
+          </div>
+        </div>
+      )}
+
+
+
+
+
+      {/* Target Stores Table (For Master Store) */}
+      {isMaster && connections.filter(c => c.direction === 'outgoing').length > 0 && (
+        <div className="mb-8">
+          <Table 
+            title="Connected Stores"
+            headerColor="#9333ea"
+            columns={[
+              { title: 'Store Name', key: 'name', type: 'bold' },
+              { title: 'Store URL', key: 'url' },
+              { title: 'Status', key: 'status', type: 'badge', badgeRules: { 'Healthy': 'success', 'Stale': 'warning' } },
+              { title: 'Action', key: 'action', type: 'react_node' }
+            ]}
+            items={connections.filter(c => c.direction === 'outgoing').map(conn => ({
+              name: conn.targetStore.label || conn.targetStore.shopDomain.split('.')[0],
+              url: `https://${conn.targetStore.shopDomain}`,
+              status: conn.targetStore.isActive ? 'Healthy' : 'Stale',
+              action: (
+                <button 
+                  onClick={() => handleRemoveStore(conn.targetStoreId)} 
+                  className="text-red-600 hover:text-red-700 font-semibold px-3 py-1.5 rounded-lg bg-red-50 hover:bg-red-100 transition-colors flex items-center gap-1.5 text-xs w-fit"
+                  title="Remove Connection"
+                >
+                  <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
+                  </svg>
+                  Remove
+                </button>
+              )
+            }))}
+          />
+        </div>
+      )}
+
+      {isMaster && connections.length > 0 && (
+        <div className="bg-white rounded-2xl border border-slate-200 p-8 shadow-sm mb-8">
+          <div className="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+              <h2 className="font-bold text-xl text-slate-900 mb-1">Manual Synchronization</h2>
+              <p className="text-slate-500 text-sm">Select destination stores to force an immediate catalog push.</p>
+            </div>
+          </div>
+          
+          <div className="bg-slate-50 border border-slate-100 rounded-xl p-5 mb-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+              {connections.map((conn) => (
+                <label key={conn.targetStoreId} className="flex items-center gap-3 cursor-pointer bg-white border border-slate-200 rounded-lg p-3 shadow-sm hover:border-primary-300 transition-colors">
+                  <input 
+                    type="checkbox"
+                    className="w-4 h-4 text-primary-DEFAULT rounded border-gray-300 focus:ring-primary-DEFAULT cursor-pointer"
+                    checked={selectedStores.includes(conn.targetStoreId)}
+                    onChange={() => handleToggleSyncSelection(conn.targetStoreId)}
+                  />
+                  <span className="text-sm font-medium text-slate-700 truncate" title={conn.targetStore.label || conn.targetStore.shopDomain}>{conn.targetStore.label || conn.targetStore.shopDomain.split('.')[0]}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex gap-3 mt-4">
+            <button
+              onClick={handleSelectAllSync}
+              className="px-4 py-2 bg-white border border-slate-200 text-slate-700 text-sm font-medium rounded-lg hover:bg-slate-50 transition-colors shadow-sm"
+            >
+              {selectedStores.length === connections.length ? 'Deselect All' : 'Select All'}
+            </button>
+            <button
+              onClick={handleSync}
+              disabled={selectedStores.length === 0 || syncing}
+              className="px-6 py-2 bg-primary-DEFAULT text-white text-sm font-semibold rounded-lg hover:bg-primary-600 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 w-full md:w-auto justify-center"
+            >
+              {syncing ? (
+                <>
+                  <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                  Syncing...
+                </>
+              ) : 'Sync Selected Stores'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
+        <h2 className="font-bold text-lg text-slate-900 mb-4">Master store behaviour</h2>
+        <p className="text-slate-500 text-sm mb-6">What happens when the source of truth is unavailable</p>
+        
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="p-5 border border-slate-100 rounded-xl bg-slate-50">
+            <h4 className="font-bold text-slate-900 mb-2">Cached snapshot</h4>
+            <p className="text-slate-500 text-sm">Connected stores keep selling from the last known good inventory, flagged as stale in the header.</p>
+          </div>
+          <div className="p-5 border border-slate-100 rounded-xl bg-slate-50">
+            <h4 className="font-bold text-slate-900 mb-2">Queued writes</h4>
+            <p className="text-slate-500 text-sm">Orders placed during an outage are queued and replayed in order once master returns.</p>
+          </div>
+          <div className="p-5 border border-slate-100 rounded-xl bg-slate-50">
+            <h4 className="font-bold text-slate-900 mb-2">Failover promotion</h4>
+            <p className="text-slate-500 text-sm">If master is offline beyond your threshold, you can temporarily promote another store.</p>
+          </div>
+        </div>
+      </div>
 
       {toastMessage && (
-        <div
-          style={{
-            position: 'fixed',
-            bottom: '24px',
-            right: '24px',
-            zIndex: 9999,
-            backgroundColor: toastMessage.type === 'success' ? '#16a34a' : '#dc2626',
-            color: '#ffffff',
-            padding: '12px 24px',
-            borderRadius: '8px',
-            boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-            fontSize: '14px',
-            fontWeight: 500,
-            animation: 'syncToastSlideIn 0.3s ease-out',
-            border: '1px solid rgba(255,255,255,0.2)',
-          }}
-        >
-          <style>{`
-            @keyframes syncToastSlideIn {
-              from { transform: translateY(100px); opacity: 0; }
-              to { transform: translateY(0); opacity: 1; }
-            }
-          `}</style>
-          <span>{toastMessage.message}</span>
-          <button
-            onClick={() => setToastMessage(null)}
-            style={{
-              background: 'transparent',
-              border: 'none',
-              color: '#ffffff',
-              cursor: 'pointer',
-              marginLeft: '12px',
-              fontSize: '14px',
-              opacity: 0.8,
-              lineHeight: 1
-            }}
-          >
-            ✕
-          </button>
+        <div className={`fixed bottom-6 right-6 px-6 py-3 rounded-lg shadow-lg flex items-center gap-3 text-sm font-medium z-50 text-white ${toastMessage.type === 'success' ? 'bg-green-600' : 'bg-red-600'}`}>
+          {toastMessage.message}
+          <button onClick={() => setToastMessage(null)} className="ml-2 opacity-80 hover:opacity-100">✕</button>
         </div>
       )}
     </div>

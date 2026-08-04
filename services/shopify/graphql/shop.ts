@@ -13,6 +13,13 @@ export const SHOP_INFO_QUERY = `
       name
       email
       myshopifyDomain
+      currencyCode
+      billingAddress {
+        country
+      }
+      plan {
+        displayName
+      }
     }
   }
 `;

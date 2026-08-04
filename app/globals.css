@@ -1,21 +1,42 @@
-
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 @import '@shopify/polaris/build/esm/styles.css';
 @import 'tailwindcss';
+
+@theme {
+  --color-primary-50: #f0fdfa;
+  --color-primary-100: #ccfbf1;
+  --color-primary-200: #99f6e4;
+  --color-primary-300: #5eead4;
+  --color-primary-400: #2dd4bf;
+  --color-primary-500: #14b8a6;
+  --color-primary-600: #0d9488;
+  --color-primary-700: #0f766e;
+  --color-primary-800: #115e59;
+  --color-primary-900: #134e4a;
+  --color-primary-DEFAULT: #00a79d;
+}
 
 @layer base {
   body {
     font-family: 'Inter', system-ui, sans-serif;
+    @apply bg-[#f8fafc] text-slate-800;
   }
 }
 
 @layer components {
+  /* Existing Badges */
   .ys-badge-synced  { @apply inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800; }
   .ys-badge-failed  { @apply inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800; }
   .ys-badge-skipped { @apply inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600; }
   .ys-badge-pending { @apply inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800; }
-  .ys-card { @apply bg-white rounded-xl border border-gray-200 shadow-sm; }
-  .ys-btn-primary { @apply inline-flex items-center gap-2 px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed; }
-  .ys-btn-secondary { @apply inline-flex items-center gap-2 px-4 py-2 bg-white text-gray-700 text-sm font-medium border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors; }
-  .ys-input { @apply w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent placeholder:text-gray-400 transition-shadow; }
+  
+  /* New UI Utility Classes */
+  .ys-card { @apply bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden; }
+  .ys-btn-primary { @apply inline-flex items-center justify-center gap-2 px-4 py-2 bg-primary-DEFAULT text-white text-sm font-semibold rounded-lg hover:bg-primary-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed; }
+  .ys-btn-secondary { @apply inline-flex items-center justify-center gap-2 px-4 py-2 bg-white text-slate-700 text-sm font-medium border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors shadow-sm; }
+  .ys-input { @apply w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent placeholder:text-gray-400 transition-shadow; }
+  
+  /* Sidebar styles */
+  .ys-sidebar-link { @apply flex items-center gap-3 px-3 py-2 text-sm font-medium text-slate-600 rounded-lg hover:bg-slate-100 transition-colors; }
+  .ys-sidebar-link-active { @apply flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg transition-colors bg-primary-50 text-primary-DEFAULT hover:bg-primary-50; }
 }
