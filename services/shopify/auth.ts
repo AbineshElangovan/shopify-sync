@@ -113,6 +113,11 @@ export async function handleAuthCallback(req: NextRequest) {
     ? `${accessToken.substring(0, 10)}...${accessToken.substring(accessToken.length - 4)}`
     : "null";
 
+  console.log("=== INCOMING TOKEN DATA ===");
+  console.log("Token Type:", session.isOnline ? "ONLINE TOKEN" : "OFFLINE TOKEN");
+  console.log("Token Starts With:", accessToken?.substring(0, 12));
+  console.log("===========================");
+
   console.log("[OAuthCallback] Complete Session Object received:", {
     id: session.id,
     shop: session.shop,
@@ -193,6 +198,10 @@ export async function handleAuthCallback(req: NextRequest) {
   if (isReinstall) {
     updateData.uniqueStoreId = `STORE-${Math.random().toString(36).substring(2, 10).toUpperCase()}`;
   }
+
+  console.log("Saving Token");
+  console.log("Shop:", normalizedShop);
+  console.log("Token starts with:", accessToken.substring(0, 12));
 
   const storedShop = await prisma.$transaction(async (tx) => {
     const store = await tx.store.upsert({

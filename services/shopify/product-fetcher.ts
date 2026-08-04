@@ -1,4 +1,4 @@
-import { getAdminClient } from '@/lib/shopify/admin';
+import { getAdminClient, handleGraphQLError } from '@/lib/shopify/admin';
 
 const GET_FULL_PRODUCT_QUERY = `
   query getFullProduct($id: ID!) {
@@ -73,9 +73,15 @@ export async function fetchLatestShopifyProduct(shopDomain: string, productId: s
     : `gid://shopify/Product/${productId}`;
 
   try {
+    console.log("Fetching Product");
+    console.log("Shop:", shopDomain);
+    console.log("Product:", productIdGid);
+
     const response: any = await client.request(GET_FULL_PRODUCT_QUERY, {
       variables: { id: productIdGid }
     });
+    
+    console.log("GraphQL Success");
 
     const product = response.data?.product;
     if (!product) {
@@ -156,6 +162,10 @@ export async function fetchLatestShopifyProduct(shopDomain: string, productId: s
     return formattedPayload;
   } catch (error: any) {
     console.error(`[ProductFetcher] Error fetching product ${productIdGid}:`, error.message);
-    throw error;
+    console.error(error);
+    console.error("Response:", error.response);
+    console.error("Body:", error.body);
+    console.error("Headers:", error.headers);
+    return handleGraphQLError(error, shopDomain);
   }
 }

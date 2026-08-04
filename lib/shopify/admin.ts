@@ -13,6 +13,8 @@ export async function getAdminClient(shopDomain: string) {
   const store = await prisma.store.findUnique({
     where: { shopDomain },
   });
+  console.log(store?.shopDomain);
+  console.log(store?.accessToken);
 
   if (!store || !store.isActive) {
     throw new Error(`Store ${shopDomain} is not active or not found.`);
@@ -43,10 +45,11 @@ export async function getAdminClient(shopDomain: string) {
 
   const client = new shopify.clients.Graphql({ session: session as Session });
   console.log("[AdminClient] GraphQL client initialized successfully.");
+
   return client;
 }
 
-async function handleGraphQLError(error: any, shopDomain: string) {
+export async function handleGraphQLError(error: any, shopDomain: string) {
   if (error instanceof GraphqlQueryError) {
     console.error(`GraphQL Query Error for ${shopDomain}:`, JSON.stringify(error.response, null, 2));
     throw new Error(`Shopify GraphQL Error: ${error.message}`);

@@ -49,8 +49,8 @@
     {
       "type": "webhook_subscription",
       "handle": "c59856f7baf7f6c9a816ef1c4d3cb590d59674c5",
-      "uid": "app/uninstalled::undefined::/api/webhooks/app-uninstalled",
-      "assets": "app/uninstalled::undefined::/api/webhooks/app-uninstalled",
+      "uid": "app/uninstalled::::/api/webhooks/app-uninstalled",
+      "assets": "app/uninstalled::::/api/webhooks/app-uninstalled",
       "target": "",
       "config": {
         "topic": "app/uninstalled",
@@ -61,8 +61,8 @@
     {
       "type": "webhook_subscription",
       "handle": "f905ceb80e152fad5f23c5d37935d356ca9baf76",
-      "uid": "inventory_levels/update::undefined::/api/webhooks/inventory-levels-update",
-      "assets": "inventory_levels/update::undefined::/api/webhooks/inventory-levels-update",
+      "uid": "inventory_levels/update::::/api/webhooks/inventory-levels-update",
+      "assets": "inventory_levels/update::::/api/webhooks/inventory-levels-update",
       "target": "",
       "config": {
         "topic": "inventory_levels/update",
@@ -73,8 +73,8 @@
     {
       "type": "webhook_subscription",
       "handle": "f37d55d7632394dfcbcd69ad818a04b88c97797a",
-      "uid": "products/create::undefined::/api/webhooks/products-create",
-      "assets": "products/create::undefined::/api/webhooks/products-create",
+      "uid": "products/create::::/api/webhooks/products-create",
+      "assets": "products/create::::/api/webhooks/products-create",
       "target": "",
       "config": {
         "topic": "products/create",
@@ -85,8 +85,8 @@
     {
       "type": "webhook_subscription",
       "handle": "a559a8fc3c914ec898552db8c39fc371d6204235",
-      "uid": "products/delete::undefined::/api/webhooks/products-delete",
-      "assets": "products/delete::undefined::/api/webhooks/products-delete",
+      "uid": "products/delete::::/api/webhooks/products-delete",
+      "assets": "products/delete::::/api/webhooks/products-delete",
       "target": "",
       "config": {
         "topic": "products/delete",
@@ -97,8 +97,8 @@
     {
       "type": "webhook_subscription",
       "handle": "4ee91d66ad9ff6f4f31cf348ca14adaeb747654f",
-      "uid": "products/update::undefined::/api/webhooks/products-update",
-      "assets": "products/update::undefined::/api/webhooks/products-update",
+      "uid": "products/update::::/api/webhooks/products-update",
+      "assets": "products/update::::/api/webhooks/products-update",
       "target": "",
       "config": {
         "topic": "products/update",

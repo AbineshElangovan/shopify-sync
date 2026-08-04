@@ -162,6 +162,7 @@ export async function applyPriceAdjustmentToStore(storeId: string) {
 
     for (const map of maps) {
       if (!map.sku) continue;
+      if (!map.shopifyVariantId) continue;
 
       // Find the corresponding cached product in the source store
       const sourceCache = await prisma.productCache.findFirst({

@@ -22,6 +22,9 @@ export class ShopifyGraphQLClient {
       const store = await prisma.store.findUnique({
         where: { shopDomain: this.shopDomain },
       });
+      console.log((store as any)?.shop); // Also printing store.shop as requested
+      console.log(store?.shopDomain);
+      console.log(store?.accessToken);
       if (!store || !store.isActive) {
         throw new Error(`Store ${this.shopDomain} is not active or not found in database.`);
       }
@@ -42,6 +45,10 @@ export class ShopifyGraphQLClient {
 
   async request<T>(query: string, variables?: Record<string, any>): Promise<T> {
     const client = await this.getClient();
+    console.log("[Backend: GraphQLClient] Executing Query:", query.substring(0, 100).replace(/\s+/g, ' '));
+    console.log("[Backend: GraphQLClient] Variables:", variables);
+    console.log("[Backend: GraphQLClient] Using Token:", this.accessToken?.substring(0, 15) || "Unknown (Fetched via Prisma)");
+
     try {
       const response = await client.request(query, { variables });
 

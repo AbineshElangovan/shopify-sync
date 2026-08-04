@@ -32,17 +32,30 @@ const BUSINESS_HOURS = [
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const activeStores = await prisma.store.findMany({ where: { isActive: true } });
-  const connectedCount = activeStores.filter(s => {
-    const token = s.accessToken;
-    if (!token) return false;
-    const normalized = token.trim();
-    if (!normalized) return false;
-    if (/mock|placeholder|your[_-]?token|seed/i.test(normalized)) return false;
-    return normalized.startsWith('shp');
-  }).length;
-
+  
   const masterStore = activeStores.find(s => s.isMaster);
   const masterLabel = masterStore ? (masterStore.masterLabel || masterStore.shopDomain) : 'Not Configured';
+
+  let connectedCount = 0;
+  if (masterStore) {
+    const connections = await (prisma as any).storeConnection.findMany({
+      where: { sourceStoreId: masterStore.id }
+    });
+    
+    // Count master store + connected target stores
+    const connectedStoreIds = [masterStore.id, ...connections.map((c: any) => c.targetStoreId)];
+    
+    connectedCount = activeStores.filter(s => {
+      if (!connectedStoreIds.includes(s.id)) return false;
+      
+      const token = s.accessToken;
+      if (!token) return false;
+      const normalized = token.trim();
+      if (!normalized) return false;
+      if (/mock|placeholder|your[_-]?token|seed/i.test(normalized)) return false;
+      return normalized.startsWith('shp');
+    }).length;
+  }
 
   return (
     <html lang="en">

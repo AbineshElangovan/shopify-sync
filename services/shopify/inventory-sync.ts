@@ -78,6 +78,11 @@ export async function processInventoryUpdate(
       console.log(`[${new Date().toISOString()}] [SyncService] Variant ${shopifyVariantId} has no SKU. Skipping target replication.`);
       return;
     }
+    
+    if (!shopifyVariantId) {
+      console.log(`[${new Date().toISOString()}] [SyncService] Variant has no shopifyVariantId. Skipping target replication.`);
+      return;
+    }
 
     let trueTotalInventory = availableQuantity;
     const sourceCachedProduct = await prisma.productCache.findFirst({
@@ -142,6 +147,11 @@ export async function processInventoryUpdate(
 
       if (!target.store.autoSyncEnabled) {
         console.log(`[SyncService] Auto-sync is disabled for target store ${target.store.shopDomain}. Skipping.`);
+        continue;
+      }
+
+      if (!target.shopifyVariantId || !target.inventoryItemId) {
+        console.log(`[SyncService] Missing shopifyVariantId or inventoryItemId for target store ${target.store.shopDomain}. Skipping.`);
         continue;
       }
 

@@ -279,6 +279,11 @@ export async function processInventoryUpdate(
 
     const { sku, shopifyProductId, shopifyVariantId } = sourceVariantMap;
 
+    if (!shopifyVariantId) {
+      console.log(`[SyncService] Variant map exists but missing shopifyVariantId for inventory item ${gidInventoryItemId}. Skipping.`);
+      return;
+    }
+
     // Fetch the previous cached inventory quantity for the source store to calculate delta
     const sourceCachedProduct = await prisma.productCache.findFirst({
       where: {
@@ -339,6 +344,11 @@ export async function processInventoryUpdate(
 
       if (!target.store.autoSyncEnabled) {
         console.log(`[SyncService] Auto-sync is disabled for target store ${target.store.shopDomain}. Skipping.`);
+        continue;
+      }
+
+      if (!target.shopifyVariantId || !target.inventoryItemId) {
+        console.log(`[SyncService] Missing shopifyVariantId or inventoryItemId for target store ${target.store.shopDomain}. Skipping.`);
         continue;
       }
 

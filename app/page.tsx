@@ -13,7 +13,6 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    let intervalId: NodeJS.Timeout;
 
     async function loadDashboardData() {
       try {
@@ -22,17 +21,28 @@ export default function DashboardPage() {
           const json = await res.json();
           setData(json);
         } else {
-          // If the backend returns 500/401, it means the store is not installed in the DB.
-          // Automatically redirect to the OAuth flow to install the store.
-          const urlParams = new URLSearchParams(window.location.search);
-          const shop = urlParams.get('shop');
-          const host = urlParams.get('host');
-          if (shop) {
-             const authUrl = new URL('/api/auth', window.location.origin);
-             authUrl.searchParams.set('shop', shop);
-             if (host) authUrl.searchParams.set('host', host);
-             window.location.href = authUrl.toString();
-             return;
+          try {
+            const errorData = await res.json();
+            
+            if (res.status === 401 && errorData.message === "Store not installed or inactive") {
+              console.warn("[Dashboard] Store is missing from database. Redirecting to OAuth to reinstall...");
+              const urlParams = new URLSearchParams(window.location.search);
+              const shop = urlParams.get('shop');
+              const host = urlParams.get('host');
+              if (shop) {
+                 const authUrl = new URL('/api/auth', window.location.origin);
+                 authUrl.searchParams.set('shop', shop);
+                 if (host) authUrl.searchParams.set('host', host);
+                 window.location.href = authUrl.toString();
+                 return;
+              }
+            } else if (res.status === 401) {
+              console.warn("[Dashboard] Session token expired or invalid (401). App bridge should handle refreshing the token.");
+            } else {
+              console.error(`[Dashboard] API returned an error: ${res.status} ${res.statusText}`, errorData);
+            }
+          } catch(e) {
+            console.error(`[Dashboard] API returned an error: ${res.status} ${res.statusText}`);
           }
         }
       } catch (err) {
@@ -45,9 +55,6 @@ export default function DashboardPage() {
     // Initial load
     loadDashboardData();
 
-    // Poll every 10 seconds for dynamic updates
-    intervalId = setInterval(loadDashboardData, 10000);
-
     const handleFocus = () => loadDashboardData();
     const handleVisibility = () => {
       if (document.visibilityState === 'visible') {
@@ -59,7 +66,6 @@ export default function DashboardPage() {
     window.addEventListener('visibilitychange', handleVisibility);
 
     return () => {
-      clearInterval(intervalId);
       window.removeEventListener('focus', handleFocus);
       window.removeEventListener('visibilitychange', handleVisibility);
     };

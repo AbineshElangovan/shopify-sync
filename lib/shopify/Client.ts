@@ -61,6 +61,9 @@ export async function shopifyFetch(input: RequestInfo, init: RequestInit = {}) {
     }
   }
 
+  console.log("[Frontend: shopifyFetch] URL:", requestInput);
+  console.log("[Frontend: shopifyFetch] Token starts with:", token?.substring(0, 15));
+
   return fetch(requestInput, {
     ...init,
     headers: {
