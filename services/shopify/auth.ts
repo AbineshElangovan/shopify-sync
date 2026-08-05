@@ -7,6 +7,7 @@ import { redirect } from "next/navigation";
 import { syncStoreProducts } from "./bulk-sync";
 import { hasValidShopifyAccessToken } from "./utils";
 import { logAuthEvent } from "@/lib/auth/audit";
+import { encrypt } from "@/lib/utils/encryption";
 
 export async function cleanupSeededData() {
   try {
@@ -110,6 +111,13 @@ export async function handleAuthCallback(req: NextRequest) {
   const { shop, accessToken, scope } = session;
   console.log("OAuth Session Scope:", scope);
 
+  console.log("===== TOKEN RESPONSE =====");
+  console.log({
+    hasAccessToken: !!session.accessToken,
+    hasRefreshToken: !!(session as any).refreshToken,
+    expires: session.expires,
+  });
+
   const maskedToken = accessToken
     ? `${accessToken.substring(0, 10)}...${accessToken.substring(accessToken.length - 4)}`
     : "null";
@@ -117,7 +125,10 @@ export async function handleAuthCallback(req: NextRequest) {
   console.log("=== INCOMING TOKEN DATA ===");
   console.log("Token Type:", session.isOnline ? "ONLINE TOKEN" : "OFFLINE TOKEN");
   console.log("Token Starts With:", accessToken?.substring(0, 12));
-  console.log("===========================");
+  console.log("===== OAUTH CALLBACK =====");
+  console.log("Shop:", session.shop);
+  console.log("Timestamp:", new Date().toISOString());
+  console.log("Offline Token Received:", session.accessToken?.substring(0, 12) + "...");
 
   console.log("[OAuthCallback] Complete Session Object received:", {
     id: session.id,
@@ -133,6 +144,12 @@ export async function handleAuthCallback(req: NextRequest) {
     throw new Error("No access token provided by Shopify");
   }
 
+  console.log("===== SAVING SESSION =====");
+  console.log({
+    shop: session.shop,
+    hasAccessToken: !!session.accessToken,
+    hasRefreshToken: !!(session as any).refreshToken,
+  });
   console.log("[OAuthCallback] Attempting storeSession...");
   await shopify.config.sessionStorage.storeSession(session);
   console.log("[OAuthCallback] storeSession completed successfully.");
@@ -201,18 +218,42 @@ export async function handleAuthCallback(req: NextRequest) {
     updateData.uniqueStoreId = `STORE-${Math.random().toString(36).substring(2, 10).toUpperCase()}`;
   }
 
-  console.log("Saving Token");
+  console.log("Saving Store Token");
   console.log("Shop:", normalizedShop);
-  console.log("Token starts with:", accessToken.substring(0, 12));
+  console.log("Store Updated");
 
   const storedShop = await prisma.$transaction(async (tx) => {
+    console.log("===== SAVING STORE =====");
+    console.log({
+      shop: normalizedShop,
+      hasAccessToken: !!accessToken,
+      hasRefreshToken: !!(session as any).refreshToken,
+      expiresAt: session.expires || null,
+      refreshTokenExpiresAt: (session as any).refreshTokenExpires || null,
+    });
+
+    const encryptedAccessToken = encrypt(accessToken);
+    const encryptedRefreshToken = (session as any).refreshToken ? encrypt((session as any).refreshToken) : null;
+
+    // We can assume session.refreshToken exists since it's verified in Phase 1
+    const updateDataToSave: any = {
+      ...updateData,
+      accessToken: encryptedAccessToken,
+      refreshToken: encryptedRefreshToken,
+      expiresAt: session.expires || null,
+      refreshTokenExpiresAt: (session as any).refreshTokenExpires || null,
+    };
+
     const store = await tx.store.upsert({
       where: { shopDomain: normalizedShop },
-      update: updateData,
+      update: updateDataToSave,
       create: {
         shopDomain: normalizedShop,
         shopifyStoreId: shopifyStoreId,
-        accessToken: accessToken,
+        accessToken: encryptedAccessToken,
+        refreshToken: encryptedRefreshToken,
+        expiresAt: session.expires || null,
+        refreshTokenExpiresAt: (session as any).refreshTokenExpires || null,
         scope: scope || "",
         isActive: true,
         label: shopLabel,

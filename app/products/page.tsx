@@ -2,10 +2,10 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { Table, ColumnConfig } from '@/components/common/Table';
-import { BlockStack } from '@shopify/polaris';
 import { shopifyFetch } from '@/lib/shopify/Client';
 import { DashboardCards } from '@/components/dashboard/DashboardCards';
 import { LocalizedDate } from '@/components/common/LocalizedDate';
+import { StoreRoleBadge } from '@/components/ui/StoreRoleBadge';
 
 export default function ProductsPage() {
   const [data, setData] = useState<any>(null);
@@ -108,9 +108,9 @@ export default function ProductsPage() {
   ];
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
-      <BlockStack gap="800">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 w-full overflow-x-hidden">
+      <div className="flex flex-col gap-8 min-w-0 w-full">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 lg:gap-8">
           <div>
             <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: '#111827', margin: 0 }}>
               Products & Collections
@@ -123,69 +123,36 @@ export default function ProductsPage() {
             </div>
           </div>
           
-          {/* Overall Search Bar */}
-          <div className="relative w-full md:w-80 shadow-sm rounded-lg">
-            <span className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-gray-400">
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
-            </span>
-            <input
-              type="text"
-              placeholder="Search by title or SKU..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 bg-white border border-gray-300 rounded-lg text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-colors"
-            />
+          <div className="flex flex-wrap lg:flex-nowrap items-center gap-4">
+            <StoreRoleBadge />
+            {/* Overall Search Bar */}
+            <div className="relative w-full md:w-80 shadow-sm rounded-lg">
+              <span className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-gray-400">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+              </span>
+              <input
+                type="text"
+                placeholder="Search by title or SKU..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-10 pr-4 py-2 bg-white border border-gray-300 rounded-lg text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-colors"
+              />
+            </div>
           </div>
         </div>
 
         <DashboardCards stats={{ ...stats, lastUpdated: 'Just now' }} lowStockThreshold={data?.lowStockThreshold ?? 15} />
         {searchQuery.trim() !== '' ? (
-          <Table
-            key="search-results"
-            title="Search Results"
-            headerColor="#6366f1"
-            columns={columns}
-            items={filterProducts(allProducts).map(item => ({
-              ...item,
-              updatedDate: <LocalizedDate date={item.updatedDate} format="date" />,
-              updatedTime: <LocalizedDate date={item.updatedTime} format="time" />
-            }))}
-            searchable={false}
-            filterable
-            itemsPerPage={50}
-            filterKey="stockLevel"
-            filterOptions={[
-              { label: 'All Stock Levels', value: 'ALL' },
-              { label: 'Healthy', value: 'Healthy' },
-              { label: 'Low', value: 'Low' },
-              { label: 'Critical', value: 'Critical' },
-              { label: 'Out of Stock', value: 'Out of Stock' },
-            ]}
-            emptyState={
-              <div style={{ padding: '40px', textAlign: 'center', color: '#6b7280' }}>
-                No products found matching your search.
-              </div>
-            }
-          />
-        ) : Object.keys(groupedProducts).length > 0 ? (() => {
-          const colors = ['#6366f1', '#0f766e', '#7c3aed', '#db2777', '#ea580c', '#0891b2'];
-          return Object.entries(groupedProducts)
-            .sort((a, b) => {
-              if (a[0] === 'Uncategorized') return 1;
-              if (b[0] === 'Uncategorized') return -1;
-              return a[0].localeCompare(b[0]);
-            })
-            .map(([collectionName, items], index) => {
-            const filteredItems = filterProducts(items as any[]);
-            return (
+          <div className="w-full overflow-hidden rounded-xl border border-gray-100 shadow-sm">
+            <div className="overflow-x-auto w-full max-w-full">
               <Table
-                key={collectionName}
-                title={collectionName}
-                headerColor={collectionName === 'Uncategorized' ? '#475569' : colors[index % colors.length]}
+                key="search-results"
+                title="Search Results"
+                headerColor="#6366f1"
                 columns={columns}
-                items={filteredItems.map(item => ({
+                items={filterProducts(allProducts).map(item => ({
                   ...item,
                   updatedDate: <LocalizedDate date={item.updatedDate} format="date" />,
                   updatedTime: <LocalizedDate date={item.updatedTime} format="time" />
@@ -203,10 +170,53 @@ export default function ProductsPage() {
                 ]}
                 emptyState={
                   <div style={{ padding: '40px', textAlign: 'center', color: '#6b7280' }}>
-                    No products found in this collection.
+                    No products found matching your search.
                   </div>
                 }
               />
+            </div>
+          </div>
+        ) : Object.keys(groupedProducts).length > 0 ? (() => {
+          const colors = ['#6366f1', '#0f766e', '#7c3aed', '#db2777', '#ea580c', '#0891b2'];
+          return Object.entries(groupedProducts)
+            .sort((a, b) => {
+              if (a[0] === 'Uncategorized') return 1;
+              if (b[0] === 'Uncategorized') return -1;
+              return a[0].localeCompare(b[0]);
+            })
+            .map(([collectionName, items], index) => {
+            const filteredItems = filterProducts(items as any[]);
+            return (
+              <div key={collectionName} className="w-full overflow-hidden rounded-xl border border-gray-100 shadow-sm mb-6">
+                <div className="overflow-x-auto w-full max-w-full">
+                  <Table
+                    title={collectionName}
+                    headerColor={collectionName === 'Uncategorized' ? '#475569' : colors[index % colors.length]}
+                    columns={columns}
+                    items={filteredItems.map(item => ({
+                      ...item,
+                      updatedDate: <LocalizedDate date={item.updatedDate} format="date" />,
+                      updatedTime: <LocalizedDate date={item.updatedTime} format="time" />
+                    }))}
+                    searchable={false}
+                    filterable
+                    itemsPerPage={50}
+                    filterKey="stockLevel"
+                    filterOptions={[
+                      { label: 'All Stock Levels', value: 'ALL' },
+                      { label: 'Healthy', value: 'Healthy' },
+                      { label: 'Low', value: 'Low' },
+                      { label: 'Critical', value: 'Critical' },
+                      { label: 'Out of Stock', value: 'Out of Stock' },
+                    ]}
+                    emptyState={
+                      <div style={{ padding: '40px', textAlign: 'center', color: '#6b7280' }}>
+                        No products found in this collection.
+                      </div>
+                    }
+                  />
+                </div>
+              </div>
             );
           });
         })() : (
@@ -214,7 +224,7 @@ export default function ProductsPage() {
             No products or collections synced for this store yet.
           </div>
         )}
-      </BlockStack>
+      </div>
     </div>
   );
 }

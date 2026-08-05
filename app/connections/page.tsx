@@ -16,40 +16,10 @@ import { useRouter } from 'next/navigation';
 import { LocalizedDate } from '@/components/common/LocalizedDate';
 import { Icon } from '@shopify/polaris';
 import { DeleteIcon, AlertTriangleIcon } from '@shopify/polaris-icons';
+import { TableCard } from '@/components/ui/TableCard';
+import { ThemedSection } from '@/components/ui/ThemedSection';
+import { StoreRoleBadge } from '@/components/ui/StoreRoleBadge';
 
-const ThemedSection = ({
-  title,
-  description,
-  bgColor,
-  borderColor,
-  stripeColor,
-  titleColor,
-  descColor,
-  children
-}: {
-  title: string;
-  description?: string;
-  bgColor: string;
-  borderColor: string;
-  stripeColor: string;
-  titleColor: string;
-  descColor?: string;
-  children: React.ReactNode;
-}) => (
-  <div style={{ backgroundColor: bgColor, border: `1px solid ${borderColor}`, borderRadius: '12px', padding: '24px', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)' }}>
-    <div style={{ marginBottom: '20px', borderLeft: `4px solid ${stripeColor}`, paddingLeft: '12px' }}>
-      <h2 style={{ fontSize: '1.25rem', fontWeight: 700, color: titleColor, margin: 0 }}>
-        {title}
-      </h2>
-      {description && (
-        <p style={{ marginTop: '4px', color: descColor, fontSize: '0.875rem' }}>
-          {description}
-        </p>
-      )}
-    </div>
-    {children}
-  </div>
-);
 
 export default function ConnectionsPage() {
   const [installedStores, setInstalledStores] = useState<any[]>([]);
@@ -317,10 +287,7 @@ export default function ConnectionsPage() {
           <p className="text-slate-500 mt-1">One master, unlimited connected stores</p>
         </div>
         <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2 bg-green-50 text-green-700 px-3 py-1.5 rounded-full text-sm font-medium border border-green-100">
-            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 11.08V12a10 10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
-            Master live
-          </div>
+          <StoreRoleBadge />
         </div>
       </div>
 
@@ -351,12 +318,12 @@ export default function ConnectionsPage() {
             const lastSync = master.updatedAt || storeData?.updatedAt;
 
             return (
-             <div key="master" className="ys-card p-5 flex flex-col">
+             <div key="master" className="bg-white rounded-xl shadow-sm border border-gray-200 p-5 flex flex-col">
            <div className="flex justify-between items-start mb-4">
              <div>
                <h3 className="font-semibold text-lg flex items-center gap-2 text-slate-900">
                  {master.label || master.shopDomain.split('.')[0]}
-                 <span className="bg-primary-50 text-primary-DEFAULT px-2 py-0.5 rounded-full text-xs font-semibold flex items-center gap-1 border border-primary-100">
+                 <span className="bg-[var(--color-primary-light)] text-[var(--color-primary-dark)] px-2 py-0.5 rounded-full text-xs font-semibold flex items-center gap-1 border border-[var(--color-primary)]">
                    <svg className="w-3 h-3" viewBox="0 0 24 24" fill="currentColor"><path d="M2 22h20v-2H2v2zm9-5l5-4 4 4V5c0-1.1-.9-2-2-2H6c-1.1 0-2 .9-2 2v12l4-4 5 4z"/></svg>
                    Master
                  </span>
@@ -410,13 +377,13 @@ export default function ConnectionsPage() {
             : 0;
 
           return (
-            <div key={conn.targetStoreId} className="ys-card p-5 flex flex-col">
+            <div key={conn.targetStoreId} className="bg-white rounded-xl shadow-sm border border-gray-200 p-5 flex flex-col">
               <div className="flex justify-between items-start mb-4">
                 <div>
                   <h3 className="font-semibold text-lg flex items-center gap-2 text-slate-900">
                     {store.label || store.shopDomain.split('.')[0]}
                     {conn.direction === 'incoming' && (
-                      <span className="bg-[#e6f4f1] text-[#0f766e] px-2 py-0.5 rounded-full text-xs font-semibold flex items-center gap-1">
+                      <span className="bg-[var(--color-primary-light)] text-[var(--color-primary-dark)] px-2 py-0.5 rounded-full text-xs font-semibold flex items-center gap-1 border border-[var(--color-primary)]">
                         <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 22h20M2 18l4-10 4 6 2-8 2 8 4-6 4 10H2z"/></svg>
                         Master
                       </span>
@@ -479,7 +446,7 @@ export default function ConnectionsPage() {
               onChange={(e) => setStoreIdInput(e.target.value)}
             />
             <button 
-              className="ys-btn-primary whitespace-nowrap"
+              className="px-4 py-2 bg-[var(--color-primary-dark)] text-white text-sm font-semibold rounded-lg hover:bg-[var(--color-primary)] transition-colors shadow-sm whitespace-nowrap"
               onClick={handleAddStore}
               disabled={connecting || !storeIdInput.trim()}
             >
@@ -495,34 +462,37 @@ export default function ConnectionsPage() {
 
       {/* Target Stores Table (For Master Store) */}
       {isMaster && connections.filter(c => c.direction === 'outgoing').length > 0 && (
-        <div className="mb-8">
-          <Table 
-            title="Connected Stores"
-            headerColor="#9333ea"
-            columns={[
-              { title: 'Store Name', key: 'name', type: 'bold' },
-              { title: 'Store URL', key: 'url' },
-              { title: 'Status', key: 'status', type: 'badge', badgeRules: { 'Healthy': 'success', 'Stale': 'warning' } },
-              { title: 'Action', key: 'action', type: 'react_node' }
-            ]}
-            items={connections.filter(c => c.direction === 'outgoing').map(conn => ({
-              name: conn.targetStore.label || conn.targetStore.shopDomain.split('.')[0],
-              url: `https://${conn.targetStore.shopDomain}`,
-              status: conn.targetStore.isActive ? 'Healthy' : 'Stale',
-              action: (
-                <button 
-                  onClick={() => handleRemoveStore(conn.targetStoreId)} 
-                  className="text-red-600 hover:text-red-700 font-semibold px-3 py-1.5 rounded-lg bg-red-50 hover:bg-red-100 transition-colors flex items-center gap-1.5 text-xs w-fit"
-                  title="Remove Connection"
-                >
-                  <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
-                  </svg>
-                  Remove
-                </button>
-              )
-            }))}
-          />
+        <div className="mb-8 w-full overflow-hidden">
+          <TableCard title="Connected Stores">
+            <div className="overflow-x-auto w-full max-w-full">
+              <Table 
+                headerColor="var(--color-primary-dark)"
+                columns={[
+                  { title: 'Store Name', key: 'name', type: 'bold' },
+                  { title: 'Store URL', key: 'url' },
+                  { title: 'Status', key: 'status', type: 'badge', badgeRules: { 'Healthy': 'success', 'Stale': 'warning' } },
+                  { title: 'Action', key: 'action', type: 'react_node' }
+                ]}
+                items={connections.filter(c => c.direction === 'outgoing').map(conn => ({
+                  name: conn.targetStore.label || conn.targetStore.shopDomain.split('.')[0],
+                  url: `https://${conn.targetStore.shopDomain}`,
+                  status: conn.targetStore.isActive ? 'Healthy' : 'Stale',
+                  action: (
+                    <button 
+                      onClick={() => handleRemoveStore(conn.targetStoreId)} 
+                      className="text-red-600 hover:text-red-700 font-semibold px-3 py-1.5 rounded-lg bg-red-50 hover:bg-red-100 transition-colors flex items-center gap-1.5 text-xs w-fit"
+                      title="Remove Connection"
+                    >
+                      <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
+                      </svg>
+                      Remove
+                    </button>
+                  )
+                }))}
+              />
+            </div>
+          </TableCard>
         </div>
       )}
 
@@ -561,7 +531,7 @@ export default function ConnectionsPage() {
             <button
               onClick={handleSync}
               disabled={selectedStores.length === 0 || syncing}
-              className="px-6 py-2 bg-primary-DEFAULT text-white text-sm font-semibold rounded-lg hover:bg-primary-600 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 w-full md:w-auto justify-center"
+              className="px-6 py-2 bg-[var(--color-primary-dark)] text-white text-sm font-semibold rounded-lg hover:bg-[var(--color-primary)] transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 w-full md:w-auto justify-center"
             >
               {syncing ? (
                 <>

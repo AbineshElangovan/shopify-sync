@@ -190,24 +190,36 @@ export default function CollectionPriceAdjustment({ storeId, storeName }: { stor
       <div style={{ marginTop: '16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
           <div style={{ display: 'flex', gap: '8px' }}>
-            <Button size="micro" onClick={() => {
-              const newMap = { ...enabledMap };
-              collections.forEach(c => {
-                if (c.title.toLowerCase().includes(searchQuery.toLowerCase())) {
-                  newMap[c.id] = true;
-                }
-              });
-              setEnabledMap(newMap);
-            }}>Select All</Button>
-            <Button size="micro" onClick={() => {
-              const newMap = { ...enabledMap };
-              collections.forEach(c => {
-                if (c.title.toLowerCase().includes(searchQuery.toLowerCase())) {
-                  newMap[c.id] = false;
-                }
-              });
-              setEnabledMap(newMap);
-            }}>Deselect All</Button>
+            <button 
+              type="button"
+              className="px-3 py-1.5 bg-[var(--color-primary)] text-white text-[13px] font-semibold rounded-md hover:bg-[var(--color-primary-dark)] transition-colors shadow-sm"
+              onClick={() => {
+                const newMap = { ...enabledMap };
+                collections.forEach(c => {
+                  if (c.title.toLowerCase().includes(searchQuery.toLowerCase())) {
+                    newMap[c.id] = true;
+                  }
+                });
+                setEnabledMap(newMap);
+              }}
+            >
+              Select All
+            </button>
+            <button 
+              type="button"
+              className="px-3 py-1.5 bg-[var(--color-primary)] text-white text-[13px] font-semibold rounded-md hover:bg-[var(--color-primary-dark)] transition-colors shadow-sm"
+              onClick={() => {
+                const newMap = { ...enabledMap };
+                collections.forEach(c => {
+                  if (c.title.toLowerCase().includes(searchQuery.toLowerCase())) {
+                    newMap[c.id] = false;
+                  }
+                });
+                setEnabledMap(newMap);
+              }}
+            >
+              Deselect All
+            </button>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', paddingLeft: '16px', borderLeft: '1px solid #e5e7eb' }}>
@@ -227,19 +239,25 @@ export default function CollectionPriceAdjustment({ storeId, storeName }: { stor
               />
             </div>
             <span style={{ fontSize: '13px', color: '#374151', fontWeight: 500 }}>%</span>
-            <Button size="micro" onClick={() => {
-              const newValueMap = { ...valueMap };
-              let appliedCount = 0;
-              collections.forEach(c => {
-                if (enabledMap[c.id]) {
-                  newValueMap[c.id] = bulkValue || '0';
-                  appliedCount++;
-                }
-              });
-              setValueMap(newValueMap);
-              setMessage({ text: `✓ Applied ${bulkValue || 0}% to ${appliedCount} selected collections.`, type: 'success' });
-              setTimeout(() => setMessage(null), 3000);
-            }}>Apply to Selected</Button>
+            <button 
+              type="button"
+              className="px-3 py-1.5 bg-[var(--color-primary)] text-white text-[13px] font-semibold rounded-md hover:bg-[var(--color-primary-dark)] transition-colors shadow-sm"
+              onClick={() => {
+                const newValueMap = { ...valueMap };
+                let appliedCount = 0;
+                collections.forEach(c => {
+                  if (enabledMap[c.id]) {
+                    newValueMap[c.id] = bulkValue || '0';
+                    appliedCount++;
+                  }
+                });
+                setValueMap(newValueMap);
+                setMessage({ text: `✓ Applied ${bulkValue || 0}% to ${appliedCount} selected collections.`, type: 'success' });
+                setTimeout(() => setMessage(null), 3000);
+              }}
+            >
+              Apply to Selected
+            </button>
           </div>
         </div>
 
@@ -249,9 +267,14 @@ export default function CollectionPriceAdjustment({ storeId, storeName }: { stor
               {message.text}
             </span>
           )}
-          <Button variant="primary" loading={saving} onClick={handleSave}>
-            Save Collection
-          </Button>
+          <button 
+            type="button"
+            disabled={saving}
+            className="px-4 py-2 bg-[var(--color-primary)] text-white text-sm font-semibold rounded-lg hover:bg-[var(--color-primary-dark)] transition-colors shadow-sm disabled:opacity-50"
+            onClick={handleSave}
+          >
+            {saving ? 'Saving...' : 'Save Collection'}
+          </button>
         </div>
       </div>
     </div>

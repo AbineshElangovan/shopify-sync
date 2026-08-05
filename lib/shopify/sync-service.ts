@@ -16,7 +16,9 @@ export function hasValidShopifyAccessToken(token: string | null | undefined): bo
   if (!normalized) return false;
   if (/mock|placeholder|your[_-]?token|seed/i.test(normalized)) return false;
 
-  return normalized.startsWith('shp');
+  // With encryption enabled, tokens no longer start with 'shp' in the DB.
+  // We just verify it has a reasonable length.
+  return normalized.length > 20;
 }
 
 export async function cleanupSeededData() {

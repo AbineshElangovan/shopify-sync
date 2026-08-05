@@ -47,6 +47,9 @@ export async function executeGraphQL<T = any>(
       error.response?.status === 401 ||
       error.statusCode === 401
     ) {
+      console.error("===== SHOPIFY GRAPHQL ERROR =====");
+      console.error("Status:", error.response?.code || error.statusCode || 401);
+      console.error("Shop:", shopDomain);
       console.warn(
         `[GraphQLClient] Access token invalid for ${shopDomain}. Marking store as inactive.`
       );

@@ -17,6 +17,9 @@ model Store {
   shopDomain               String  @unique
   shopifyStoreId           String?
   accessToken              String
+  refreshToken             String?
+  expiresAt                DateTime?
+  refreshTokenExpiresAt    DateTime?
   scope                    String
   label                    String?
   masterLabel              String? @unique
@@ -33,6 +36,7 @@ model Store {
   authFailureReason String?
   tokenVersion      Int        @default(1)
 
+  createdAt   DateTime @default(now())
   installedAt DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -58,6 +62,7 @@ model StoreConnection {
   sourceStoreId String
   targetStoreId String
   createdAt     DateTime @default(now())
+  updatedAt     DateTime @default(now()) @updatedAt
 
   sourceStore Store @relation("SourceConnections", fields: [sourceStoreId], references: [id], onDelete: Cascade)
   targetStore Store @relation("TargetConnections", fields: [targetStoreId], references: [id], onDelete: Cascade)
@@ -74,16 +79,10 @@ model Session {
   scope               String?
   expires             DateTime?
   accessToken         String
-  userId              BigInt?
-  firstName           String?
-  lastName            String?
-  email               String?
-  accountOwner        Boolean   @default(false)
-  locale              String?
-  collaborator        Boolean?  @default(false)
-  emailVerified       Boolean?  @default(false)
   refreshToken        String?
   refreshTokenExpires DateTime?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @default(now()) @updatedAt
 
   @@map("session")
 }
@@ -156,6 +155,7 @@ model SyncLog {
   requestId          String?
   durationMs         Int?
   createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @default(now()) @updatedAt
 
   sourceStore      Store @relation("SourceStore", fields: [sourceStoreId], references: [id])
   destinationStore Store @relation("DestinationStore", fields: [destinationStoreId], references: [id])
@@ -172,6 +172,8 @@ model WebhookEvent {
   topic       String
   shopDomain  String
   processedAt DateTime @default(now())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @default(now()) @updatedAt
 
   @@index([shopDomain, topic])
   @@map("webhook_events")
@@ -208,6 +210,8 @@ model CollectionProduct {
   id             String @id @default(uuid())
   collectionId   String
   productCacheId String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @default(now()) @updatedAt
 
   collection   Collection   @relation(fields: [collectionId], references: [id], onDelete: Cascade)
   productCache ProductCache @relation(fields: [productCacheId], references: [id], onDelete: Cascade)
@@ -258,8 +262,10 @@ model ProductMapping {
 }
 
 model ProductUniqueIdSequence {
-  id              String @id @default("product")
-  currentSequence Int    @default(1)
+  id              String   @id @default("product")
+  currentSequence Int      @default(1)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @default(now()) @updatedAt
 
   @@map("product_unique_id_sequence")
 }
@@ -270,6 +276,7 @@ model ProductBaseSku {
   storeId          String
   baseSequence     Int
   createdAt        DateTime @default(now())
+  updatedAt        DateTime @default(now()) @updatedAt
 
   store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
 
@@ -283,6 +290,7 @@ model VariantBaseSku {
   storeId          String
   baseSequence     Int
   createdAt        DateTime @default(now())
+  updatedAt        DateTime @default(now()) @updatedAt
 
   store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
 
@@ -335,6 +343,7 @@ model AuthAudit {
   success    Boolean
   message    String?  @db.Text
   createdAt  DateTime @default(now())
+  updatedAt  DateTime @default(now()) @updatedAt
 
   @@index([shopDomain])
   @@index([createdAt])

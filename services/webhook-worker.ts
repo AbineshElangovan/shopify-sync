@@ -135,9 +135,6 @@ async function handleProductsCreate(shop: string, payload: any, webhookId: strin
   const store = await prisma.store.findUnique({
     where: { shopDomain: shop },
   });
-  console.log((store as any)?.shop);
-  console.log(store?.shopDomain);
-  console.log(store?.accessToken);
 
   if (!(store as any)?.isMaster) {
     console.log(`[Worker:products/create] Ignored event from Sub Store: ${shop}`);
@@ -208,9 +205,6 @@ async function handleProductsUpdate(shop: string, payload: any, webhookId: strin
   const store = await prisma.store.findUnique({
     where: { shopDomain: shop },
   });
-  console.log((store as any)?.shop);
-  console.log(store?.shopDomain);
-  console.log(store?.accessToken);
 
   if (!(store as any)?.isMaster) {
     console.log(`[Worker:products/update] Ignored event from Sub Store: ${shop}`);
@@ -264,9 +258,6 @@ async function handleProductsDelete(shop: string, payload: any, webhookId: strin
   const store = await prisma.store.findUnique({
     where: { shopDomain: shop },
   });
-  console.log((store as any)?.shop);
-  console.log(store?.shopDomain);
-  console.log(store?.accessToken);
 
   if (!store) return;
 

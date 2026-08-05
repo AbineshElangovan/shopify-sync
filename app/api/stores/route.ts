@@ -8,6 +8,7 @@ import { authenticate, handleApiError } from '@/lib/shopify/authenticate';
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: NextRequest) {
+  console.log('[Stores API] GET called');
   try {
     const { store } = await authenticate(req);
     const { searchParams } = req.nextUrl;
@@ -88,7 +89,7 @@ export async function GET(req: NextRequest) {
       stores: enrichedStores,
     });
   } catch (error: any) {
-    console.error('[Stores API] Error:', error);
+    console.error('[Stores API] Error details:', error.message, error.stack);
     return handleApiError(error);
   }
 }

@@ -1,5 +1,6 @@
 import { Session } from "@shopify/shopify-api";
 import { prisma } from "@/lib/db/prisma";
+import { encrypt, decrypt } from "@/lib/utils/encryption";
 
 export const sessionStorage = {
   async storeSession(session: Session): Promise<boolean> {
@@ -16,6 +17,10 @@ export const sessionStorage = {
         console.warn(`[CustomSessionStorage] Warning: SDK attempted to store session ${session.id} with blank token. Preserving existing token.`);
       }
 
+      console.log("Saving Session");
+      console.log(session.shop);
+      console.log("Has Access Token:", !!session.accessToken);
+
       await prisma.session.upsert({
         where: { id: session.id },
         update: {
@@ -24,16 +29,8 @@ export const sessionStorage = {
           isOnline: session.isOnline,
           scope: session.scope || null,
           expires: session.expires || null,
-          accessToken: finalToken,
-          userId: user?.id ? BigInt(user.id) : null,
-          firstName: user?.first_name || null,
-          lastName: user?.last_name || null,
-          email: user?.email || null,
-          accountOwner: user?.account_owner || false,
-          locale: user?.locale || null,
-          collaborator: user?.collaborator || null,
-          emailVerified: user?.email_verified || null,
-          refreshToken: session.refreshToken || null,
+          accessToken: finalToken ? encrypt(finalToken) : "",
+          refreshToken: session.refreshToken ? encrypt(session.refreshToken) : null,
           refreshTokenExpires: session.refreshTokenExpires || null,
         },
         create: {
@@ -43,16 +40,8 @@ export const sessionStorage = {
           isOnline: session.isOnline,
           scope: session.scope || null,
           expires: session.expires || null,
-          accessToken: finalToken,
-          userId: user?.id ? BigInt(user.id) : null,
-          firstName: user?.first_name || null,
-          lastName: user?.last_name || null,
-          email: user?.email || null,
-          accountOwner: user?.account_owner || false,
-          locale: user?.locale || null,
-          collaborator: user?.collaborator || null,
-          emailVerified: user?.email_verified || null,
-          refreshToken: session.refreshToken || null,
+          accessToken: finalToken ? encrypt(finalToken) : "",
+          refreshToken: session.refreshToken ? encrypt(session.refreshToken) : null,
           refreshTokenExpires: session.refreshTokenExpires || null,
         },
       });
@@ -70,20 +59,21 @@ export const sessionStorage = {
       });
       if (!dbSession) return undefined;
 
-      const onlineAccessInfo = dbSession.userId ? ({
-        expires_in: 0,
-        associated_user_scope: "",
-        associated_user: {
-          id: Number(dbSession.userId),
-          first_name: dbSession.firstName || "",
-          last_name: dbSession.lastName || "",
-          email: dbSession.email || "",
-          account_owner: dbSession.accountOwner,
-          locale: dbSession.locale || "",
-          collaborator: dbSession.collaborator || false,
-          email_verified: dbSession.emailVerified || false,
+      const onlineAccessInfo = undefined;
+
+      let decryptedAccessToken = dbSession.accessToken;
+      let decryptedRefreshToken = dbSession.refreshToken || undefined;
+
+      try {
+        if (dbSession.accessToken && dbSession.accessToken.includes(':')) {
+           decryptedAccessToken = decrypt(dbSession.accessToken);
         }
-      } as any) : undefined;
+        if (dbSession.refreshToken && dbSession.refreshToken.includes(':')) {
+           decryptedRefreshToken = decrypt(dbSession.refreshToken);
+        }
+      } catch (e) {
+        console.error("Failed to decrypt session tokens", e);
+      }
 
       const session = new Session({
         id: dbSession.id,
@@ -92,8 +82,8 @@ export const sessionStorage = {
         isOnline: dbSession.isOnline,
         scope: dbSession.scope || undefined,
         expires: dbSession.expires || undefined,
-        accessToken: dbSession.accessToken,
-        refreshToken: dbSession.refreshToken || undefined,
+        accessToken: decryptedAccessToken,
+        refreshToken: decryptedRefreshToken,
         refreshTokenExpires: dbSession.refreshTokenExpires || undefined,
         onlineAccessInfo,
       });
@@ -135,20 +125,21 @@ export const sessionStorage = {
       });
       return dbSessions.map(
         (dbSession) => {
-          const onlineAccessInfo = dbSession.userId ? ({
-            expires_in: 0,
-            associated_user_scope: "",
-            associated_user: {
-              id: Number(dbSession.userId),
-              first_name: dbSession.firstName || "",
-              last_name: dbSession.lastName || "",
-              email: dbSession.email || "",
-              account_owner: dbSession.accountOwner,
-              locale: dbSession.locale || "",
-              collaborator: dbSession.collaborator || false,
-              email_verified: dbSession.emailVerified || false,
+          const onlineAccessInfo = undefined;
+
+          let decryptedAccessToken = dbSession.accessToken;
+          let decryptedRefreshToken = dbSession.refreshToken || undefined;
+
+          try {
+            if (dbSession.accessToken && dbSession.accessToken.includes(':')) {
+               decryptedAccessToken = decrypt(dbSession.accessToken);
             }
-          } as any) : undefined;
+            if (dbSession.refreshToken && dbSession.refreshToken.includes(':')) {
+               decryptedRefreshToken = decrypt(dbSession.refreshToken);
+            }
+          } catch (e) {
+            console.error("Failed to decrypt session tokens", e);
+          }
 
           return new Session({
             id: dbSession.id,
@@ -157,8 +148,8 @@ export const sessionStorage = {
             isOnline: dbSession.isOnline,
             scope: dbSession.scope || undefined,
             expires: dbSession.expires || undefined,
-            accessToken: dbSession.accessToken,
-            refreshToken: dbSession.refreshToken || undefined,
+            accessToken: decryptedAccessToken,
+            refreshToken: decryptedRefreshToken,
             refreshTokenExpires: dbSession.refreshTokenExpires || undefined,
             onlineAccessInfo,
           });

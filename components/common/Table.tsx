@@ -226,15 +226,9 @@ export function Table({
   };
 
   return (
-    <div className="rounded-xl overflow-hidden shadow-[0_2px_12px_rgba(0,0,0,0.07)] border border-gray-200 bg-white">
+    <div className="w-full bg-white">
 
-      {/* ── Title bar ── */}
-      {title && (
-        <div className="p-[14px_20px] border-b border-gray-200 flex items-center gap-3 bg-white">
-          <div style={{ backgroundColor: headerColor }} className="w-1 h-5.5 rounded shrink-0" />
-          <span className="font-bold text-[15px] text-gray-900">{title}</span>
-        </div>
-      )}
+      {/* ── Title handled by parent TableCard ── */}
 
       {/* ── Search & Filter toolbar ── */}
       {(searchable || filterable) && !loading && (

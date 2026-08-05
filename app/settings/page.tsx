@@ -1,53 +1,22 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { Card, Table } from '@/components/common';
-import { BlockStack, Layout, Button, ChoiceList, InlineStack } from '@shopify/polaris';
-import { shopifyFetch } from '@/lib/shopify/Client';
-import { useRouter } from 'next/navigation';
 import { Input, Checkbox, Select } from '@/components/forms';
+import { useRouter } from 'next/navigation';
+import { shopifyFetch } from '@/lib/shopify/Client';
 import CollectionPriceAdjustment from '@/components/stores/CollectionPriceAdjustment';
+import { Button } from '@/components/common/Button';
+import { ThemedSection } from '@/components/ui/ThemedSection';
 import { LocalizedDate } from '@/components/common/LocalizedDate';
+import { StoreRoleBadge } from '@/components/ui/StoreRoleBadge';
 
-const ThemedSection = ({
-  title,
-  description,
-  bgColor,
-  borderColor,
-  stripeColor,
-  titleColor,
-  descColor,
-  children
-}: {
-  title: string;
-  description?: string;
-  bgColor: string;
-  borderColor: string;
-  stripeColor: string;
-  titleColor: string;
-  descColor?: string;
-  children: React.ReactNode;
-}) => (
-  <div style={{ backgroundColor: bgColor, border: `1px solid ${borderColor}`, borderRadius: '12px', padding: '24px', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)' }}>
-    <div style={{ marginBottom: '20px', borderLeft: `4px solid ${stripeColor}`, paddingLeft: '12px' }}>
-      <h2 style={{ fontSize: '1.15rem', fontWeight: 700, color: titleColor, margin: 0 }}>
-        {title}
-      </h2>
-      {description && (
-        <p style={{ marginTop: '4px', color: descColor, fontSize: '0.875rem' }}>
-          {description}
-        </p>
-      )}
-    </div>
-    {children}
-  </div>
-);
 
 export default function SettingsPage() {
   const router = useRouter();
   const [stores, setStores] = useState<any[]>([]);
   const [threshold, setThreshold] = useState<string>('15');
   const [customThreshold, setCustomThreshold] = useState<string>('15');
+  const [debugOutput, setDebugOutput] = useState<string>('');
   const [autoSync, setAutoSync] = useState<boolean>(true);
 
   const [loading, setLoading] = useState(true);
@@ -68,9 +37,12 @@ export default function SettingsPage() {
       const storesRes = await shopifyFetch(`/api/stores?active=false&t=${Date.now()}`, { cache: 'no-store' });
       if (storesRes.ok) {
         const storesJson = await storesRes.json();
+        setDebugOutput(JSON.stringify(storesJson));
         const loadedStores = storesJson.stores || [];
         setStores(loadedStores);
 
+        const currentSettings = storesJson.storeSettings || {};
+        if (currentSettings.threshold) setThreshold(currentSettings.threshold.toString());
         const initialAdjustments: { [storeId: string]: string } = {};
         const initialMasterLabels: { [storeId: string]: string } = {};
         let initialMasterStoreId = null;
@@ -89,6 +61,9 @@ export default function SettingsPage() {
         setStoreAdjustments(initialAdjustments);
         setMasterLabels(initialMasterLabels);
         setMasterStoreId(initialMasterStoreId);
+      } else {
+        const errText = await storesRes.text();
+        setDebugOutput(`API ERROR ${storesRes.status}: ${errText}`);
       }
 
       const settingsRes = await shopifyFetch(`/api/settings?t=${Date.now()}`, { cache: 'no-store' });
@@ -157,8 +132,8 @@ export default function SettingsPage() {
     setMasterLabels(prev => ({ ...prev, [storeId]: val }));
   };
 
-  const handleSetMaster = async (storeId: string, autoLabel: string) => {
-    const confirmMsg = "Are you sure you want to change the Master Store?";
+  const handleSetMaster = async (storeId: string, autoLabel: string, isAlreadyMaster: boolean = false) => {
+    const confirmMsg = isAlreadyMaster ? "Are you sure you want to update the Master Label?" : "Are you sure you want to change the Master Store?";
     if (!window.confirm(confirmMsg)) return;
 
     setMasterSaving(true);
@@ -297,19 +272,23 @@ export default function SettingsPage() {
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
-      <BlockStack gap="800">
-        <div>
-          <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: '#111827', margin: 0 }}>
-            Settings
-          </h1>
-          <p style={{ marginTop: '4px', color: '#6b7280', fontSize: '0.875rem' }}>
-            Manage store connections, threshold alerts, and synchronization rules
-          </p>
+      <div className="flex flex-col gap-8">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: '#111827', margin: 0 }}>
+              Settings
+            </h1>
+            <p style={{ marginTop: '4px', color: '#6b7280', fontSize: '0.875rem' }}>
+              Manage store connections, threshold alerts, and synchronization rules
+            </p>
+          </div>
+          <div>
+            <StoreRoleBadge />
+          </div>
         </div>
 
-        <Layout>
-          <Layout.Section>
-            <BlockStack gap="500">
+        <div className="flex flex-col lg:flex-row gap-8">
+          <div className="flex-1 flex flex-col gap-6">
 
 
               <ThemedSection
@@ -322,9 +301,12 @@ export default function SettingsPage() {
                 descColor="#be123c"
               >
 
-                <BlockStack gap="400">
+                <div className="flex flex-col gap-4">
                   {stores.length === 0 ? (
-                    <p style={{ color: '#9ca3af', fontSize: '13px' }}>No stores available to configure.</p>
+                    <div>
+                      <p style={{ color: '#9ca3af', fontSize: '13px' }}>No stores available to configure.</p>
+                      <pre className="text-xs text-red-500 mt-2 whitespace-pre-wrap">{debugOutput}</pre>
+                    </div>
                   ) : (
                     stores.map((s) => (
                       <div
@@ -349,26 +331,25 @@ export default function SettingsPage() {
                             {s.shopDomain}
                           </div>
                         </div>
-
                         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-                          <span style={{ fontSize: '13px', fontWeight: s.isMaster ? 600 : 500, color: s.isMaster ? '#4338ca' : '#4b5563', marginRight: '16px' }}>
-                            {s.isMaster ? '● Master Store' : '○ Connected Store'}
-                          </span>
-
-                          {!s.isMaster && (
-                            <Button
-                              variant="primary"
-                              loading={masterSaving}
-                              onClick={() => handleSetMaster(s.id, (s.label || s.shopDomain).replace('.myshopify.com', ''))}
+                          {s.isMaster ? (
+                            <span className="px-2.5 py-1 rounded-md text-[11px] font-bold bg-green-700 text-white uppercase tracking-wider border border-green-800 shadow-sm">
+                              Master
+                            </span>
+                          ) : (
+                            <button
+                              className="px-3 py-1.5 bg-[var(--color-primary-dark)] text-white text-sm font-semibold rounded-lg hover:bg-[var(--color-primary)] transition-colors shadow-sm disabled:opacity-50"
+                              disabled={masterSaving}
+                              onClick={() => handleSetMaster(s.id, masterLabels[s.id] || (s.label || s.shopDomain).replace('.myshopify.com', ''), false)}
                             >
-                              Make Master
-                            </Button>
+                              {masterSaving ? 'Saving...' : 'Make Master'}
+                            </button>
                           )}
                         </div>
                       </div>
                     ))
                   )}
-                </BlockStack>
+                </div>
               </ThemedSection>
 
               <ThemedSection
@@ -381,7 +362,7 @@ export default function SettingsPage() {
                 descColor="#047857"
               >
 
-                <BlockStack gap="400">
+                <div className="flex flex-col gap-4">
                   {stores.length === 0 ? (
                     <p style={{ color: '#9ca3af', fontSize: '13px' }}>No stores available to configure.</p>
                   ) : (
@@ -434,13 +415,13 @@ export default function SettingsPage() {
                               autoComplete="off"
                             />
                           </div>
-                          <Button
-                            variant="primary"
-                            loading={storeSaving[s.id]}
+                          <button
+                            className="px-3 py-1.5 bg-[var(--color-primary-dark)] text-white text-sm font-semibold rounded-lg hover:bg-[var(--color-primary)] transition-colors shadow-sm disabled:opacity-50"
+                            disabled={storeSaving[s.id]}
                             onClick={() => handleStoreSave(s.id)}
                           >
-                            Set
-                          </Button>
+                            {storeSaving[s.id] ? 'Saving...' : 'Set'}
+                          </button>
                         </div>
                         <div style={{ width: '100%' }}>
                           <CollectionPriceAdjustment storeId={s.id} storeName={s.label || s.shopDomain} />
@@ -448,7 +429,7 @@ export default function SettingsPage() {
                       </div>
                     ))
                   )}
-                </BlockStack>
+                </div>
               </ThemedSection>
 
               <ThemedSection
@@ -461,16 +442,14 @@ export default function SettingsPage() {
                 descColor="#15803d"
               >
                 <div style={{ padding: '8px 0' }}>
-                  <Button variant="primary" onClick={() => router.push(`/settings/sku${window.location.search}`)}>
+                  <button className="px-4 py-2 bg-[var(--color-primary-dark)] text-white text-sm font-semibold rounded-lg hover:bg-[var(--color-primary)] transition-colors shadow-sm" onClick={() => router.push(`/settings/sku${window.location.search}`)}>
                     Configure SKU Generation
-                  </Button>
+                  </button>
                 </div>
               </ThemedSection>
-            </BlockStack>
-          </Layout.Section>
+            </div>
 
-          <Layout.Section variant="oneThird">
-            <BlockStack gap="500">
+          <div className="w-full lg:w-[360px] shrink-0 flex flex-col gap-6">
               <ThemedSection
                 title="Store Configurations"
                 bgColor="#fffbeb"
@@ -478,25 +457,23 @@ export default function SettingsPage() {
                 stripeColor="#f59e0b"
                 titleColor="#b45309"
               >
-
-                <BlockStack gap="400">
-                  <Checkbox
-                    label="Enable Real-Time Inventory Sync"
-                    checked={autoSync}
-                    onChange={(val) => setAutoSync(val)}
-                  />
-
-                  <div style={{ borderTop: '1px solid #e5e7eb', paddingTop: '16px' }}>
-                    <ChoiceList
-                      title="Low Stock Alert Threshold"
-                      choices={[
-                        { label: '10 units', value: '10' },
-                        { label: '20 units', value: '20' },
-                        { label: 'Custom Value', value: 'custom' },
-                      ]}
-                      selected={[threshold]}
-                      onChange={(selected) => setThreshold(selected[0])}
-                    />
+                <div className="flex flex-col gap-4">
+                  <div>
+                    <h3 className="text-sm font-semibold text-gray-900 mb-2">Low Stock Alert Threshold</h3>
+                    <div className="flex flex-col gap-2">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input type="radio" checked={threshold === '10'} onChange={() => setThreshold('10')} className="text-[var(--color-primary-dark)] focus:ring-[var(--color-primary-dark)]" />
+                        <span className="text-sm text-gray-700">10 units</span>
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input type="radio" checked={threshold === '20'} onChange={() => setThreshold('20')} className="text-[var(--color-primary-dark)] focus:ring-[var(--color-primary-dark)]" />
+                        <span className="text-sm text-gray-700">20 units</span>
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input type="radio" checked={threshold === 'custom'} onChange={() => setThreshold('custom')} className="text-[var(--color-primary-dark)] focus:ring-[var(--color-primary-dark)]" />
+                        <span className="text-sm text-gray-700">Custom Value</span>
+                      </label>
+                    </div>
                   </div>
 
                   {threshold === 'custom' && (
@@ -511,44 +488,24 @@ export default function SettingsPage() {
                   )}
 
                   <div style={{ marginTop: '8px' }}>
-                    <InlineStack gap="300" align="space-between">
-                      <InlineStack gap="300">
-                        <Button variant="primary" loading={saving} onClick={handleSave}>
-                          Save
-                        </Button>
-                        <Button 
-                          onClick={async () => {
-                            setSaving(true);
-                            try {
-                              const res = await shopifyFetch('/api/admin/force-sync');
-                              if (res.ok) {
-                                setToastMessage({ message: '✅ Sync forced successfully.', type: 'success' });
-                              } else {
-                                setToastMessage({ message: '❌ Failed to force sync.', type: 'error' });
-                              }
-                            } catch (e) {
-                              setToastMessage({ message: '❌ Failed to force sync.', type: 'error' });
-                            } finally {
-                              setSaving(false);
-                            }
-                          }}
-                        >
-                          Force Sync
-                        </Button>
-                      </InlineStack>
+                    <div className="flex items-center justify-between">
+                      <div className="flex gap-3">
+                        <button className="px-4 py-2 bg-[var(--color-primary-dark)] text-white text-sm font-semibold rounded-lg hover:bg-[var(--color-primary)] transition-colors shadow-sm disabled:opacity-50" disabled={saving} onClick={handleSave}>
+                          {saving ? 'Saving...' : 'Save'}
+                        </button>
+                      </div>
                       {saveSuccess && (
-                        <span style={{ color: '#16a34a', fontSize: '13px', fontWeight: 500, alignSelf: 'center' }}>
-                          ✓ Settings Saved!
+                        <span style={{ color: '#16a34a', fontSize: '13px', fontWeight: 500 }}>
+                          ✓ Saved!
                         </span>
                       )}
-                    </InlineStack>
+                    </div>
                   </div>
-                </BlockStack>
+                </div>
               </ThemedSection>
-            </BlockStack>
-          </Layout.Section>
-        </Layout>
-      </BlockStack>
+          </div>
+        </div>
+      </div>
       {toastMessage && (
         <div
           style={{

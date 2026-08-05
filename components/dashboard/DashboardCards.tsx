@@ -1,13 +1,12 @@
 'use client';
 import React from 'react';
-import { Grid } from '@shopify/polaris';
 import {
   ProductIcon,
   ChartVerticalIcon,
   AlertTriangleIcon,
   CheckCircleIcon,
 } from '@shopify/polaris-icons';
-import { StatCard } from '@/components/common';
+import { StatCard } from '@/components/ui/StatCard';
 
 export interface DashboardCardsProps {
   stats: {
@@ -23,53 +22,49 @@ export interface DashboardCardsProps {
 
 export function DashboardCards({ stats, lowStockThreshold = 15, crossStore = false }: DashboardCardsProps) {
   const statsConfig = [
-      {
-        key: 'totalProducts' as const,
-        label: 'Total Products',
-        description: crossStore ? 'Products across all stores' : 'Products in this store',
-        icon: ProductIcon,
-        gradient: 'linear-gradient(135deg, #7c3aed 0%, #a855f7 100%)',
-        iconBg: 'rgba(255,255,255,0.2)',
-      },
-      {
-        key: 'totalInventory' as const,
-        label: 'Total Inventory',
-        description: crossStore ? 'Total stock across all stores' : 'Total stock in this store',
-        icon: ChartVerticalIcon,
-        gradient: 'linear-gradient(135deg, #1d4ed8 0%, #3b82f6 100%)',
-        iconBg: 'rgba(255,255,255,0.2)',
-      },
+    {
+      key: 'totalProducts' as const,
+      title: 'Total Products',
+      description: crossStore ? 'Products across all stores' : 'Products in this store',
+      icon: ProductIcon,
+      color: 'primary' as const,
+    },
+    {
+      key: 'totalInventory' as const,
+      title: 'Total Inventory',
+      description: crossStore ? 'Total stock across all stores' : 'Total stock in this store',
+      icon: ChartVerticalIcon,
+      color: 'info' as const,
+    },
     {
       key: 'lowStock' as const,
-      label: 'Low Stock',
+      title: 'Low Stock',
       description: `Products needing restock (≤${lowStockThreshold} units)`,
       icon: AlertTriangleIcon,
-      gradient: 'linear-gradient(135deg, #c2410c 0%, #f97316 100%)',
-      iconBg: 'rgba(255,255,255,0.2)',
+      color: 'warning' as const,
     },
     {
       key: 'activeProducts' as const,
-      label: 'Active Products',
+      title: 'Active Products',
       description: 'Products with available inventory',
       icon: CheckCircleIcon,
-      gradient: 'linear-gradient(135deg, #15803d 0%, #22c55e 100%)',
-      iconBg: 'rgba(255,255,255,0.2)',
+      color: 'success' as const,
     },
   ];
+
   return (
-    <Grid>
-      {statsConfig.map(({ key, label, description, icon, gradient, iconBg }) => (
-        <Grid.Cell key={key} columnSpan={{ xs: 6, sm: 3, md: 3, lg: 3, xl: 3 }}>
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      {statsConfig.map(({ key, title, description, icon, color }) => (
+        <div key={key}>
           <StatCard
-            label={label}
+            title={title}
             description={description}
             value={stats[key].toLocaleString('en-US')}
             icon={icon}
-            gradient={gradient}
-            iconBg={iconBg}
+            color={color}
           />
-        </Grid.Cell>
+        </div>
       ))}
-    </Grid>
+    </div>
   );
 }

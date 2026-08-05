@@ -3,17 +3,7 @@ import React from 'react';
 import { BarChart as RechartsBarChart, Bar, LineChart as RechartsLineChart, Line, AreaChart as RechartsAreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart as RechartsPieChart, Pie, Cell, } from 'recharts';
 
 
-function ChartCard({ title, subtitle, children }: { title: string; subtitle?: string; children: React.ReactNode }) {
-  return (
-    <div style={{ backgroundColor: '#fff', borderRadius: 12, border: '1px solid #e5e7eb', boxShadow: '0 2px 8px rgba(0,0,0,0.07)', overflow: 'hidden' }}>
-      <div style={{ padding: '14px 20px', borderBottom: '1px solid #f1f5f9' }}>
-        <span style={{ fontWeight: 700, fontSize: 14, color: '#111827' }}>{title}</span>
-        {subtitle && <p style={{ margin: '2px 0 0', fontSize: 12, color: '#9ca3af' }}>{subtitle}</p>}
-      </div>
-      <div style={{ padding: '20px' }}>{children}</div>
-    </div>
-  );
-}
+import { ChartCard } from '@/components/ui/ChartCard';
 
 function NoData({ message = 'No data available yet' }: { message?: string }) {
   return (
@@ -70,7 +60,7 @@ export function BarChart({
 }: BarChartProps) {
   const hasData = data && data.length > 0;
   return (
-    <ChartCard title={title} subtitle={subtitle}>
+    <ChartCard title={title} description={subtitle}>
       {!hasData ? <NoData /> : (
         <div style={{ width: '100%', height }}>
           <ResponsiveContainer width="100%" height="100%">
@@ -112,7 +102,7 @@ export function LineChart({
 }: LineChartProps) {
   const hasData = data && data.length > 0;
   return (
-    <ChartCard title={title} subtitle={subtitle}>
+    <ChartCard title={title} description={subtitle}>
       {!hasData ? <NoData /> : (
         <div style={{ width: '100%', height }}>
           <ResponsiveContainer width="100%" height="100%">
@@ -161,7 +151,7 @@ export function AreaChart({
 }: AreaChartProps) {
   const hasData = data && data.length > 0;
   return (
-    <ChartCard title={title} subtitle={subtitle}>
+    <ChartCard title={title} description={subtitle}>
       {!hasData ? <NoData /> : (
         <div style={{ width: '100%', height }}>
           <ResponsiveContainer width="100%" height="100%">
@@ -208,16 +198,27 @@ export interface PieChartProps {
 
   unit?: string;
 
-  innerRadius?: number;
+  innerRadius?: number | string;
 
-  outerRadius?: number;
+  outerRadius?: number | string;
 }
 
 const RADIAN = Math.PI / 180;
 
 function renderCustomLabel({ cx, cy, midAngle, innerRadius, outerRadius, percent }: any) {
   if (percent < 0.05) return null;
-  const radius = innerRadius + (outerRadius - innerRadius) * 0.55;
+  
+  if (percent > 0.99) {
+    return (
+      <text x={cx} y={cy} fill="#111827" textAnchor="middle" dominantBaseline="central" fontSize={16} fontWeight={700}>
+        100%
+      </text>
+    );
+  }
+
+  const innerR = typeof innerRadius === 'number' ? innerRadius : parseFloat(innerRadius as string) || 0;
+  const outerR = typeof outerRadius === 'number' ? outerRadius : parseFloat(outerRadius as string) || 0;
+  const radius = innerR + (outerR - innerR) * 0.55;
   const x = cx + radius * Math.cos(-midAngle * RADIAN);
   const y = cy + radius * Math.sin(-midAngle * RADIAN);
   return (
@@ -227,12 +228,12 @@ function renderCustomLabel({ cx, cy, midAngle, innerRadius, outerRadius, percent
   );
 }
 
-export function PieChart({ title, subtitle, data, unit = '', innerRadius = 55, outerRadius = 88 }: PieChartProps) {
+export function PieChart({ title, subtitle, data, unit = '', innerRadius = '60%', outerRadius = '80%' }: PieChartProps) {
   const total = data.reduce((s, d) => s + d.value, 0);
   const hasData = data.length > 0 && total > 0;
 
   return (
-    <ChartCard title={title} subtitle={subtitle}>
+    <ChartCard title={title} description={subtitle}>
       {!hasData ? <NoData message="No data to display" /> : (
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
           <div style={{ width: '100%', height: 220 }}>
@@ -268,9 +269,11 @@ export function PieChart({ title, subtitle, data, unit = '', innerRadius = 55, o
               const pct = total > 0 ? ((entry.value / total) * 100).toFixed(1) : '0';
               return (
                 <div key={entry.name} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flex: 1 }}>
                     <div style={{ width: 10, height: 10, borderRadius: '50%', backgroundColor: entry.color, flexShrink: 0 }} />
-                    <span style={{ fontSize: 13, color: '#374151', fontWeight: 500 }}>{entry.name}</span>
+                    <span style={{ fontSize: 13, color: '#374151', fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={entry.name}>
+                      {entry.name}
+                    </span>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                     <span style={{ fontSize: 13, color: '#6b7280' }}>{unit}{entry.value.toLocaleString('en-IN')}</span>

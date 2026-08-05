@@ -1,5 +1,5 @@
 'use client';
-import { Grid } from '@shopify/polaris';
+// Removed Polaris Grid
 import { BarChart, PieChart } from '@/components/common/BarChart';
 
 export interface StoreChartEntry {
@@ -16,7 +16,7 @@ export interface DashboardChartsProps {
   };
 }
 
-const STORE_COLORS = ['#7c3aed', '#0891b2', '#ea580c', '#16a34a', '#dc2626'];
+const STORE_COLORS = ['#0db69d', '#0b8d7b', '#dffaf6', '#14b8a6', '#0d9488'];
 
 export function DashboardCharts({ chartData }: DashboardChartsProps) {
   const { combinedData, currentStoreData } = chartData;
@@ -44,40 +44,40 @@ export function DashboardCharts({ chartData }: DashboardChartsProps) {
         data={combinedData}
         xKey="name"
         bars={[
-          { key: 'Total Products',  color: '#8b5cf6', name: 'Total Products'  },
-          { key: 'Total Inventory', color: '#3b82f6', name: 'Total Inventory' },
+          { key: 'Total Products',  color: '#0b8d7b', name: 'Total Products'  },
+          { key: 'Total Inventory', color: '#0db69d', name: 'Total Inventory' },
         ]}
       />
 
       {/* Row 2 – Sales Value bar + two pie charts */}
-      <Grid>
-        <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 6, lg: 6, xl: 6 }}>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mt-5">
+        <div className="col-span-1 md:col-span-2">
           <BarChart
             title="Sales Value — Current Store"
             subtitle="Estimated revenue for this store (₹500 per unit)"
             data={currentStoreData}
             xKey="name"
             bars={[
-              { key: 'Total Sales Value', color: '#10b981', name: 'Sales Value (₹)' },
+              { key: 'Total Sales Value', color: '#0db69d', name: 'Sales Value (₹)' },
             ]}
           />
-        </Grid.Cell>
-        <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 3, lg: 3, xl: 3 }}>
+        </div>
+        <div className="col-span-1 md:col-span-1">
           <PieChart
             title="Sales Share %"
             subtitle="Current store sales"
             data={salesPieData}
             unit="₹"
           />
-        </Grid.Cell>
-        <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 3, lg: 3, xl: 3 }}>
+        </div>
+        <div className="col-span-1 md:col-span-1">
           <PieChart
             title="Products Share %"
             subtitle="Current store products"
             data={productsPieData}
           />
-        </Grid.Cell>
-      </Grid>
+        </div>
+      </div>
 
     </div>
   );

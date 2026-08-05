@@ -22,9 +22,6 @@ export class ShopifyGraphQLClient {
       const store = await prisma.store.findUnique({
         where: { shopDomain: this.shopDomain },
       });
-      console.log((store as any)?.shop); // Also printing store.shop as requested
-      console.log(store?.shopDomain);
-      console.log(store?.accessToken);
       if (!store || !store.isActive) {
         throw new Error(`Store ${this.shopDomain} is not active or not found in database.`);
       }

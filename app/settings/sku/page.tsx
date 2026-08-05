@@ -1,9 +1,7 @@
 "use client";
 import React, { useState, useEffect, useRef } from 'react';
-import { Layout, BlockStack, Box, Button, Text } from '@shopify/polaris';
 import { shopifyFetch } from '@/lib/shopify/Client';
 import CollectionSkuRule from '@/components/stores/CollectionSkuRule';
-import { Card } from '@/components/common/Card';
 import { Input } from '@/components/forms/Input';
 
 export default function SkuSettingsPage() {
@@ -127,8 +125,7 @@ export default function SkuSettingsPage() {
         </div>
       )}
 
-      <Layout>
-        <Layout.Section>
+      <div className="flex flex-col gap-6">
           <div style={{ backgroundColor: '#f5f3ff', border: `1px solid #ddd6fe`, borderRadius: '12px', padding: '24px', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)' }}>
             <div style={{ marginBottom: '24px', borderLeft: `6px solid #8b5cf6`, paddingLeft: '16px' }}>
               <h2 style={{ fontSize: '1.5rem', fontWeight: 800, color: '#5b21b6', margin: 0 }}>
@@ -139,10 +136,8 @@ export default function SkuSettingsPage() {
               </p>
             </div>
             
-            <div className="bg-white rounded-lg p-6 border border-purple-100 shadow-sm">
-              <BlockStack gap="400">
-
-                <Box>
+            <div className="bg-white rounded-lg p-6 border border-purple-100 shadow-sm flex flex-col gap-4">
+                <div>
                   <Input
                     label="Product Prefix"
                     prefix="STB -"
@@ -151,9 +146,9 @@ export default function SkuSettingsPage() {
                     autoComplete="off"
                     disabled={!isMaster}
                   />
-                </Box>
+                </div>
 
-                <Box>
+                <div>
                   <Input
                     label="Starting Sequence"
                     value={skuSequence}
@@ -162,23 +157,23 @@ export default function SkuSettingsPage() {
                     error={inlineError || undefined}
                     disabled={!isMaster}
                   />
-                </Box>
+                </div>
 
                 {storeId && (
-                  <Box>
+                  <div>
                     <CollectionSkuRule 
                       ref={collectionRuleRef}
                       storeId={storeId} 
                       onSelectCollection={(id, prefix) => setSelectedCollectionPrefix(prefix)}
                     />
-                  </Box>
+                  </div>
                 )}
 
                 <div className="mt-4 p-4 bg-purple-50 border-2 border-purple-200 rounded-lg shadow-sm text-center">
-                  <Text as="p" tone="subdued" variant="bodySm">Generated SKU Example</Text>
-                  <Text as="span" variant="headingLg" fontWeight="bold" tone="success">
+                  <p className="text-gray-500 text-sm mb-2">Generated SKU Example</p>
+                  <span className="text-xl font-bold text-green-700">
                     {generatedPreview}
-                  </Text>
+                  </span>
                 </div>
 
                 <div className="mt-6 pt-4 border-t border-purple-100 flex justify-end items-center gap-4">
@@ -187,15 +182,13 @@ export default function SkuSettingsPage() {
                       {toastMessage.message}
                     </span>
                   )}
-                  <Button variant="primary" onClick={handleSave} loading={saving} disabled={!isMaster}>
-                    Save Configuration
-                  </Button>
+                  <button className="px-4 py-2 bg-[var(--color-primary-dark)] text-white text-sm font-semibold rounded-lg hover:bg-[var(--color-primary)] transition-colors shadow-sm disabled:opacity-50" onClick={handleSave} disabled={saving || !isMaster}>
+                    {saving ? 'Saving...' : 'Save Configuration'}
+                  </button>
                 </div>
-              </BlockStack>
             </div>
           </div>
-        </Layout.Section>
-      </Layout>
+      </div>
     </div>
   );
 }

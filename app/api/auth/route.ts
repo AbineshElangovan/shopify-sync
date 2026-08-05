@@ -4,6 +4,10 @@ import { shopify } from "@/lib/shopify";
 
 export async function GET(req: NextRequest) {
   const shop = req.nextUrl.searchParams.get("shop");
+  console.log("===== OAUTH START =====");
+  console.log("Shop:", shop);
+  console.log("Timestamp:", new Date().toISOString());
+  
   console.log("[Install] auth route hit", { 
     shop, 
     url: req.url,

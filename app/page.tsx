@@ -1,8 +1,8 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { BlockStack, Layout } from '@shopify/polaris';
 import { DashboardCards } from '@/components/dashboard/DashboardCards';
+import { StoreRoleBadge } from '@/components/ui/StoreRoleBadge';
 import { DashboardCharts } from '@/components/dashboard/DashboardCharts';
 import { Table, ColumnConfig } from '@/components/common/Table';
 import { shopifyFetch } from '@/lib/shopify/Client';
@@ -145,15 +145,20 @@ export default function DashboardPage() {
   ];
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
-      <BlockStack gap="800">
-        <div>
-          <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: '#111827', margin: 0 }}>
-            Inventory Dashboard
-          </h1>
-          <p style={{ marginTop: '4px', color: '#6b7280', fontSize: '0.875rem' }}>
-            Live overview of your connected Shopify store
-          </p>
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 w-full overflow-x-hidden">
+      <div className="flex flex-col gap-8 min-w-0 w-full">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: '#111827', margin: 0 }}>
+              Inventory Dashboard
+            </h1>
+            <p style={{ marginTop: '4px', color: '#6b7280', fontSize: '0.875rem' }}>
+              Live overview of your connected Shopify store
+            </p>
+          </div>
+          <div>
+            <StoreRoleBadge />
+          </div>
         </div>
 
         <DashboardCards stats={stats} lowStockThreshold={lowStockThreshold} />
@@ -173,8 +178,8 @@ export default function DashboardPage() {
           })) : []
         }} />
 
-        <Layout>
-          <Layout.Section>
+        <div className="w-full overflow-hidden">
+          <div className="overflow-x-auto w-full max-w-full">
             <Table
               title="Store Summary"
               headerColor="#0f766e"
@@ -189,11 +194,11 @@ export default function DashboardPage() {
                 </div>
               }
             />
-          </Layout.Section>
-        </Layout>
+          </div>
+        </div>
 
-        <Layout>
-          <Layout.Section>
+        <div className="w-full overflow-hidden">
+          <div className="overflow-x-auto w-full max-w-full">
             <Table
               title="Low Stock Products"
               headerColor="#ea580c"
@@ -214,11 +219,11 @@ export default function DashboardPage() {
                 </div>
               }
             />
-          </Layout.Section>
-        </Layout>
+          </div>
+        </div>
 
-        <Layout>
-          <Layout.Section>
+        <div className="w-full overflow-hidden">
+          <div className="overflow-x-auto w-full max-w-full">
             <Table
               title="Recently Added Products"
               headerColor="#0891b2"
@@ -233,9 +238,9 @@ export default function DashboardPage() {
                 </div>
               }
             />
-          </Layout.Section>
-        </Layout>
-      </BlockStack>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
