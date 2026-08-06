@@ -1,6 +1,7 @@
 "use client";
 import React, { useState, useEffect, useRef } from 'react';
 import { shopifyFetch } from '@/lib/shopify/Client';
+import { Loading } from '@/components/common';
 import CollectionSkuRule from '@/components/stores/CollectionSkuRule';
 import { Input } from '@/components/forms/Input';
 
@@ -97,7 +98,7 @@ export default function SkuSettingsPage() {
   };
 
   if (loading) {
-    return <div className="p-8 max-w-2xl mx-auto mt-10">Loading SKU Configuration...</div>;
+    return <Loading label="Loading SKU rules..." />;
   }
 
   const generatedPreview = `STB-${skuPrefix || "SHOE"}-${selectedCollectionPrefix ? selectedCollectionPrefix + '-' : ''}${skuSequence ? skuSequence.toString().padStart(4, '0') : "0001"}`;

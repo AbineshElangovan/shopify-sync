@@ -53,6 +53,7 @@ model Store {
   productMappings            ProductMapping[]
   productBaseSkus            ProductBaseSku[]
   variantBaseSkus            VariantBaseSku[]
+  activityLogs               ActivityLog[]
 
   @@map("stores")
 }
@@ -406,4 +407,38 @@ model CollectionSkuRule {
 
   @@unique([storeId, collectionId])
   @@map("collection_sku_rules")
+}
+
+// -----------------------------------------------------------------------------
+// ACTIVITY LOGGING
+// -----------------------------------------------------------------------------
+
+enum ActivityEventType {
+  CREATE
+  UPDATE
+  DELETE
+  SOLD
+}
+
+model ActivityLog {
+  id           String            @id @default(uuid())
+  storeId      String
+  productId    String?
+  productTitle String
+  sku          String?
+  eventType    ActivityEventType
+  description  String
+  quantity     Int?
+  amount       Float?
+  collection   String?
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@index([storeId])
+  @@index([sku])
+  @@index([productTitle])
+  @@index([createdAt])
+  @@map("activity_logs")
 }

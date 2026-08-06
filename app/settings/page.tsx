@@ -9,6 +9,7 @@ import { Button } from '@/components/common/Button';
 import { ThemedSection } from '@/components/ui/ThemedSection';
 import { LocalizedDate } from '@/components/common/LocalizedDate';
 import { StoreRoleBadge } from '@/components/ui/StoreRoleBadge';
+import { Loading } from '@/components/common';
 
 
 export default function SettingsPage() {
@@ -253,13 +254,7 @@ export default function SettingsPage() {
   };
 
   if (loading) {
-    return (
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '50vh', gap: 14 }}>
-        <style>{`@keyframes sync-spin{to{transform:rotate(360deg)}}.ys-sync-ring{width:44px;height:44px;border-radius:50%;border:4px solid #e5e7eb;border-top-color:#6366f1;animation:sync-spin 0.75s linear infinite}`}</style>
-        <div className="ys-sync-ring" />
-        <p style={{ margin: 0, fontSize: 13, color: '#9ca3af', fontWeight: 500 }}>Loading settings…</p>
-      </div>
-    );
+    return <Loading label="Loading settings..." />;
   }
 
   const formattedStores = stores.map((s) => ({

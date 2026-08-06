@@ -3,11 +3,12 @@ import React from 'react';
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import Image from 'next/image';
-import {  HomeIcon,  ProductIcon,  ImportIcon,  HeartIcon, 
+import {
+  HomeIcon, ProductIcon, ImportIcon, HeartIcon,
   DiscountIcon,
   CashDollarIcon,
-  SettingsIcon, 
-  LinkIcon, 
+  SettingsIcon,
+  LinkIcon,
   CodeIcon,
   ClockIcon
 } from '@shopify/polaris-icons';
@@ -44,7 +45,7 @@ export function Sidebar() {
       title: 'OVERVIEW',
       items: [
         { label: 'Dashboard', href: '/', icon: HomeIcon },
-        { label: 'Activity', href: '#', icon: ClockIcon },
+        { label: 'Activity', href: '/activity', icon: ClockIcon },
       ]
     },
     {
@@ -73,12 +74,12 @@ export function Sidebar() {
   ];
 
   return (
-    <div className="w-[260px] flex-shrink-0 border-r border-gray-200 bg-white h-screen sticky top-0 flex flex-col">
+    <div className="w-[260px] flex-shrink-0 border-r border-[#0db69d]/10 bg-[#f0fdfa] h-screen sticky top-0 flex flex-col">
       {/* Brand */}
       <div className="px-6 py-6 flex items-center gap-3">
-        <Image src="/logo.png" alt="Logo" width={32} height={32} className="rounded-lg" />
+        <Image src="/logo.png" alt="Logo" width={32} height={32} className='rounded-lg' />
         <div>
-          <h2 className="text-[15px] font-bold text-gray-900 leading-tight">Store Bridge</h2>
+          <h2 className="text-[15px] font-bold text-gray-900 leading-tight">StoreBridge</h2>
           <p className="text-[11px] text-gray-500 leading-tight">Multi-store inventory sync</p>
         </div>
       </div>
@@ -93,17 +94,16 @@ export function Sidebar() {
               {section.items.map((item) => {
                 const isActive = pathname === item.href;
                 return (
-                  <Link 
+                  <Link
                     key={item.label}
                     href={createHref(item.href)}
-                    className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
-                      isActive 
-                        ? 'bg-[var(--color-primary-light)] text-[var(--color-primary-dark)] font-semibold' 
-                        : 'text-gray-600 hover:bg-gray-100 font-medium'
-                    }`}
+                    className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors group ${isActive
+                        ? 'bg-[#e0f8f5] text-[#0b9c86] font-semibold'
+                        : 'text-gray-600 hover:bg-[#0db69d] hover:text-white font-medium'
+                      }`}
                   >
-                    <span className={isActive ? 'text-[var(--color-primary-dark)]' : 'text-gray-400'}>
-                      <Icon source={item.icon} />
+                    <span className={isActive ? 'text-[#0b9c86]' : 'text-gray-400 group-hover:text-white transition-colors'}>
+                      <Icon source={item.icon} tone="inherit" />
                     </span>
                     {item.label}
                     {item.badge && (

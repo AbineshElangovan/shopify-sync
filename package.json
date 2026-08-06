@@ -20,6 +20,8 @@
     "@shopify/polaris": "^13.9.5",
     "@shopify/polaris-icons": "^9.3.1",
     "@shopify/shopify-api": "^13.1.0",
+    "jspdf": "^4.2.1",
+    "jspdf-autotable": "^5.0.8",
     "localtunnel": "^2.0.2",
     "next": "16.2.9",
     "prisma": "^6.19.0",

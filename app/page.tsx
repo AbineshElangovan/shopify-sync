@@ -4,7 +4,8 @@ import React, { useState, useEffect } from 'react';
 import { DashboardCards } from '@/components/dashboard/DashboardCards';
 import { StoreRoleBadge } from '@/components/ui/StoreRoleBadge';
 import { DashboardCharts } from '@/components/dashboard/DashboardCharts';
-import { Table, ColumnConfig } from '@/components/common/Table';
+import { Table, Loading } from '@/components/common';
+import type { ColumnConfig } from '@/components/common/Table';
 import { shopifyFetch } from '@/lib/shopify/Client';
 import { LocalizedDate } from '@/components/common/LocalizedDate';
 
@@ -72,13 +73,7 @@ export default function DashboardPage() {
   }, []);
 
   if (loading) {
-    return (
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '50vh', gap: 14 }}>
-        <style>{`@keyframes sync-spin{to{transform:rotate(360deg)}}.ys-sync-ring{width:44px;height:44px;border-radius:50%;border:4px solid #e5e7eb;border-top-color:#6366f1;animation:sync-spin 0.75s linear infinite}`}</style>
-        <div className="ys-sync-ring" />
-        <p style={{ margin: 0, fontSize: 13, color: '#9ca3af', fontWeight: 500 }}>Loading dashboard…</p>
-      </div>
-    );
+    return <Loading label="Loading dashboard..." />;
   }
 
   const stats = data?.stats || { totalProducts: 0, totalInventory: 0, lowStock: 0, activeProducts: 0, lastUpdated: 'Never' };

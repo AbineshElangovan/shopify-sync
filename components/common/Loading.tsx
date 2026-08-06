@@ -1,11 +1,21 @@
 "use client";
 import React from 'react';
-import { Spinner as PolarisSpinner } from '@shopify/polaris';
 
-export type LoadingProps = React.ComponentProps<typeof PolarisSpinner>;
-
-export function Loading(props: LoadingProps) {
+export function Loading({ label = "Loading..." }: { label?: string }) {
   return (
-    <PolarisSpinner size="large" {...props} />
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', width: '100%', minHeight: '60vh', marginTop: '10vh', gap: 14 }}>
+      <style>{`
+        @keyframes sync-spin { to { transform: rotate(360deg); } }
+        .ys-sync-ring {
+          width: 44px; height: 44px;
+          border-radius: 50%;
+          border: 4px solid #e5e7eb;
+          border-top-color: #0db69d;
+          animation: sync-spin 0.75s linear infinite;
+        }
+      `}</style>
+      <div className="ys-sync-ring" />
+      <p style={{ margin: 0, fontSize: 13, color: '#9ca3af', fontWeight: 500 }}>{label}</p>
+    </div>
   );
 }

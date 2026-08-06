@@ -197,6 +197,34 @@ async function handleProductsCreate(shop: string, payload: any, webhookId: strin
 
     await updateLocalProductCache(shop, enrichedPayload);
     await processProductCreate(shop, enrichedPayload, webhookId);
+
+    // Create ActivityLog for CREATE
+    if (storeRecord) {
+      const sku = enrichedPayload.variants?.[0]?.sku || null;
+      
+      const productCache = await prisma.productCache.findFirst({
+        where: { storeId: storeRecord.id, shopifyProductId: `gid://shopify/Product/${enrichedPayload.id}` },
+        include: { collections: { include: { collection: true } } }
+      });
+      const collectionStr = productCache?.collections?.map((c: any) => c.collection.title).join(', ') || null;
+
+      const connections = await prisma.storeConnection.findMany({
+        where: { sourceStoreId: storeRecord.id }
+      });
+      const allStoreIds = [storeRecord.id, ...connections.map(c => c.targetStoreId)];
+
+      await prisma.activityLog.createMany({
+        data: allStoreIds.map(id => ({
+          storeId: id,
+          productId: String(enrichedPayload.id),
+          productTitle: enrichedPayload.title || "Unknown Product",
+          sku: sku,
+          eventType: "CREATE",
+          description: `Product created with ${enrichedPayload.variants?.length || 1} variants`,
+          collection: collectionStr,
+        }))
+      });
+    }
   });
 }
 
@@ -250,6 +278,34 @@ async function handleProductsUpdate(shop: string, payload: any, webhookId: strin
            throw new Error(`Data Inconsistency: Mapping missing for variant ${variantIdStr}`);
         }
       }
+
+      // Create ActivityLog for UPDATE
+      if (storeRecord) {
+        const sku = currentPayload.variants?.[0]?.sku || null;
+
+        const productCache = await prisma.productCache.findFirst({
+          where: { storeId: storeRecord.id, shopifyProductId: `gid://shopify/Product/${currentPayload.id}` },
+          include: { collections: { include: { collection: true } } }
+        });
+        const collectionStr = productCache?.collections?.map((c: any) => c.collection.title).join(', ') || null;
+
+        const connections = await prisma.storeConnection.findMany({
+          where: { sourceStoreId: storeRecord.id }
+        });
+        const allStoreIds = [storeRecord.id, ...connections.map(c => c.targetStoreId)];
+
+        await prisma.activityLog.createMany({
+          data: allStoreIds.map(id => ({
+            storeId: id,
+            productId: String(currentPayload.id),
+            productTitle: currentPayload.title || "Unknown Product",
+            sku: sku,
+            eventType: "UPDATE",
+            description: `Product details or inventory updated`,
+            collection: collectionStr,
+          }))
+        });
+      }
     }
   });
 }
@@ -291,6 +347,36 @@ async function handleProductsDelete(shop: string, payload: any, webhookId: strin
     return;
   }
 
+  // Fetch cache for logging BEFORE processProductDelete wipes it out
+  const deletedGid = `gid://shopify/Product/${payload.id}`;
+  const cacheForLog = await prisma.productCache.findFirst({
+    where: { storeId: store?.id, shopifyProductId: deletedGid },
+    include: { collections: { include: { collection: true } } }
+  });
+
+  const productTitle = cacheForLog?.title || `Product ${payload.id}`;
+  const productSku = cacheForLog?.sku || null;
+  const collectionStr = cacheForLog?.collections?.map((c: any) => c.collection.title).join(', ') || null;
+
+  if (store) {
+    const connections = await prisma.storeConnection.findMany({
+      where: { sourceStoreId: store.id }
+    });
+    const allStoreIds = [store.id, ...connections.map(c => c.targetStoreId)];
+
+    await prisma.activityLog.createMany({
+      data: allStoreIds.map(id => ({
+        storeId: id,
+        productId: String(payload.id),
+        productTitle: productTitle,
+        sku: productSku,
+        eventType: "DELETE",
+        description: `Product removed from catalog`,
+        collection: collectionStr,
+      }))
+    });
+  }
+
   // Replicate deletion to target stores
   const { processProductDelete } = require('@/services/shopify/product-sync');
   await processProductDelete(shop, payload, webhookId);
@@ -303,11 +389,9 @@ async function handleProductsDelete(shop: string, payload: any, webhookId: strin
       console.warn(`[Worker:products/delete] Warning: Mapping not found to delete for product ${payload.id}`);
     }
   }
-
+  
   console.log(`[Worker:products/delete] sync complete for ${shop}`);
   
-  // Clean up Master store local cache
-  const deletedGid = `gid://shopify/Product/${payload.id}`;
   await prisma.variantMap.deleteMany({
     where: { storeId: store?.id, shopifyProductId: deletedGid },
   });
@@ -333,6 +417,31 @@ async function handleInventoryUpdate(shop: string, payload: any, webhookId: stri
     throw new Error(`Invalid payload for ${shop}`);
   }
 
+  const storeRecord = await prisma.store.findUnique({
+    where: { shopDomain: shop },
+  });
+
+  let previousQuantity: number | null = null;
+  let variantMap: any = null;
+  let cache: any = null;
+
+  if (storeRecord) {
+    // Attempt to find product info from variant map for ActivityLog BEFORE it gets updated
+    const inventoryGid = `gid://shopify/InventoryItem/${inventory_item_id}`;
+    variantMap = await prisma.variantMap.findFirst({
+      where: { storeId: storeRecord.id, inventoryItemId: inventoryGid },
+    });
+    
+    if (variantMap) {
+      cache = await prisma.productCache.findFirst({
+        where: { storeId: storeRecord.id, shopifyVariantId: variantMap.shopifyVariantId || '' }
+      });
+      if (cache) {
+        previousQuantity = cache.inventoryQuantity;
+      }
+    }
+  }
+
   const { processInventoryUpdate } = require('@/services/shopify/inventory-sync');
   await processInventoryUpdate(
     shop,
@@ -341,4 +450,33 @@ async function handleInventoryUpdate(shop: string, payload: any, webhookId: stri
     available,
     webhookId
   );
+
+  if (storeRecord && cache && previousQuantity !== null) {
+    const diff = available - previousQuantity;
+    
+    if (diff !== 0) {
+      const connections = await prisma.storeConnection.findMany({
+        where: { sourceStoreId: storeRecord.id }
+      });
+      const allStoreIds = [storeRecord.id, ...connections.map(c => c.targetStoreId)];
+      
+      const isSale = diff < 0;
+      const eventType = isSale ? "SOLD" : "UPDATE";
+      const description = isSale 
+        ? `${Math.abs(diff)} item(s) sold (New stock: ${available})`
+        : `Inventory manually adjusted by +${diff} (New stock: ${available})`;
+
+      await prisma.activityLog.createMany({
+        data: allStoreIds.map(id => ({
+          storeId: id,
+          productId: cache.shopifyProductId.split('/').pop() || '',
+          productTitle: cache.title,
+          sku: cache.sku || variantMap.sku,
+          eventType: eventType,
+          description: description,
+          quantity: Math.abs(diff)
+        }))
+      });
+    }
+  }
 }
