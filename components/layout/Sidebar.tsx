@@ -59,7 +59,7 @@ export function Sidebar() {
     {
       title: 'RULES',
       items: [
-        { label: 'SKU generation', href: '#', icon: DiscountIcon },
+        { label: 'SKU generation', href: '/sku', icon: DiscountIcon },
         { label: 'Price adjustment', href: '#', icon: CashDollarIcon },
         { label: 'Store connections', href: '/connections', icon: LinkIcon },
         { label: 'Settings', href: '/settings', icon: SettingsIcon },
@@ -98,8 +98,8 @@ export function Sidebar() {
                     key={item.label}
                     href={createHref(item.href)}
                     className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors group ${isActive
-                        ? 'bg-[#e0f8f5] text-[#0b9c86] font-semibold'
-                        : 'text-gray-600 hover:bg-[#0db69d] hover:text-white font-medium'
+                      ? 'bg-[#e0f8f5] text-[#0b9c86] font-semibold'
+                      : 'text-gray-600 hover:bg-[#0db69d] hover:text-white font-medium'
                       }`}
                   >
                     <span className={isActive ? 'text-[#0b9c86]' : 'text-gray-400 group-hover:text-white transition-colors'}>

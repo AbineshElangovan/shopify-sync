@@ -11,11 +11,13 @@ import {
   InlineStack,
   Box,
   Icon,
+  Pagination,
+  Button,
 } from "@shopify/polaris";
-import { ProductAddIcon, EditIcon, DeleteIcon, CartIcon, InfoIcon } from "@shopify/polaris-icons";
+import { ProductAddIcon, EditIcon, DeleteIcon, CartIcon, InfoIcon, SearchIcon, ExportIcon } from "@shopify/polaris-icons";
 import { shopifyFetch } from "@/lib/shopify/Client";
 import { StoreRoleBadge } from '@/components/ui/StoreRoleBadge';
-import { Loading } from '@/components/common';
+import { Loading, SearchBar, CustomSelect } from '@/components/common';
 
 export default function ActivityPage() {
   const [activities, setActivities] = useState<any[]>([]);
@@ -23,8 +25,18 @@ export default function ActivityPage() {
 
   // Filters state
   const [queryValue, setQueryValue] = useState("");
+  const [debouncedQueryValue, setDebouncedQueryValue] = useState("");
   const [collectionFilter, setCollectionFilter] = useState("");
   const [storeFilter, setStoreFilter] = useState("");
+  const [dateFilter, setDateFilter] = useState("all");
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedQueryValue(queryValue);
+      setPage(1); // Reset page when search term changes
+    }, 500);
+    return () => clearTimeout(handler);
+  }, [queryValue]);
 
   const [collectionOptions, setCollectionOptions] = useState<any[]>([]);
   const [storeOptions, setStoreOptions] = useState<any[]>([]);
@@ -32,13 +44,22 @@ export default function ActivityPage() {
   const [isMaster, setIsMaster] = useState(false);
   const [isMultiStore, setIsMultiStore] = useState(false);
 
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [errorMsg, setErrorMsg] = useState("");
+  const [isExporting, setIsExporting] = useState(false);
+
   const fetchActivities = useCallback(async () => {
     setLoading(true);
+    setErrorMsg("");
     try {
       const params = new URLSearchParams();
-      if (queryValue) params.append("search", queryValue);
+      if (debouncedQueryValue) params.append("search", debouncedQueryValue);
       if (collectionFilter) params.append("collection", collectionFilter);
       if (storeFilter) params.append("storeId", storeFilter);
+      if (dateFilter) params.append("dateRange", dateFilter);
+      params.append("page", page.toString());
+      params.append("limit", "15");
 
       const response = await shopifyFetch(`/api/activity?${params.toString()}`);
       if (response.ok) {
@@ -46,27 +67,28 @@ export default function ActivityPage() {
         setActivities(data.activities || []);
         setIsMaster(data.isMaster || false);
         setIsMultiStore(data.isMultiStore || false);
-        setCollectionOptions([
-          { label: "All Collections", value: "" },
-          ...(data.collectionOptions || [])
-        ]);
-        setStoreOptions([
-          { label: "All Stores", value: "all" },
-          ...(data.storeOptions || [])
-        ]);
+        setTotalPages(data.pagination?.totalPages || 1);
+        setCollectionOptions(data.collectionOptions || []);
+        setStoreOptions(data.storeOptions || []);
+      } else {
+        const errData = await response.json();
+        setErrorMsg(errData.error || "Failed to fetch activities");
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Failed to fetch activities:", error);
+      setErrorMsg(error.message || "Network error");
     } finally {
       setLoading(false);
     }
-  }, [queryValue, collectionFilter, storeFilter]);
+  }, [debouncedQueryValue, collectionFilter, storeFilter, dateFilter, page]);
 
   useEffect(() => {
     fetchActivities();
   }, [fetchActivities]);
 
-  const handleSearchChange = useCallback((value: string) => setQueryValue(value), []);
+  const handleSearchChange = useCallback((value: string) => {
+    setQueryValue(value);
+  }, []);
 
   const getEventIcon = (eventType: string) => {
     const wrapIcon = (icon: any, colorClass: string) => (
@@ -109,38 +131,57 @@ export default function ActivityPage() {
     return `${datePart} • ${timePart}`;
   };
 
-  const exportToPDF = useCallback(() => {
-    import('jspdf').then(({ default: jsPDF }) => {
-      import('jspdf-autotable').then(({ default: autoTable }) => {
-        const doc = new jsPDF();
-        doc.text("Activity Log", 14, 15);
+  const exportToPDF = useCallback(async () => {
+    setIsExporting(true);
+    try {
+      const params = new URLSearchParams();
+      if (debouncedQueryValue) params.append("search", debouncedQueryValue);
+      if (collectionFilter) params.append("collection", collectionFilter);
+      if (storeFilter) params.append("storeId", storeFilter);
+      if (dateFilter) params.append("dateRange", dateFilter);
+      params.append("export", "true");
 
-        const tableColumn = ["Date", "Event", "Title", "SKU", "Store", "Description"];
-        const tableRows: any[] = [];
+      const response = await shopifyFetch(`/api/activity?${params.toString()}`);
+      if (!response.ok) throw new Error("Failed to fetch export data");
+      const data = await response.json();
+      const exportActivities = data.activities || [];
 
-        activities.forEach(item => {
-          const date = formatDate(item.createdAt);
-          const event = getEventTitle(item.eventType);
-          const title = item.productTitle || "-";
-          const sku = item.sku || "-";
-          const store = item.store?.label || item.store?.shopDomain || "Unknown Store";
-          const desc = item.description;
+      const { default: jsPDF } = await import('jspdf');
+      const { default: autoTable } = await import('jspdf-autotable');
+      
+      const doc = new jsPDF();
+      doc.text("Activity Log", 14, 15);
 
-          tableRows.push([date, event, title, sku, store, desc]);
-        });
+      const tableColumn = ["Date", "Event", "Title", "SKU", "Store", "Description"];
+      const tableRows: any[] = [];
 
-        autoTable(doc, {
-          head: [tableColumn],
-          body: tableRows,
-          startY: 20,
-          styles: { fontSize: 9 },
-          headStyles: { fillColor: [13, 182, 157] } // #0db69d
-        });
+      exportActivities.forEach((item: any) => {
+        const date = formatDate(item.createdAt);
+        const event = getEventTitle(item.eventType);
+        const title = item.productTitle || "-";
+        const sku = item.sku || "-";
+        const store = item.store?.label || item.store?.shopDomain || "Unknown Store";
+        const desc = item.description;
 
-        doc.save(`Activity_Log_${new Date().toISOString().split('T')[0]}.pdf`);
+        tableRows.push([date, event, title, sku, store, desc]);
       });
-    });
-  }, [activities]);
+
+      autoTable(doc, {
+        head: [tableColumn],
+        body: tableRows,
+        startY: 20,
+        styles: { fontSize: 9 },
+        headStyles: { fillColor: [13, 182, 157] } // #0db69d
+      });
+
+      doc.save(`Activity_Log_${new Date().toISOString().split('T')[0]}.pdf`);
+    } catch (error) {
+      console.error("Export failed:", error);
+      setErrorMsg("Failed to export activities");
+    } finally {
+      setIsExporting(false);
+    }
+  }, [debouncedQueryValue, collectionFilter, storeFilter, dateFilter]);
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 w-full overflow-x-hidden">
@@ -156,79 +197,97 @@ export default function ActivityPage() {
           </div>
 
           <div className="flex items-center gap-4">
-            <button
-              onClick={exportToPDF}
-              className="bg-[#0db69d] hover:bg-[#0b9c86] text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors shadow-sm flex items-center gap-2"
-            >
-              <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-              </svg>
-              Export
-            </button>
+              <button
+                onClick={exportToPDF}
+                disabled={isExporting}
+                className="flex items-center gap-2 bg-[#0db69d] hover:bg-[#0b9c86] text-white px-4 py-2 rounded-lg font-medium transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                </svg>
+                {isExporting ? 'Exporting...' : 'Export'}
+              </button>
             <StoreRoleBadge />
           </div>
         </div>
 
-        {loading ? (
-          <Loading label="Loading activities..." />
-        ) : (
-          <div className="w-full bg-white overflow-hidden rounded-xl border border-gray-200 shadow-sm">
+        <div className="w-full bg-white overflow-hidden rounded-xl border border-gray-200 shadow-sm">
             <div className="p-3 px-5 border-b border-slate-100 bg-slate-50/50 flex gap-3 flex-wrap items-center">
-              {/* Custom Tailwind Search */}
-              <div className="relative flex-1 min-w-[250px]">
-                <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
-                </svg>
-                <input
-                  type="text"
-                  placeholder="Search by Product Title or SKU..."
-                  value={queryValue}
-                  onChange={(e) => handleSearchChange(e.target.value)}
-                  className="w-full pl-8 pr-8 py-2 border border-gray-300 rounded-lg text-[13px] outline-none transition-colors bg-white box-border focus:border-[#0db69d] focus:ring-1 focus:ring-[#0db69d]"
-                />
-                {queryValue && (
-                  <button
-                    onClick={() => handleSearchChange("")}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 bg-transparent border-none cursor-pointer text-gray-400 p-0.5 leading-none"
-                  >
-                    ✕
-                  </button>
-                )}
-              </div>
+              <div className="flex-1 min-w-[250px]">
+                  <SearchBar
+                    label="Search"
+                    labelHidden
+                    placeholder="Search by Product Title or SKU..."
+                    value={queryValue}
+                    onChange={handleSearchChange}
+                    autoComplete="off"
+                    clearButton
+                    onClearButtonClick={() => handleSearchChange("")}
+                    prefix={<Icon source={SearchIcon} tone="base" />}
+                  />
+                </div>
 
               {/* Custom Tailwind Collection Select */}
               <div className="min-w-[180px]">
-                <select
+                <CustomSelect
+                  label="Collection"
+                  labelHidden
+                  options={[
+                    { label: 'All Collections', value: '' },
+                    ...collectionOptions
+                      .filter(opt => opt.value !== '')
+                      .map(opt => ({ label: opt.label, value: opt.value }))
+                  ]}
                   value={collectionFilter}
-                  onChange={(e) => setCollectionFilter(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-[13px] text-gray-700 bg-white cursor-pointer outline-none focus:border-[#0db69d] focus:ring-1 focus:ring-[#0db69d] transition-colors"
-                >
-                  {collectionOptions.length > 0 ? (
-                    collectionOptions.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)
-                  ) : (
-                    <option value="">All Collections</option>
-                  )}
-                </select>
+                  onChange={(value) => { setCollectionFilter(value); setPage(1); }}
+                />
               </div>
 
               {/* Custom Tailwind Store Select (Master Only) */}
               {isMaster && isMultiStore && (
                 <div className="min-w-[180px]">
-                  <select
+                  <CustomSelect
+                    label="Store"
+                    labelHidden
+                    options={[
+                      { label: 'All Stores', value: 'all' },
+                      ...storeOptions
+                        .filter(opt => opt.value !== 'all')
+                        .map(opt => ({ label: opt.label, value: opt.value }))
+                    ]}
                     value={storeFilter}
-                    onChange={(e) => setStoreFilter(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-[13px] text-gray-700 bg-white cursor-pointer outline-none focus:border-[#0db69d] focus:ring-1 focus:ring-[#0db69d] transition-colors"
-                  >
-                    {storeOptions.length > 0 ? (
-                      storeOptions.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)
-                    ) : (
-                      <option value="all">All Stores</option>
-                    )}
-                  </select>
+                    onChange={(value) => { setStoreFilter(value); setPage(1); }}
+                  />
                 </div>
               )}
+
+              {/* Date Filter Select */}
+              <div className="min-w-[150px]">
+                  <CustomSelect
+                    label="Date Range"
+                    labelHidden
+                    options={[
+                      { label: 'All Time', value: 'all' },
+                      { label: 'This Day', value: 'today' },
+                      { label: 'This Week', value: 'week' },
+                      { label: 'This Month', value: 'month' },
+                    ]}
+                    value={dateFilter}
+                    onChange={(value) => { setDateFilter(value); setPage(1); }}
+                  />
+              </div>
             </div>
-            <Box padding="400">
+            
+            {errorMsg && (
+              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4 mx-4">
+                <strong>Error: </strong>{errorMsg}
+              </div>
+            )}
+
+            {loading ? (
+              <Loading label="Loading activities..." />
+            ) : (
+              <Box padding="400">
               {activities.length === 0 ? (
                 <div style={{ padding: '60px', textAlign: 'center', color: '#6b7280' }}>
                   No activities found.
@@ -286,9 +345,19 @@ export default function ActivityPage() {
                   }}
                 />
               )}
+              
+                <div className="flex justify-center mt-6 border-t border-gray-100 pt-4 pb-2">
+                  <Pagination
+                    hasPrevious={page > 1}
+                    onPrevious={() => setPage(page - 1)}
+                    hasNext={page < totalPages}
+                    onNext={() => setPage(page + 1)}
+                    label={`Page ${page} of ${totalPages}`}
+                  />
+                </div>
             </Box>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </div>
   );

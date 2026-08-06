@@ -273,8 +273,8 @@ export default function SettingsPage() {
             <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: '#111827', margin: 0 }}>
               Settings
             </h1>
-            <p style={{ marginTop: '4px', color: '#6b7280', fontSize: '0.875rem' }}>
-              Manage store connections, threshold alerts, and synchronization rules
+            <p style={{ marginTop: 4, color: '#6b7280', fontSize: '0.875rem' }}>
+              Manage store connections, threshold alerts, and synchronization rules.
             </p>
           </div>
           <div>
@@ -424,22 +424,6 @@ export default function SettingsPage() {
                       </div>
                     ))
                   )}
-                </div>
-              </ThemedSection>
-
-              <ThemedSection
-                title="SKU Generation Settings"
-                description="Configure automatic SKU generation and rules for new products."
-                bgColor="#f0fdf4"
-                borderColor="#bbf7d0"
-                stripeColor="#22c55e"
-                titleColor="#166534"
-                descColor="#15803d"
-              >
-                <div style={{ padding: '8px 0' }}>
-                  <button className="px-4 py-2 bg-[var(--color-primary-dark)] text-white text-sm font-semibold rounded-lg hover:bg-[var(--color-primary)] transition-colors shadow-sm" onClick={() => router.push(`/settings/sku${window.location.search}`)}>
-                    Configure SKU Generation
-                  </button>
                 </div>
               </ThemedSection>
             </div>

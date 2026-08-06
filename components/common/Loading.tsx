@@ -1,7 +1,16 @@
 "use client";
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 
 export function Loading({ label = "Loading..." }: { label?: string }) {
+  const [show, setShow] = useState(false);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setShow(true), 250);
+    return () => clearTimeout(timer);
+  }, []);
+
+  if (!show) return null;
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', width: '100%', minHeight: '60vh', marginTop: '10vh', gap: 14 }}>
       <style>{`

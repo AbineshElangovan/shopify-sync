@@ -147,8 +147,8 @@ export default function DashboardPage() {
             <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: '#111827', margin: 0 }}>
               Inventory Dashboard
             </h1>
-            <p style={{ marginTop: '4px', color: '#6b7280', fontSize: '0.875rem' }}>
-              Live overview of your connected Shopify store
+            <p style={{ marginTop: 4, color: '#6b7280', fontSize: '0.875rem' }}>
+              Live overview of your connected Shopify store.
             </p>
           </div>
           <div>

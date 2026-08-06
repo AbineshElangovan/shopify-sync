@@ -102,8 +102,8 @@ export async function getAdminClient(shopDomain: string) {
     // FOR TESTING: Refresh if the token has lived for more than 5 minutes
     // A fresh token lives for 60 mins. If timeUntilExpiry < 55 mins, it has lived for 5 mins.
     const timeUntilExpiry = activeStore.expiresAt.getTime() - now.getTime();
-    if (timeUntilExpiry < 5 * 60 * 1000) {
-      console.log(`[AdminClient] TESTING MODE: Token for ${shopDomain} is older than 5 minutes. Attempting refresh...`);
+    if (timeUntilExpiry < 60 * 60 * 1000) {
+      console.log(`[AdminClient] TESTING MODE: Token for ${shopDomain} is older than 60 minutes. Attempting refresh...`);
       
       let oldDecryptedToken = "UNKNOWN";
       if (activeStore.accessToken) {

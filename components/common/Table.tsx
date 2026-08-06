@@ -1,6 +1,7 @@
 'use client';
 import React, { useState, useMemo } from 'react';
 import { Badge, Text } from '@shopify/polaris';
+import { CustomSelect } from './CustomSelect';
 
 export interface ColumnConfig {
   title: string;
@@ -242,15 +243,11 @@ export function Table({
           )}
           {filterable && filterKey && (
             <div className="min-w-[160px]">
-              <select
+              <CustomSelect
+                options={filterOptions}
                 value={currentFilterValue}
-                onChange={(e) => handleFilterChange(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-[13px] text-gray-700 bg-white cursor-pointer outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors"
-              >
-                {filterOptions.map((opt) => (
-                  <option key={opt.value} value={opt.value}>{opt.label}</option>
-                ))}
-              </select>
+                onChange={(value) => handleFilterChange(value)}
+              />
             </div>
           )}
           {(query || currentFilterValue !== 'ALL') && (
