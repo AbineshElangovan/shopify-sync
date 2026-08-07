@@ -1,6 +1,6 @@
 "use client";
 import React, { useState, useEffect } from 'react';
-import { Table } from '@/components/common';
+import { Table, Loading } from '@/components/common';
 import {
   TextField,
   Button,
@@ -271,12 +271,7 @@ export default function ConnectionsPage() {
   });
 
   if (loading && connections.length === 0) {
-    return (
-      <div className="p-8 max-w-7xl mx-auto flex justify-center mt-20">
-        <style>{`@keyframes sync-spin{to{transform:rotate(360deg)}}.ys-sync-ring{width:44px;height:44px;border-radius:50%;border:4px solid #e5e7eb;border-top-color:#6366f1;animation:sync-spin 0.75s linear infinite}`}</style>
-        <div className="ys-sync-ring" />
-      </div>
-    );
+    return <Loading label="Loading connections..." />;
   }
 
   return (

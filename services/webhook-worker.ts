@@ -213,17 +213,24 @@ async function handleProductsCreate(shop: string, payload: any, webhookId: strin
       });
       const allStoreIds = [storeRecord.id, ...connections.map(c => c.targetStoreId)];
 
-      await prisma.activityLog.createMany({
-        data: allStoreIds.map(id => ({
-          storeId: id,
-          productId: String(enrichedPayload.id),
-          productTitle: enrichedPayload.title || "Unknown Product",
-          sku: sku,
-          eventType: "CREATE",
-          description: `Product created with ${enrichedPayload.variants?.length || 1} variants`,
-          collection: collectionStr,
-        }))
-      });
+      const activities = await Promise.all(
+        allStoreIds.map(id => 
+          prisma.activityLog.create({
+            data: {
+              storeId: id,
+              productId: String(enrichedPayload.id),
+              productTitle: enrichedPayload.title || "Unknown Product",
+              sku: sku,
+              eventType: "CREATE",
+              description: `Product created with ${enrichedPayload.variants?.length || 1} variants`,
+              collection: collectionStr,
+            },
+            include: {
+              store: { select: { id: true, label: true, shopDomain: true, isMaster: true } }
+            }
+          })
+        )
+      );
     }
   });
 }
@@ -294,17 +301,24 @@ async function handleProductsUpdate(shop: string, payload: any, webhookId: strin
         });
         const allStoreIds = [storeRecord.id, ...connections.map(c => c.targetStoreId)];
 
-        await prisma.activityLog.createMany({
-          data: allStoreIds.map(id => ({
-            storeId: id,
-            productId: String(currentPayload.id),
-            productTitle: currentPayload.title || "Unknown Product",
-            sku: sku,
-            eventType: "UPDATE",
-            description: `Product details or inventory updated`,
-            collection: collectionStr,
-          }))
-        });
+        const activities = await Promise.all(
+          allStoreIds.map(id => 
+            prisma.activityLog.create({
+              data: {
+                storeId: id,
+                productId: String(currentPayload.id),
+                productTitle: currentPayload.title || "Unknown Product",
+                sku: sku,
+                eventType: "UPDATE",
+                description: `Product details or inventory updated`,
+                collection: collectionStr,
+              },
+              include: {
+                store: { select: { id: true, label: true, shopDomain: true, isMaster: true } }
+              }
+            })
+          )
+        );
       }
     }
   });
@@ -364,17 +378,24 @@ async function handleProductsDelete(shop: string, payload: any, webhookId: strin
     });
     const allStoreIds = [store.id, ...connections.map(c => c.targetStoreId)];
 
-    await prisma.activityLog.createMany({
-      data: allStoreIds.map(id => ({
-        storeId: id,
-        productId: String(payload.id),
-        productTitle: productTitle,
-        sku: productSku,
-        eventType: "DELETE",
-        description: `Product removed from catalog`,
-        collection: collectionStr,
-      }))
-    });
+    const activities = await Promise.all(
+      allStoreIds.map(id => 
+        prisma.activityLog.create({
+          data: {
+            storeId: id,
+            productId: String(payload.id),
+            productTitle: productTitle,
+            sku: productSku,
+            eventType: "DELETE",
+            description: `Product removed from catalog`,
+            collection: collectionStr,
+          },
+          include: {
+            store: { select: { id: true, label: true, shopDomain: true, isMaster: true } }
+          }
+        })
+      )
+    );
   }
 
   // Replicate deletion to target stores
@@ -466,17 +487,24 @@ async function handleInventoryUpdate(shop: string, payload: any, webhookId: stri
         ? `${Math.abs(diff)} item(s) sold (New stock: ${available})`
         : `Inventory manually adjusted by +${diff} (New stock: ${available})`;
 
-      await prisma.activityLog.createMany({
-        data: allStoreIds.map(id => ({
-          storeId: id,
-          productId: cache.shopifyProductId.split('/').pop() || '',
-          productTitle: cache.title,
-          sku: cache.sku || variantMap.sku,
-          eventType: eventType,
-          description: description,
-          quantity: Math.abs(diff)
-        }))
-      });
+      const activities = await Promise.all(
+        allStoreIds.map(id => 
+          prisma.activityLog.create({
+            data: {
+              storeId: id,
+              productId: cache.shopifyProductId.split('/').pop() || '',
+              productTitle: cache.title,
+              sku: cache.sku || variantMap.sku,
+              eventType: eventType as any,
+              description: description,
+              quantity: Math.abs(diff)
+            },
+            include: {
+              store: { select: { id: true, label: true, shopDomain: true, isMaster: true } }
+            }
+          })
+        )
+      );
     }
   }
 }

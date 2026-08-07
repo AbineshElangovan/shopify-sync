@@ -126,9 +126,12 @@ export async function PUT(req: NextRequest) {
 
     await prisma.$transaction(updates);
 
-    // Apply the price adjustments to the Shopify stores in the background
-    // We don't await this so the UI returns immediately.
-    Promise.all(stores.map(async (s: any) => {
+    // We only trigger price adjustments on the connected (target) stores.
+    // The master store is the source of truth and its Shopify prices should not be overridden by the app.
+    const activeStores = await prisma.store.findMany({ where: { isActive: true } });
+    const targetStores = activeStores.filter((s: any) => !s.isMaster && stores.some((updatedStore: any) => updatedStore.id === s.id));
+
+    Promise.all(targetStores.map(async (s: any) => {
       try {
         await applyPriceAdjustmentToStore(s.id);
       } catch (adjustErr: any) {

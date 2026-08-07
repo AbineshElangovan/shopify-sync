@@ -22,6 +22,8 @@ import { Loading, SearchBar, CustomSelect } from '@/components/common';
 export default function ActivityPage() {
   const [activities, setActivities] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [currentStoreId, setCurrentStoreId] = useState<string | null>(null);
+  const [connectionStatus, setConnectionStatus] = useState<string>("Disconnected");
 
   // Filters state
   const [queryValue, setQueryValue] = useState("");
@@ -70,6 +72,7 @@ export default function ActivityPage() {
         setTotalPages(data.pagination?.totalPages || 1);
         setCollectionOptions(data.collectionOptions || []);
         setStoreOptions(data.storeOptions || []);
+        setCurrentStoreId(data.currentStoreId || null);
       } else {
         const errData = await response.json();
         setErrorMsg(errData.error || "Failed to fetch activities");
@@ -85,6 +88,48 @@ export default function ActivityPage() {
   useEffect(() => {
     fetchActivities();
   }, [fetchActivities]);
+
+  useEffect(() => {
+    if (!currentStoreId) return;
+
+    let eventSource: EventSource | null = null;
+
+    const connectSSE = () => {
+      setConnectionStatus('Connecting...');
+      eventSource = new EventSource(`/api/activity/stream?storeId=${currentStoreId}`);
+
+      eventSource.onopen = () => {
+        setConnectionStatus('Live');
+      };
+
+      eventSource.addEventListener('new-activity', (e) => {
+        try {
+          const newActivity = JSON.parse(e.data);
+          setActivities(prev => {
+            if (prev.some(act => act.id === newActivity.id)) {
+              return prev;
+            }
+            return [newActivity, ...prev];
+          });
+        } catch (err) {
+          console.error("Error parsing new activity", err);
+        }
+      });
+
+      eventSource.onerror = () => {
+        setConnectionStatus('Disconnected');
+        // The browser's native EventSource will automatically attempt to reconnect.
+      };
+    };
+
+    connectSSE();
+
+    return () => {
+      if (eventSource) {
+        eventSource.close();
+      }
+    };
+  }, [currentStoreId]);
 
   const handleSearchChange = useCallback((value: string) => {
     setQueryValue(value);
@@ -197,6 +242,7 @@ export default function ActivityPage() {
           </div>
 
           <div className="flex items-center gap-4">
+
               <button
                 onClick={exportToPDF}
                 disabled={isExporting}
@@ -312,16 +358,23 @@ export default function ActivityPage() {
                             </Text>
                           </InlineStack>
 
-                          <BlockStack gap="100">
-                            <Text variant="headingMd" as="h3">
-                              {productTitle}
-                            </Text>
-                            {sku && (
-                              <Text variant="bodySm" as="p" tone="subdued">
-                                SKU: {sku}
-                              </Text>
+                          <div className="flex items-start gap-4 mt-2">
+                            {item.imageUrl && (
+                              <div className="w-12 h-12 rounded bg-gray-50 flex-shrink-0 border border-gray-200 overflow-hidden">
+                                <img src={item.imageUrl} alt={productTitle} className="w-full h-full object-cover" />
+                              </div>
                             )}
-                          </BlockStack>
+                            <BlockStack gap="100">
+                              <Text variant="headingMd" as="h3">
+                                {productTitle}
+                              </Text>
+                              {sku && (
+                                <Text variant="bodySm" as="p" tone="subdued">
+                                  SKU: {sku}
+                                </Text>
+                              )}
+                            </BlockStack>
+                          </div>
 
                           <Box paddingBlockStart="200">
                             <Text variant="bodyMd" as="p">

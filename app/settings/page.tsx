@@ -4,13 +4,11 @@ import React, { useState, useEffect } from 'react';
 import { Input, Checkbox, Select } from '@/components/forms';
 import { useRouter } from 'next/navigation';
 import { shopifyFetch } from '@/lib/shopify/Client';
-import CollectionPriceAdjustment from '@/components/stores/CollectionPriceAdjustment';
 import { Button } from '@/components/common/Button';
 import { ThemedSection } from '@/components/ui/ThemedSection';
 import { LocalizedDate } from '@/components/common/LocalizedDate';
 import { StoreRoleBadge } from '@/components/ui/StoreRoleBadge';
 import { Loading } from '@/components/common';
-
 
 export default function SettingsPage() {
   const router = useRouter();
@@ -19,14 +17,11 @@ export default function SettingsPage() {
   const [customThreshold, setCustomThreshold] = useState<string>('15');
   const [debugOutput, setDebugOutput] = useState<string>('');
   const [autoSync, setAutoSync] = useState<boolean>(true);
+  const [dataRetentionEnabled, setDataRetentionEnabled] = useState<boolean>(true);
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
-
-  const [storeAdjustments, setStoreAdjustments] = useState<{ [storeId: string]: string }>({});
-  const [storeSaving, setStoreSaving] = useState<{ [storeId: string]: boolean }>({});
-  const [storeSuccessText, setStoreSuccessText] = useState<{ [storeId: string]: string }>({});
   const [toastMessage, setToastMessage] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
   const [masterLabels, setMasterLabels] = useState<{ [storeId: string]: string }>({});
@@ -44,22 +39,15 @@ export default function SettingsPage() {
 
         const currentSettings = storesJson.storeSettings || {};
         if (currentSettings.threshold) setThreshold(currentSettings.threshold.toString());
-        const initialAdjustments: { [storeId: string]: string } = {};
         const initialMasterLabels: { [storeId: string]: string } = {};
         let initialMasterStoreId = null;
 
         loadedStores.forEach((store: any) => {
-          let initialVal = '0';
-          if (store.priceAdjustmentValue !== undefined && store.priceAdjustmentValue !== null) {
-            initialVal = store.priceAdjustmentValue.toString();
-          }
-          initialAdjustments[store.id] = initialVal;
           initialMasterLabels[store.id] = store.masterLabel || '';
           if (store.isMaster) {
             initialMasterStoreId = store.id;
           }
         });
-        setStoreAdjustments(initialAdjustments);
         setMasterLabels(initialMasterLabels);
         setMasterStoreId(initialMasterStoreId);
       } else {
@@ -72,6 +60,9 @@ export default function SettingsPage() {
         const settingsJson = await settingsRes.json();
         const threshVal = settingsJson.settings.lowStockThreshold;
         setAutoSync(settingsJson.settings.autoSyncEnabled);
+        if (typeof settingsJson.settings.dataRetentionEnabled === 'boolean') {
+          setDataRetentionEnabled(settingsJson.settings.dataRetentionEnabled);
+        }
 
         if ([5, 10, 20].includes(threshVal)) {
           setThreshold(threshVal.toString());
@@ -116,19 +107,6 @@ export default function SettingsPage() {
     }
   }, [toastMessage]);
 
-  const handleStoreAdjustmentChange = (storeId: string, val: string) => {
-    let numericValue = val.replace(/[^0-9]/g, '');
-    if (numericValue.length > 1 && numericValue.startsWith('0')) {
-      numericValue = numericValue.replace(/^0+/, '');
-    }
-    if (numericValue === '') numericValue = '0';
-    
-    setStoreAdjustments(prev => ({
-      ...prev,
-      [storeId]: numericValue
-    }));
-  };
-
   const handleMasterLabelChange = (storeId: string, val: string) => {
     setMasterLabels(prev => ({ ...prev, [storeId]: val }));
   };
@@ -168,63 +146,6 @@ export default function SettingsPage() {
     }
   };
 
-  const handleStoreSave = async (storeId: string) => {
-    const valStr = storeAdjustments[storeId];
-    const val = parseFloat(valStr || '0');
-    if (isNaN(val)) {
-      setStoreSuccessText(prev => ({ ...prev, [storeId]: '✕ Invalid percentage value.' }));
-      setToastMessage({ message: '❌ Failed to update price adjustment. Please try again.', type: 'error' });
-      setTimeout(() => {
-        setStoreSuccessText(prev => ({ ...prev, [storeId]: '' }));
-        setToastMessage(prev => prev?.message === '❌ Failed to update price adjustment. Please try again.' ? null : prev);
-      }, 3000);
-      return;
-    }
-
-    setStoreSaving(prev => ({ ...prev, [storeId]: true }));
-    try {
-      const res = await shopifyFetch('/api/stores', {
-        method: 'PUT',
-        body: JSON.stringify({
-          stores: [{
-            id: storeId,
-            priceAdjustmentValue: val,
-            priceAdjustmentType: 'PERCENTAGE',
-            isPriceAdjustmentEnabled: val !== 0,
-          }]
-        })
-      });
-
-      if (res.ok) {
-        setStoreSuccessText(prev => ({ ...prev, [storeId]: '✓ Price adjustment updated successfully.' }));
-        setToastMessage({ message: '✅ Price adjustment updated successfully.', type: 'success' });
-        setTimeout(() => {
-          setStoreSuccessText(prev => ({ ...prev, [storeId]: '' }));
-          setToastMessage(prev => prev?.message === '✅ Price adjustment updated successfully.' ? null : prev);
-        }, 3000);
-
-        // Fetch fresh data from the server so the entire UI updates synchronously 
-        await loadData();
-      } else {
-        setStoreSuccessText(prev => ({ ...prev, [storeId]: '✕ Failed to update price adjustment.' }));
-        setToastMessage({ message: '❌ Failed to update price adjustment. Please try again.', type: 'error' });
-        setTimeout(() => {
-          setStoreSuccessText(prev => ({ ...prev, [storeId]: '' }));
-          setToastMessage(prev => prev?.message === '❌ Failed to update price adjustment. Please try again.' ? null : prev);
-        }, 3000);
-      }
-    } catch (err) {
-      setStoreSuccessText(prev => ({ ...prev, [storeId]: '✕ Failed to update price adjustment.' }));
-      setToastMessage({ message: '❌ Failed to update price adjustment. Please try again.', type: 'error' });
-      setTimeout(() => {
-        setStoreSuccessText(prev => ({ ...prev, [storeId]: '' }));
-        setToastMessage(prev => prev?.message === '❌ Failed to update price adjustment. Please try again.' ? null : prev);
-      }, 3000);
-    } finally {
-      setStoreSaving(prev => ({ ...prev, [storeId]: false }));
-    }
-  };
-
   const handleSave = async () => {
     setSaving(true);
     setSaveSuccess(false);
@@ -233,12 +154,13 @@ export default function SettingsPage() {
         ? parseInt(customThreshold, 10) || 15
         : parseInt(threshold, 10);
 
-      // Save threshold and autoSync settings
+      // Save threshold, autoSync, and dataRetention settings
       const settingsRes = await shopifyFetch('/api/settings', {
         method: 'PUT',
         body: JSON.stringify({
           lowStockThreshold: finalThreshold,
           autoSyncEnabled: autoSync,
+          dataRetentionEnabled: dataRetentionEnabled,
         }),
       });
 
@@ -253,10 +175,6 @@ export default function SettingsPage() {
     }
   };
 
-  if (loading) {
-    return <Loading label="Loading settings..." />;
-  }
-
   const formattedStores = stores.map((s) => ({
     id: s.id,
     domain: s.shopDomain,
@@ -264,6 +182,10 @@ export default function SettingsPage() {
     status: s.isActive ? 'CONNECTED' : 'DISCONNECTED',
     installedAt: <LocalizedDate date={s.installedAt} format="date" />,
   }));
+
+  if (loading) {
+    return <Loading label="Loading settings..." />;
+  }
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
@@ -285,9 +207,8 @@ export default function SettingsPage() {
         <div className="flex flex-col lg:flex-row gap-8">
           <div className="flex-1 flex flex-col gap-6">
 
-
-              <ThemedSection
-                title="Master Store Configuration"
+            <ThemedSection
+              title="Master Store Configuration"
                 description="Identify the primary store. Synchronization originates from the Master Store."
                 bgColor="#fff1f2"
                 borderColor="#fecdd3"
@@ -328,8 +249,11 @@ export default function SettingsPage() {
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
                           {s.isMaster ? (
-                            <span className="px-2.5 py-1 rounded-md text-[11px] font-bold bg-green-700 text-white uppercase tracking-wider border border-green-800 shadow-sm">
-                              Master
+                            <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-black bg-[#064e3b] text-white uppercase tracking-wider shadow-sm">
+                              <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
+                                <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                              </svg>
+                              MASTER
                             </span>
                           ) : (
                             <button
@@ -346,88 +270,9 @@ export default function SettingsPage() {
                   )}
                 </div>
               </ThemedSection>
+          </div>
 
-              <ThemedSection
-                title="Store-Specific Pricing Rules & Adjustments"
-                description="Configure automatic markups or fixed price adjustments when replicating products to each target store."
-                bgColor="#ecfdf5"
-                borderColor="#a7f3d0"
-                stripeColor="#10b981"
-                titleColor="#065f46"
-                descColor="#047857"
-              >
-
-                <div className="flex flex-col gap-4">
-                  {stores.length === 0 ? (
-                    <p style={{ color: '#9ca3af', fontSize: '13px' }}>No stores available to configure.</p>
-                  ) : (
-                    stores.map((s) => (
-                      <div
-                        key={s.id}
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'space-between',
-                          padding: '16px',
-                          border: '1px solid #e5e7eb',
-                          borderRadius: '10px',
-                          backgroundColor: '#f9fafb',
-                          gap: '16px',
-                          flexWrap: 'wrap'
-                        }}
-                      >
-                        <div>
-                          <span style={{ fontWeight: 600, fontSize: '14px', color: '#111827' }}>
-                            {s.label || s.shopDomain}
-                          </span>
-                          <div style={{ color: '#6b7280', fontSize: '12px', marginTop: '2px' }}>
-                            {s.shopDomain}
-                          </div>
-                        </div>
-
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-                          {storeSuccessText[s.id] && (
-                            <span style={{
-                              color: storeSuccessText[s.id].startsWith('✓') ? '#16a34a' : '#dc2626',
-                              fontSize: '13px',
-                              fontWeight: 500,
-                              marginRight: '8px'
-                            }}>
-                              {storeSuccessText[s.id]}
-                            </span>
-                          )}
-                          <span style={{ fontSize: '13px', color: '#4b5563', fontWeight: 500 }}>
-                            Price Adjustment:
-                          </span>
-                          <div style={{ width: '120px' }}>
-                            <Input
-                              type="text"
-                              label="Price Adjustment Percentage"
-                              labelHidden
-                              suffix="%"
-                              value={storeAdjustments[s.id] !== undefined ? storeAdjustments[s.id] : '0'}
-                              onChange={(val) => handleStoreAdjustmentChange(s.id, val)}
-                              autoComplete="off"
-                            />
-                          </div>
-                          <button
-                            className="px-3 py-1.5 bg-[var(--color-primary-dark)] text-white text-sm font-semibold rounded-lg hover:bg-[var(--color-primary)] transition-colors shadow-sm disabled:opacity-50"
-                            disabled={storeSaving[s.id]}
-                            onClick={() => handleStoreSave(s.id)}
-                          >
-                            {storeSaving[s.id] ? 'Saving...' : 'Set'}
-                          </button>
-                        </div>
-                        <div style={{ width: '100%' }}>
-                          <CollectionPriceAdjustment storeId={s.id} storeName={s.label || s.shopDomain} />
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </ThemedSection>
-            </div>
-
+          {/* Right Column */}
           <div className="w-full lg:w-[360px] shrink-0 flex flex-col gap-6">
               <ThemedSection
                 title="Store Configurations"
@@ -484,7 +329,37 @@ export default function SettingsPage() {
               </ThemedSection>
           </div>
         </div>
+
+        {/* Full-width Data Handling Section */}
+        <div className="mt-2">
+          <ThemedSection
+            title="Data & Privacy"
+            description="Data handling - Built for Shopify app review"
+            bgColor="#f0fdfa"
+            borderColor="#ccfbf1"
+            stripeColor="#0d9488"
+            titleColor="#0f766e"
+            descColor="#115e59"
+          >
+            <div className="bg-white border border-gray-200 rounded-xl p-5 flex items-center justify-between shadow-sm mt-2">
+              <div className="flex flex-col">
+                <span className="text-[15px] font-bold text-gray-900">Store activity logs for 90 days</span>
+                <span className="text-[13px] text-gray-500 mt-0.5">Then permanently deleted.</span>
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input 
+                  type="checkbox" 
+                  className="sr-only peer" 
+                  checked={dataRetentionEnabled} 
+                  onChange={(e) => setDataRetentionEnabled(e.target.checked)} 
+                />
+                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-teal-600"></div>
+              </label>
+            </div>
+          </ThemedSection>
+        </div>
       </div>
+      
       {toastMessage && (
         <div
           style={{

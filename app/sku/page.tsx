@@ -20,6 +20,8 @@ export default function SkuSettingsPage() {
   const [isMaster, setIsMaster] = useState(true);
   const [toastMessage, setToastMessage] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [inlineError, setInlineError] = useState<string | null>(null);
+  
+  const [skuMode, setSkuMode] = useState<'default' | 'collection'>('default');
 
   const collectionRuleRef = useRef<any>(null);
 
@@ -66,10 +68,12 @@ export default function SkuSettingsPage() {
 
     try {
       // 1. Save SKU Prefix and Sequence
+      const finalPrefix = skuPrefix.trim() || 'SHOE';
+
       const res = await shopifyFetch('/api/settings/sku', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ skuPrefix, skuSequence })
+        body: JSON.stringify({ skuPrefix: finalPrefix, skuSequence })
       });
       const data = await res.json();
 
@@ -102,7 +106,7 @@ export default function SkuSettingsPage() {
     return <Loading label="Loading SKU rules..." />;
   }
 
-  const generatedPreview = `STB-${skuPrefix || "SHOE"}-${selectedCollectionPrefix ? selectedCollectionPrefix + '-' : ''}${skuSequence ? skuSequence.toString().padStart(4, '0') : "0001"}`;
+  const generatedPreview = `STB-${skuPrefix || "SHOE"}-${(skuMode === 'collection' && selectedCollectionPrefix) ? selectedCollectionPrefix + '-' : ''}${skuSequence ? skuSequence.toString().padStart(4, '0') : "0001"}`;
 
   return (
     <div className="p-8 max-w-4xl mx-auto mb-16">
@@ -132,13 +136,39 @@ export default function SkuSettingsPage() {
 
       <div className="flex flex-col gap-6">
           <div style={{ backgroundColor: '#f0fdfa', border: `1px solid #ccfbf1`, borderRadius: '12px', padding: '24px', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)' }}>
-            <div style={{ marginBottom: '24px', borderLeft: `6px solid #0a9984`, paddingLeft: '16px' }}>
-              <h2 style={{ fontSize: '1.5rem', fontWeight: 800, color: '#115e59', margin: 0 }}>
-                SKU Generation Rules
-              </h2>
-              <p style={{ marginTop: '6px', color: '#0f766e', fontSize: '1rem' }}>
-                Define how SKUs are automatically generated for products missing a valid SKU.
-              </p>
+            <div style={{ marginBottom: '24px', borderLeft: `6px solid #0a9984`, paddingLeft: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <h2 style={{ fontSize: '1.5rem', fontWeight: 800, color: '#115e59', margin: 0 }}>
+                  SKU Generation Rules
+                </h2>
+                <p style={{ marginTop: '6px', color: '#0f766e', fontSize: '1rem' }}>
+                  Define how SKUs are automatically generated for products missing a valid SKU.
+                </p>
+              </div>
+              
+              <div className={`flex items-center gap-2 p-1 bg-white/50 backdrop-blur-sm rounded-lg border border-teal-100 ${!isMaster ? 'opacity-60 cursor-not-allowed' : ''}`}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (isMaster) {
+                      setSkuMode('default');
+                      setSelectedCollectionPrefix(''); // Clear prefix on switch
+                    }
+                  }}
+                  className={`px-4 py-1.5 text-sm font-semibold rounded-md transition-colors ${skuMode === 'default' ? 'bg-[#0a9984] text-white shadow-sm' : 'text-[#0f766e] hover:bg-teal-50'}`}
+                  disabled={!isMaster}
+                >
+                  Default SKU
+                </button>
+                <button
+                  type="button"
+                  onClick={() => isMaster && setSkuMode('collection')}
+                  className={`px-4 py-1.5 text-sm font-semibold rounded-md transition-colors ${skuMode === 'collection' ? 'bg-[#0a9984] text-white shadow-sm' : 'text-[#0f766e] hover:bg-teal-50'}`}
+                  disabled={!isMaster}
+                >
+                  Collection-Based SKU
+                </button>
+              </div>
             </div>
             
             <div className="bg-white rounded-lg p-6 border border-teal-100 shadow-sm flex flex-col gap-4">
@@ -164,7 +194,7 @@ export default function SkuSettingsPage() {
                   />
                 </div>
 
-                {storeId && (
+                {storeId && skuMode === 'collection' && (
                   <div>
                     <CollectionSkuRule 
                       ref={collectionRuleRef}

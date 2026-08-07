@@ -3,6 +3,7 @@
 import React, { useState, useEffect, forwardRef, useImperativeHandle } from 'react';
 import { BlockStack } from '@shopify/polaris';
 import { shopifyFetch } from '@/lib/shopify/Client';
+import { Loading } from '@/components/common';
 import { Checkbox, Input } from '@/components/forms';
 
 const CollectionSkuRule = forwardRef(({ 
@@ -72,7 +73,7 @@ const CollectionSkuRule = forwardRef(({
   }));
 
   if (loading) {
-    return <div style={{ marginTop: '16px', fontSize: '13px', color: '#6b7280' }}>Loading collections...</div>;
+    return <Loading label="Loading collections..." />;
   }
 
   if (collections.length === 0) {
@@ -99,6 +100,9 @@ const CollectionSkuRule = forwardRef(({
       </div>
       
       <div style={{ maxHeight: '300px', overflowY: 'auto', paddingRight: '8px' }}>
+        <div className="flex items-center justify-between px-4 py-2 bg-purple-50 border border-purple-100 rounded-t-lg mb-2">
+          <span className="text-sm font-semibold text-purple-900">Collection Name</span>
+        </div>
         <BlockStack gap="300">
           {collections.filter(c => c.title.toLowerCase().includes(searchQuery.toLowerCase())).map((col) => {
             const isSelected = selectedCollectionId === col.id;

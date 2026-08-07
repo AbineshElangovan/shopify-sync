@@ -131,23 +131,47 @@ export async function processProductUpdate(shopDomain: string, payload: any, web
         matchingVariantMap = await prisma.productMapping.findFirst({
           where: {
             storeId: targetStore.id,
+            productUniqueId: masterMapping.productUniqueId
+          }
+        });
+
+        if (!matchingVariantMap) {
+          matchingVariantMap = await prisma.productMapping.findFirst({
+            where: {
+              storeId: targetStore.id,
+              sku: { in: skus },
+            },
+          });
+
+          // Repair mapping if fallback succeeds
+          if (matchingVariantMap) {
+            console.log(`🛠️ Target Mapping found via SKU in ProductMapping! Repairing Unique ID link...\n`);
+            await prisma.productMapping.update({
+              where: { id: matchingVariantMap.id },
+              data: { productUniqueId: masterMapping.productUniqueId }
+            });
+          }
+        } else {
+          console.log(`✅ Target Mapping found via Unique ID!\n`);
+        }
+      }
+
+      // 2. FALLBACK LOOKUP: VariantMap
+      if (!matchingVariantMap) {
+        console.log(`⚠️ Target Mapping NOT found in ProductMapping. Falling back to VariantMap lookup...\n`);
+        matchingVariantMap = await prisma.variantMap.findFirst({
+          where: {
+            storeId: targetStore.id,
             sku: { in: skus },
           },
         });
-
-        // Repair mapping if fallback succeeds
-        if (matchingVariantMap && masterMapping) {
-          console.log(`🛠️ Target Mapping found via SKU! Repairing Unique ID link...\n`);
-          await prisma.productMapping.update({
-            where: { id: matchingVariantMap.id },
-            data: { productUniqueId: masterMapping.productUniqueId }
-          });
-        } else if (!matchingVariantMap) {
-          console.log(`❌ Target Mapping NOT found via SKU either. Will attempt create flow.\n`);
+        if (matchingVariantMap) {
+          console.log(`✅ Target Mapping found via SKU in VariantMap!\n`);
         }
       }
 
       if (!matchingVariantMap) {
+        console.log(`❌ Target Mapping NOT found via SKU either. Will attempt create flow.\n`);
         console.log(`[ProductSync:Update] Product does not exist in target store ${targetStore.shopDomain}. Routing to create.`);
         await processProductCreate(shopDomain, payload, webhookId, [targetStore.shopDomain]);
         continue;

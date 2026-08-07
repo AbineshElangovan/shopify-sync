@@ -53,14 +53,14 @@ export function Sidebar() {
       items: [
         { label: 'Products', href: '/products', icon: ProductIcon },
         { label: 'Import & Sync', href: '/sync', icon: ImportIcon },
-        { label: 'Catalog health', href: '#', icon: HeartIcon },
+       
       ]
     },
     {
       title: 'RULES',
       items: [
         { label: 'SKU generation', href: '/sku', icon: DiscountIcon },
-        { label: 'Price adjustment', href: '#', icon: CashDollarIcon },
+        { label: 'Price adjustment', href: '/price-adjustment', icon: CashDollarIcon },
         { label: 'Store connections', href: '/connections', icon: LinkIcon },
         { label: 'Settings', href: '/settings', icon: SettingsIcon },
       ]

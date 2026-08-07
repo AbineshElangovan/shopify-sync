@@ -21,22 +21,27 @@ export async function GET(req: NextRequest) {
     let allowedStoreIds: string[] = [];
     let isMultiStore = false;
 
-    if (store.isMaster) {
-      const connections = await (prisma as any).storeConnection.findMany({
-        where: { sourceStoreId: store.id }
-      });
-      allowedStoreIds = [store.id, ...connections.map((c: any) => c.targetStoreId)];
-      isMultiStore = connections.length > 0;
-    } else {
-      allowedStoreIds = [store.id];
-      const connections = await (prisma as any).storeConnection.findMany({
+    // 1. Find the Master Store ID for this network
+    let masterStoreId = store.id;
+    if (!store.isMaster) {
+      const parentConnection = await (prisma as any).storeConnection.findFirst({
          where: { targetStoreId: store.id }
       });
-      if (connections.length > 0) isMultiStore = true;
+      if (parentConnection) {
+        masterStoreId = parentConnection.sourceStoreId;
+      }
     }
 
+    // 2. Find ALL stores in this network (Master + all connected stores)
+    const connections = await (prisma as any).storeConnection.findMany({
+      where: { sourceStoreId: masterStoreId }
+    });
+    
+    allowedStoreIds = [masterStoreId, ...connections.map((c: any) => c.targetStoreId)];
+    isMultiStore = connections.length > 0;
+
     let storeIdsToQuery = allowedStoreIds;
-    if (store.isMaster && filterStoreId && filterStoreId !== 'all') {
+    if (filterStoreId && filterStoreId !== 'all') {
       if (allowedStoreIds.includes(filterStoreId)) {
         storeIdsToQuery = [filterStoreId];
       }
@@ -70,6 +75,24 @@ export async function GET(req: NextRequest) {
       whereClause.createdAt = { gte: startDate };
     }
 
+    // Auto-delete logs older than 90 days if enabled for the master store
+    try {
+      const masterSettings = await (prisma.storeSetting as any).findUnique({ where: { storeId: masterStoreId } });
+      if (!masterSettings || masterSettings.dataRetentionEnabled) {
+        const ninetyDaysAgo = new Date();
+        ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+        
+        await prisma.activityLog.deleteMany({
+          where: {
+            storeId: { in: allowedStoreIds },
+            createdAt: { lt: ninetyDaysAgo }
+          }
+        });
+      }
+    } catch (cleanupErr) {
+      console.error("[Activity API] Error cleaning up old logs:", cleanupErr);
+    }
+
     const [activities, totalActivities] = await Promise.all([
       prisma.activityLog.findMany({
         where: whereClause,
@@ -85,8 +108,38 @@ export async function GET(req: NextRequest) {
       prisma.activityLog.count({ where: whereClause })
     ]);
     
+    // Attach product images from ProductCache
+    const productIds = activities.map(a => a.productId).filter(Boolean) as string[];
+    const skus = activities.map(a => a.sku).filter(Boolean) as string[];
+    
+    let enrichedActivities = activities;
+    if (productIds.length > 0 || skus.length > 0) {
+      const productCaches = await prisma.productCache.findMany({
+        where: {
+          OR: [
+            { shopifyProductId: { in: productIds } },
+            { sku: { in: skus } }
+          ]
+        },
+        select: { shopifyProductId: true, sku: true, imageUrl: true }
+      });
+      
+      const imageUrlMap = new Map<string, string>();
+      productCaches.forEach((pc: any) => {
+         if (pc.imageUrl) {
+           if (pc.shopifyProductId) imageUrlMap.set(pc.shopifyProductId, pc.imageUrl);
+           if (pc.sku) imageUrlMap.set(pc.sku, pc.imageUrl);
+         }
+      });
+      
+      enrichedActivities = activities.map((a: any) => ({
+        ...a,
+        imageUrl: (a.productId && imageUrlMap.get(a.productId)) || (a.sku && imageUrlMap.get(a.sku)) || null
+      })) as any;
+    }
+    
     let storeOptions: any[] = [];
-    if (store.isMaster && isMultiStore) {
+    if (isMultiStore) {
         const stores = await prisma.store.findMany({
             where: { id: { in: allowedStoreIds } },
             select: { id: true, label: true, shopDomain: true }
@@ -109,13 +162,14 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      activities,
+      activities: enrichedActivities,
       pagination: {
         total: totalActivities,
         page,
         limit,
         totalPages: Math.ceil(totalActivities / limit)
       },
+      currentStoreId: store.id,
       isMaster: store.isMaster,
       isMultiStore,
       storeOptions,

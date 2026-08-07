@@ -229,32 +229,43 @@ export function Table({
   return (
     <div className="w-full bg-white">
 
-      {/* ── Title handled by parent TableCard ── */}
+      {/* ── Table Header / Toolbar ── */}
+      {(title || searchable || filterable) && !loading && (
+        <div className="p-4 px-5 border-b border-slate-100 bg-slate-50/50 flex flex-wrap items-center justify-between gap-4">
+          
+          {/* Left Side: Title */}
+          <div className="flex items-center gap-3">
+            {title && (
+              <h3 style={{ fontSize: '18px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: headerColor, margin: 0 }}>
+                {title}
+              </h3>
+            )}
+          </div>
 
-      {/* ── Search & Filter toolbar ── */}
-      {(searchable || filterable) && !loading && (
-        <div className="p-3 px-5 border-b border-slate-100 bg-slate-50/50 flex gap-3 flex-wrap items-center">
-          {searchable && (searchKey || serverSide) && (
-            <SearchInput
-              value={query}
-              onChange={setQuery}
-              placeholder={`Search ${title?.replace(/[^a-zA-Z ]/g, '').trim() || 'records'}…`}
-            />
-          )}
-          {filterable && filterKey && (
-            <div className="min-w-[160px]">
-              <CustomSelect
-                options={filterOptions}
-                value={currentFilterValue}
-                onChange={(value) => handleFilterChange(value)}
+          {/* Right Side: Search & Filter */}
+          <div className="flex gap-3 flex-wrap items-center ml-auto">
+            {searchable && (searchKey || serverSide) && (
+              <SearchInput
+                value={query}
+                onChange={setQuery}
+                placeholder={`Search ${title?.replace(/[^a-zA-Z ]/g, '').trim() || 'records'}…`}
               />
-            </div>
-          )}
-          {(query || currentFilterValue !== 'ALL') && (
-            <span className="text-xs text-gray-400">
-              {serverSide ? (totalItems ?? items.length) : filteredItems.length} result{((serverSide ? (totalItems ?? items.length) : filteredItems.length) !== 1) ? 's' : ''}
-            </span>
-          )}
+            )}
+            {filterable && filterKey && (
+              <div className="min-w-[160px]">
+                <CustomSelect
+                  options={filterOptions}
+                  value={currentFilterValue}
+                  onChange={(value) => handleFilterChange(value)}
+                />
+              </div>
+            )}
+            {(query || currentFilterValue !== 'ALL') && (
+              <span className="text-xs text-gray-400">
+                {serverSide ? (totalItems ?? items.length) : filteredItems.length} result{((serverSide ? (totalItems ?? items.length) : filteredItems.length) !== 1) ? 's' : ''}
+              </span>
+            )}
+          </div>
         </div>
       )}
 

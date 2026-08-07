@@ -121,10 +121,10 @@ export async function applyPriceAdjustmentToStore(storeId: string) {
     return;
   }
 
-  // Find the other active store to treat as the source store
+  // Find the Master store to treat as the source store
   const sourceStore = await prisma.store.findFirst({
     where: {
-      id: { not: storeId },
+      isMaster: true,
       isActive: true
     }
   });

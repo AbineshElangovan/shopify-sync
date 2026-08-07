@@ -10,6 +10,7 @@ import { ResponsiveLayout } from '@/components/layout/ResponsiveLayout';
 import Script from 'next/script';
 import { prisma } from '@/lib/db/prisma';
 import { TimezoneProvider } from '@/components/providers/TimezoneContext';
+import { LiveRefresher } from '@/components/providers/LiveRefresher';
 
 const inter = Inter({ subsets: ['latin'] });
 
@@ -71,6 +72,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             </Suspense>
           }>
             <TimezoneProvider>
+              <LiveRefresher />
               {children}
             </TimezoneProvider>
           </ResponsiveLayout>
