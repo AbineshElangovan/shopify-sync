@@ -9,9 +9,11 @@ import { ThemedSection } from '@/components/ui/ThemedSection';
 import { LocalizedDate } from '@/components/common/LocalizedDate';
 import { StoreRoleBadge } from '@/components/ui/StoreRoleBadge';
 import { Loading } from '@/components/common';
+import { useStoreContext } from '@/components/providers/StoreProvider';
 
 export default function SettingsPage() {
   const router = useRouter();
+  const { isStandalone } = useStoreContext();
   const [stores, setStores] = useState<any[]>([]);
   const [threshold, setThreshold] = useState<string>('15');
   const [customThreshold, setCustomThreshold] = useState<string>('15');
@@ -27,6 +29,8 @@ export default function SettingsPage() {
   const [masterLabels, setMasterLabels] = useState<{ [storeId: string]: string }>({});
   const [masterSaving, setMasterSaving] = useState(false);
   const [masterStoreId, setMasterStoreId] = useState<string | null>(null);
+
+  const [standaloneSaving, setStandaloneSaving] = useState(false);
 
   const loadData = React.useCallback(async () => {
     try {
@@ -146,6 +150,33 @@ export default function SettingsPage() {
     }
   };
 
+  const handleMakeStandalone = async (storeId: string) => {
+    if (!window.confirm("Make this store standalone?\n\nThis store will stop synchronizing with the current multi-store network. Its Shopify data and account will remain intact.")) {
+      return;
+    }
+
+    setStandaloneSaving(true);
+    try {
+      const res = await shopifyFetch('/api/stores/standalone', {
+        method: 'PUT',
+        body: JSON.stringify({ storeId })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setToastMessage({ message: '✅ Store is now standalone.', type: 'success' });
+        setTimeout(() => setToastMessage(null), 3000);
+        await loadData();
+        router.refresh();
+      } else {
+        setToastMessage({ message: `❌ Failed: ${data.error}`, type: 'error' });
+      }
+    } catch (err: any) {
+      setToastMessage({ message: '❌ Failed to make store standalone.', type: 'error' });
+    } finally {
+      setStandaloneSaving(false);
+    }
+  };
+
   const handleSave = async () => {
     setSaving(true);
     setSaveSuccess(false);
@@ -205,75 +236,84 @@ export default function SettingsPage() {
         </div>
 
         <div className="flex flex-col lg:flex-row gap-8">
-          <div className="flex-1 flex flex-col gap-6">
+          {!isStandalone && (
+            <div className="flex-1 flex flex-col gap-6">
 
-            <ThemedSection
-              title="Master Store Configuration"
-                description="Identify the primary store. Synchronization originates from the Master Store."
-                bgColor="#fff1f2"
-                borderColor="#fecdd3"
-                stripeColor="#f43f5e"
-                titleColor="#9f1239"
-                descColor="#be123c"
-              >
+              <ThemedSection
+                title="Master Store Configuration"
+                  description="Identify the primary store. Synchronization originates from the Master Store."
+                  bgColor="#fff1f2"
+                  borderColor="#fecdd3"
+                  stripeColor="#f43f5e"
+                  titleColor="#9f1239"
+                  descColor="#be123c"
+                >
 
-                <div className="flex flex-col gap-4">
-                  {stores.length === 0 ? (
-                    <div>
-                      <p style={{ color: '#9ca3af', fontSize: '13px' }}>No stores available to configure.</p>
-                      <pre className="text-xs text-red-500 mt-2 whitespace-pre-wrap">{debugOutput}</pre>
-                    </div>
-                  ) : (
-                    stores.map((s) => (
-                      <div
-                        key={s.id}
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'space-between',
-                          padding: '16px',
-                          border: s.isMaster ? '2px solid #6366f1' : '1px solid #e5e7eb',
-                          borderRadius: '10px',
-                          backgroundColor: s.isMaster ? '#eef2ff' : '#f9fafb',
-                          gap: '16px',
-                          flexWrap: 'wrap'
-                        }}
-                      >
-                        <div>
-                          <span style={{ fontWeight: 600, fontSize: '14px', color: '#111827' }}>
-                            {s.label || s.shopDomain}
-                          </span>
-                          <div style={{ color: '#6b7280', fontSize: '12px', marginTop: '2px' }}>
-                            {s.shopDomain}
+                  <div className="flex flex-col gap-4">
+                    {stores.length === 0 ? (
+                      <div>
+                        <p style={{ color: '#9ca3af', fontSize: '13px' }}>No stores available to configure.</p>
+                        <pre className="text-xs text-red-500 mt-2 whitespace-pre-wrap">{debugOutput}</pre>
+                      </div>
+                    ) : (
+                      stores.map((s) => (
+                        <div
+                          key={s.id}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            padding: '16px',
+                            border: s.isMaster ? '2px solid #6366f1' : '1px solid #e5e7eb',
+                            borderRadius: '10px',
+                            backgroundColor: s.isMaster ? '#eef2ff' : '#f9fafb',
+                            gap: '16px',
+                            flexWrap: 'wrap'
+                          }}
+                        >
+                          <div>
+                            <span style={{ fontWeight: 600, fontSize: '14px', color: '#111827' }}>
+                              {s.label || s.shopDomain}
+                            </span>
+                            <div style={{ color: '#6b7280', fontSize: '12px', marginTop: '2px' }}>
+                              {s.shopDomain}
+                            </div>
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                            {s.isMaster ? (
+                              <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-black bg-[#064e3b] text-white uppercase tracking-wider shadow-sm">
+                                <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
+                                  <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                                </svg>
+                                MASTER
+                              </span>
+                            ) : (
+                              <button
+                                className="px-3 py-1.5 bg-[var(--color-primary-dark)] text-white text-sm font-semibold rounded-lg hover:bg-[var(--color-primary)] transition-colors shadow-sm disabled:opacity-50"
+                                disabled={masterSaving}
+                                onClick={() => handleSetMaster(s.id, masterLabels[s.id] || (s.label || s.shopDomain).replace('.myshopify.com', ''), false)}
+                              >
+                                {masterSaving ? 'Saving...' : 'Make Master'}
+                              </button>
+                            )}
+                            <button
+                              className="px-3 py-1.5 bg-blue-600 border border-transparent text-white text-sm font-semibold rounded-lg hover:bg-blue-700 transition-colors shadow-sm disabled:opacity-50"
+                              disabled={standaloneSaving}
+                              onClick={() => handleMakeStandalone(s.id)}
+                            >
+                              Make Standalone
+                            </button>
                           </div>
                         </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-                          {s.isMaster ? (
-                            <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-black bg-[#064e3b] text-white uppercase tracking-wider shadow-sm">
-                              <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
-                                <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                              </svg>
-                              MASTER
-                            </span>
-                          ) : (
-                            <button
-                              className="px-3 py-1.5 bg-[var(--color-primary-dark)] text-white text-sm font-semibold rounded-lg hover:bg-[var(--color-primary)] transition-colors shadow-sm disabled:opacity-50"
-                              disabled={masterSaving}
-                              onClick={() => handleSetMaster(s.id, masterLabels[s.id] || (s.label || s.shopDomain).replace('.myshopify.com', ''), false)}
-                            >
-                              {masterSaving ? 'Saving...' : 'Make Master'}
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </ThemedSection>
-          </div>
+                      ))
+                    )}
+                  </div>
+                </ThemedSection>
+            </div>
+          )}
 
-          {/* Right Column */}
-          <div className="w-full lg:w-[360px] shrink-0 flex flex-col gap-6">
+          {/* Right Column (or Full Width in Single Store) */}
+          <div className={`w-full ${isStandalone ? 'max-w-4xl' : 'lg:w-[360px] shrink-0'} flex flex-col gap-6`}>
               <ThemedSection
                 title="Store Configurations"
                 bgColor="#fffbeb"
@@ -331,7 +371,7 @@ export default function SettingsPage() {
         </div>
 
         {/* Full-width Data Handling Section */}
-        <div className="mt-2">
+        <div className={`mt-2 w-full ${isStandalone ? 'max-w-4xl' : ''}`}>
           <ThemedSection
             title="Data & Privacy"
             description="Data handling - Built for Shopify app review"

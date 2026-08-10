@@ -60,7 +60,7 @@ export default function ConnectionsPage() {
     if (toastMessage) {
       const timer = setTimeout(() => {
         setToastMessage(null);
-      }, 15000);
+      }, 3000);
       return () => clearTimeout(timer);
     }
   }, [toastMessage]);

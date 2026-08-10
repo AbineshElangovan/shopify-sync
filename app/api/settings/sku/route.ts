@@ -32,10 +32,20 @@ export async function POST(req: NextRequest) {
   try {
     const { store } = await authenticate(req);
     
-    if (!(store as any).isMaster) {
-      return NextResponse.json({ success: false, error: "Only the Master Store can configure SKU settings." }, { status: 403 });
-    }
+    const connections = await prisma.storeConnection.count({
+      where: {
+        OR: [
+          { sourceStoreId: store.id },
+          { targetStoreId: store.id }
+        ]
+      }
+    });
+    const isStandalone = connections === 0 && !(store as any).isMaster;
+    const canManageSku = (store as any).isMaster || isStandalone;
 
+    if (!canManageSku) {
+      return NextResponse.json({ success: false, error: "Unauthorized. Store lacks capability to manage SKU settings." }, { status: 403 });
+    }
     const body = await req.json();
     const { skuPrefix, skuSequence } = body;
 

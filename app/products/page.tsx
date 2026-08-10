@@ -7,8 +7,10 @@ import { shopifyFetch } from '@/lib/shopify/Client';
 import { DashboardCards } from '@/components/dashboard/DashboardCards';
 import { LocalizedDate } from '@/components/common/LocalizedDate';
 import { StoreRoleBadge } from '@/components/ui/StoreRoleBadge';
+import { useStoreContext } from '@/components/providers/StoreProvider';
 
 export default function ProductsPage() {
+  const { isStandalone } = useStoreContext();
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -176,6 +178,11 @@ export default function ProductsPage() {
                     }
                   />
                 </div>
+              </div>
+            ) : loading ? (
+              <div className="w-full h-64 flex flex-col items-center justify-center bg-white rounded-xl border border-gray-100 shadow-sm gap-4">
+                <div className="w-11 h-11 rounded-full border-4 border-gray-200 border-t-indigo-600 animate-spin" />
+                <p className="text-sm text-gray-400 font-medium">Loading products...</p>
               </div>
             ) : Object.keys(groupedProducts).length > 0 ? (() => {
               const colors = ['#6366f1', '#0f766e', '#7c3aed', '#db2777', '#ea580c', '#0891b2'];

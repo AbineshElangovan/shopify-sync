@@ -62,9 +62,19 @@ export async function GET(req: NextRequest) {
       select: { storeId: true, shopifyProductId: true }
     });
 
+    const allConnections = await (prisma as any).storeConnection.findMany({
+      where: {
+        OR: [
+          { sourceStoreId: { in: visibleStoreIds } },
+          { targetStoreId: { in: visibleStoreIds } }
+        ]
+      }
+    });
+
     const enrichedStores = stores.map((s: any) => {
       const storeProducts = productCaches.filter((p: any) => p.storeId === s.id);
       const uniqueProductCount = new Set(storeProducts.map((p: any) => p.shopifyProductId)).size;
+      const isConnected = allConnections.some((c: any) => c.sourceStoreId === s.id || c.targetStoreId === s.id);
 
       return {
         id: s.id,
@@ -72,6 +82,7 @@ export async function GET(req: NextRequest) {
         label: s.label,
         masterLabel: s.masterLabel,
         isMaster: s.isMaster,
+        isStandalone: !isConnected && !s.isMaster,
         isActive: s.isActive && hasValidShopifyAccessToken(s.accessToken),
         scope: s.scope,
         productCount: uniqueProductCount,

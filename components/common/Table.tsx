@@ -270,14 +270,12 @@ export function Table({
       )}
 
       {/* ── Table body / Loading / Error ── */}
-      {loading ? (
-        <TableSpinner />
-      ) : errorState ? (
+      {errorState ? (
         <div className="p-12 px-5 text-center text-red-600 font-medium">
           {errorState}
         </div>
       ) : (
-        <div className="overflow-x-auto">
+        <div className="relative overflow-x-auto">
           <table className="w-full border-collapse table-auto">
             <thead>
               <tr>
@@ -326,13 +324,20 @@ export function Table({
                   </tr>
                 ))
               )}
+              {loading && (
+                <tr>
+                  <td colSpan={columns.length} className="p-0 bg-white/80 absolute inset-0 z-10 flex items-center justify-center backdrop-blur-[1px]">
+                    <TableSpinner />
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
       )}
 
       {/* ── Pagination ── */}
-      {!loading && paginate && totalPages > 1 && (
+      {paginate && totalPages > 1 && (
         <div className="p-3 px-5 border-t border-gray-200 bg-white flex items-center justify-between flex-wrap gap-2">
           <span className="text-xs text-gray-400">
             {serverSide ? (
@@ -344,8 +349,8 @@ export function Table({
           <div className="flex gap-1.5">
             <button
               onClick={() => handlePageChange(Math.max(currentPage - 1, 1))}
-              disabled={currentPage <= 1}
-              style={{ cursor: currentPage <= 1 ? 'not-allowed' : 'pointer' }}
+              disabled={currentPage <= 1 || loading}
+              style={{ cursor: currentPage <= 1 || loading ? 'not-allowed' : 'pointer' }}
               className="p-[6px_14px] border border-gray-300 rounded-lg text-[13px] transition duration-150 disabled:opacity-50 disabled:bg-gray-50 disabled:text-gray-400 bg-white text-gray-700 hover:bg-gray-50"
             >← Prev</button>
             <span className="p-[6px_12px] text-[13px] text-gray-500 border border-gray-200 rounded-lg bg-slate-50">
@@ -353,8 +358,8 @@ export function Table({
             </span>
             <button
               onClick={() => handlePageChange(Math.min(currentPage + 1, totalPages))}
-              disabled={currentPage >= totalPages}
-              style={{ cursor: currentPage >= totalPages ? 'not-allowed' : 'pointer' }}
+              disabled={currentPage >= totalPages || loading}
+              style={{ cursor: currentPage >= totalPages || loading ? 'not-allowed' : 'pointer' }}
               className="p-[6px_14px] border border-gray-300 rounded-lg text-[13px] transition duration-150 disabled:opacity-50 disabled:bg-gray-50 disabled:text-gray-400 bg-white text-gray-700 hover:bg-gray-50"
             >Next →</button>
           </div>

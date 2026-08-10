@@ -5,6 +5,7 @@ import { Loading } from '@/components/common';
 import CollectionSkuRule from '@/components/stores/CollectionSkuRule';
 import { Input } from '@/components/forms/Input';
 import { StoreRoleBadge } from '@/components/ui/StoreRoleBadge';
+import { useStoreContext } from '@/components/providers/StoreProvider';
 
 export default function SkuSettingsPage() {
   const [skuPrefix, setSkuPrefix] = useState('SHOE');
@@ -22,6 +23,9 @@ export default function SkuSettingsPage() {
   const [inlineError, setInlineError] = useState<string | null>(null);
   
   const [skuMode, setSkuMode] = useState<'default' | 'collection'>('default');
+
+  const { canManageSku, isStandalone } = useStoreContext();
+  const hasWriteAccess = canManageSku;
 
   const collectionRuleRef = useRef<any>(null);
 
@@ -78,7 +82,7 @@ export default function SkuSettingsPage() {
       const data = await res.json();
 
       // 2. Save Collection Rule via Ref
-      if (collectionRuleRef.current && isMaster) {
+      if (collectionRuleRef.current && hasWriteAccess) {
         await collectionRuleRef.current.saveRules();
       }
 
@@ -122,13 +126,13 @@ export default function SkuSettingsPage() {
         <StoreRoleBadge />
       </div>
 
-      {!isMaster && (
+      {!hasWriteAccess && (
         <div className="mb-6 p-4 rounded-md font-medium shadow-sm border bg-red-50 text-red-800 border-red-200">
           ⚠ Only the Master Store can configure SKU settings. These settings are read-only for this store.
         </div>
       )}
 
-      {isMaster && (
+      {hasWriteAccess && (
         <div className="mb-6 p-4 bg-blue-50 text-blue-800 rounded-md border border-blue-200 text-sm">
           <strong>Note:</strong> SKU Sequence and Prefix are managed here. The Collections list below is read-only and automatically syncs from Shopify.
         </div>
@@ -146,25 +150,25 @@ export default function SkuSettingsPage() {
                 </p>
               </div>
               
-              <div className={`flex items-center gap-2 p-1 bg-white/50 backdrop-blur-sm rounded-lg border border-teal-100 ${!isMaster ? 'opacity-60 cursor-not-allowed' : ''}`}>
+              <div className={`flex items-center gap-2 p-1 bg-white/50 backdrop-blur-sm rounded-lg border border-teal-100 ${!hasWriteAccess ? 'opacity-60 cursor-not-allowed' : ''}`}>
                 <button
                   type="button"
                   onClick={() => {
-                    if (isMaster) {
+                    if (hasWriteAccess) {
                       setSkuMode('default');
                       setSelectedCollectionPrefix(''); // Clear prefix on switch
                     }
                   }}
                   className={`px-4 py-1.5 text-sm font-semibold rounded-md transition-colors ${skuMode === 'default' ? 'bg-[#0a9984] text-white shadow-sm' : 'text-[#0f766e] hover:bg-teal-50'}`}
-                  disabled={!isMaster}
+                  disabled={!hasWriteAccess}
                 >
                   Default SKU
                 </button>
                 <button
                   type="button"
-                  onClick={() => isMaster && setSkuMode('collection')}
+                  onClick={() => hasWriteAccess && setSkuMode('collection')}
                   className={`px-4 py-1.5 text-sm font-semibold rounded-md transition-colors ${skuMode === 'collection' ? 'bg-[#0a9984] text-white shadow-sm' : 'text-[#0f766e] hover:bg-teal-50'}`}
-                  disabled={!isMaster}
+                  disabled={!hasWriteAccess}
                 >
                   Collection-Based SKU
                 </button>
@@ -179,7 +183,7 @@ export default function SkuSettingsPage() {
                     value={skuPrefix}
                     onChange={(val) => setSkuPrefix(val.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10))}
                     autoComplete="off"
-                    disabled={!isMaster}
+                    disabled={!hasWriteAccess}
                   />
                 </div>
 
@@ -190,8 +194,12 @@ export default function SkuSettingsPage() {
                     onChange={(val) => setSkuSequence(val.replace(/[^0-9]/g, '').slice(0, 6))}
                     autoComplete="off"
                     error={inlineError || undefined}
-                    disabled={!isMaster}
+                    disabled={!hasWriteAccess}
                   />
+                </div>
+
+                <div className="text-sm text-gray-600 bg-gray-50 p-4 rounded-md border border-gray-100">
+                  <span className="font-semibold text-gray-800">Dynamic Insertion:</span> If a product belongs to a Collection or has Variants (e.g. Size/Color), the system will automatically extract their short-form abbreviations and insert them into the generated SKU.
                 </div>
 
                 {storeId && skuMode === 'collection' && (
@@ -217,7 +225,7 @@ export default function SkuSettingsPage() {
                       {toastMessage.message}
                     </span>
                   )}
-                  <button className="px-4 py-2 bg-[#0a9984] text-white text-sm font-semibold rounded-lg hover:bg-[#087d6c] transition-colors shadow-sm disabled:opacity-50" onClick={handleSave} disabled={saving || !isMaster}>
+                  <button className="px-4 py-2 bg-[#0a9984] text-white text-sm font-semibold rounded-lg hover:bg-[#087d6c] transition-colors shadow-sm disabled:opacity-50" onClick={handleSave} disabled={saving || !hasWriteAccess}>
                     {saving ? 'Saving...' : 'Save Configuration'}
                   </button>
                 </div>

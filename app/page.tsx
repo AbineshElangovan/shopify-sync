@@ -8,10 +8,12 @@ import { Table, Loading } from '@/components/common';
 import type { ColumnConfig } from '@/components/common/Table';
 import { shopifyFetch } from '@/lib/shopify/Client';
 import { LocalizedDate } from '@/components/common/LocalizedDate';
+import { useStoreContext } from '@/components/providers/StoreProvider';
 
 export default function DashboardPage() {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const { isStandalone, loading: contextLoading } = useStoreContext();
 
   useEffect(() => {
 
@@ -72,7 +74,7 @@ export default function DashboardPage() {
     };
   }, []);
 
-  if (loading) {
+  if (loading || contextLoading) {
     return <Loading label="Loading dashboard..." />;
   }
 
@@ -158,39 +160,44 @@ export default function DashboardPage() {
 
         <DashboardCards stats={stats} lowStockThreshold={lowStockThreshold} />
 
-        <DashboardCharts chartData={{ 
-          combinedData: data?.stores ? data.stores.map((s: any) => ({
-            name: s.label || s.shopDomain,
-            'Total Products': s.productCount,
-            'Total Inventory': s.inventoryTotal,
-            'Total Sales Value': s.salesValue,
-          })) : [],
-          currentStoreData: data?.stores ? data.stores.filter((s: any) => s.id === data.currentStoreId).map((s: any) => ({
-            name: s.label || s.shopDomain,
-            'Total Products': s.productCount,
-            'Total Inventory': s.inventoryTotal,
-            'Total Sales Value': s.salesValue,
-          })) : []
-        }} />
+        {/* Only show charts if multi-store */}
+        {!isStandalone && (
+          <DashboardCharts chartData={{ 
+            combinedData: !data?.stores ? [] : data.stores.map((s: any) => ({
+              name: s.label || s.shopDomain,
+              'Total Products': s.productCount,
+              'Total Inventory': s.inventoryTotal,
+              'Total Sales Value': s.salesValue,
+            })),
+            currentStoreData: data?.stores ? data.stores.filter((s: any) => s.id === data.currentStoreId).map((s: any) => ({
+              name: s.label || s.shopDomain,
+              'Total Products': s.productCount,
+              'Total Inventory': s.inventoryTotal,
+              'Total Sales Value': s.salesValue,
+            })) : []
+          }} />
+        )}
 
-        <div className="w-full overflow-hidden">
-          <div className="overflow-x-auto w-full max-w-full">
-            <Table
-              title="Store Summary"
-              headerColor="#0f766e"
-              columns={storeSummaryColumns}
-              items={storeSummaryData}
-              searchable={false}
-              filterable={false}
-              paginate={false}
-              emptyState={
-                <div style={{ padding: '40px', textAlign: 'center', color: '#6b7280' }}>
-                  No store data available.
-                </div>
-              }
-            />
+        {!isStandalone && (
+          <div className="w-full overflow-hidden">
+            <div className="overflow-x-auto w-full max-w-full">
+              <Table
+                title="Store Summary"
+                headerColor="#0f766e"
+                columns={storeSummaryColumns}
+                items={storeSummaryData}
+                searchable={false}
+                filterable={false}
+                paginate={false}
+                emptyState={
+                  <div style={{ padding: '40px', textAlign: 'center', color: '#6b7280' }}>
+                    No store data available.
+                  </div>
+                }
+              />
+            </div>
           </div>
-        </div>
+        )}
 
         <div className="w-full overflow-hidden">
           <div className="overflow-x-auto w-full max-w-full">

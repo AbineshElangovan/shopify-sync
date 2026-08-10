@@ -8,9 +8,11 @@ import CollectionPriceAdjustment from '@/components/stores/CollectionPriceAdjust
 import { ThemedSection } from '@/components/ui/ThemedSection';
 import { StoreRoleBadge } from '@/components/ui/StoreRoleBadge';
 import { Loading } from '@/components/common';
+import { useStoreContext } from '@/components/providers/StoreProvider';
 
 export default function PriceAdjustmentPage() {
   const router = useRouter();
+  const { isStandalone } = useStoreContext();
   const [stores, setStores] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 

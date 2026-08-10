@@ -42,6 +42,9 @@ export async function generateSkusForProductIfNeeded(shopDomain: string, payload
   if (activeRules.length > 0) {
     try {
       // 2. Fetch the product's collections from Shopify GraphQL to be absolutely sure we have the latest
+      // Important: Add a small delay for Shopify to index the newly created product's collections!
+      await new Promise(r => setTimeout(r, 3000));
+      
       const client = await getAdminClient(shopDomain);
       const colResponse: any = await client.request(`
         query getProductCollections($id: ID!) {
@@ -55,12 +58,21 @@ export async function generateSkusForProductIfNeeded(shopDomain: string, payload
 
       const productCollections = colResponse?.data?.product?.collections?.edges?.map((e: any) => e.node.id) || [];
       
-      // Find the first rule that matches one of the product's collections
-      // Sorting rules by collection title alphabetically for deterministic priority
+      // Fallback: Check tags if GraphQL collections are empty or lagging
+      const payloadTags = (payload.tags || "").split(',').map((t: string) => t.trim().toLowerCase());
+      
       activeRules.sort((a, b) => a.collection.title.localeCompare(b.collection.title));
       
       for (const rule of activeRules) {
-        if (productCollections.includes(rule.collection.shopifyCollectionId)) {
+        const titleLower = rule.collection.title.toLowerCase();
+        const tagMatches = payloadTags.some((tag: string) => 
+          titleLower.includes(tag) || tag.includes(titleLower)
+        );
+
+        if (
+          productCollections.includes(rule.collection.shopifyCollectionId) ||
+          tagMatches
+        ) {
           appliedRule = rule;
           break;
         }
@@ -130,16 +142,18 @@ export async function generateSkusForProductIfNeeded(shopDomain: string, payload
     if (appliedRule) {
       const globPrefix = setting.skuPrefix || "SKU";
       
-      const words = appliedRule.collection.title.trim().split(/[\s\-]+/).filter((w: string) => w.length > 0);
-      let colPrefix = '';
-      if (words.length === 1) {
-        colPrefix = words[0].substring(0, 3).toUpperCase();
-      } else if (words.length === 2) {
-        colPrefix = (words[0][0] + words[1].substring(0, 2)).toUpperCase();
-      } else if (words.length >= 3) {
-        colPrefix = (words[0][0] + words[1][0] + words[2][0]).toUpperCase();
+      let colPrefix = appliedRule.skuPrefix?.trim();
+      if (!colPrefix) {
+        const words = appliedRule.collection.title.trim().split(/[\s\-]+/).filter((w: string) => w.length > 0);
+        if (words.length === 1) {
+          colPrefix = words[0].substring(0, 3).toUpperCase();
+        } else if (words.length === 2) {
+          colPrefix = (words[0][0] + words[1].substring(0, 2)).toUpperCase();
+        } else if (words.length >= 3) {
+          colPrefix = (words[0][0] + words[1][0] + words[2][0]).toUpperCase();
+        }
+        colPrefix = (colPrefix || 'COL').padEnd(3, 'X').substring(0, 3);
       }
-      colPrefix = (colPrefix || 'COL').padEnd(3, 'X').substring(0, 3);
       
       if (optionsStr) {
         expectedSku = `${globalPrefix}-${globPrefix}-${colPrefix}-${optionsStr}-${paddedSequence}`;

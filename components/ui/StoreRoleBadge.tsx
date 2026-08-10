@@ -1,18 +1,22 @@
 'use client';
-import React, { useEffect, useState } from 'react';
-import { shopifyFetch } from '@/lib/shopify/Client';
+import React from 'react';
+import { useStoreContext } from '@/components/providers/StoreProvider';
 
 export function StoreRoleBadge() {
-  const [isMaster, setIsMaster] = useState<boolean | null>(null);
+  const { isMaster, isStandalone, loading } = useStoreContext();
 
-  useEffect(() => {
-    shopifyFetch('/api/stores/current')
-      .then(res => res.json())
-      .then(data => setIsMaster(data.isMaster))
-      .catch(() => {});
-  }, []);
+  if (loading) return null;
 
-  if (isMaster === null) return null;
+  if (isStandalone) {
+    return (
+      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-bold bg-blue-800 text-white uppercase tracking-wider border border-blue-900 shadow-sm">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M12 2L22 7L12 12L2 7L12 2ZM12 14.5L20 10.5L22 11.5L12 16.5L2 11.5L4 10.5L12 14.5ZM12 19L20 15L22 16L12 21L2 16L4 15L12 19Z"/>
+        </svg>
+        Standalone
+      </span>
+    );
+  }
 
   return isMaster ? (
     <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-bold bg-[#064e3b] text-white uppercase tracking-wider border border-[#022c22] shadow-sm">

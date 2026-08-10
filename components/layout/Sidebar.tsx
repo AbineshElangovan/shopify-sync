@@ -13,12 +13,14 @@ import {
   ClockIcon
 } from '@shopify/polaris-icons';
 import { Icon } from '@shopify/polaris';
+import { useStoreContext } from '@/components/providers/StoreProvider';
 
 interface MenuItem {
   label: string;
   href: string;
   icon: any;
   badge?: string;
+  hideInSingleStore?: boolean;
 }
 
 interface MenuSection {
@@ -31,6 +33,8 @@ export function Sidebar() {
   const searchParams = useSearchParams();
   const shop = searchParams.get('shop');
   const host = searchParams.get('host');
+  
+  const { currentStore, isStandalone, canManageNetwork, loading } = useStoreContext();
 
   const createHref = (basePath: string) => {
     const queryParams = new URLSearchParams();
@@ -52,7 +56,7 @@ export function Sidebar() {
       title: 'CATALOG',
       items: [
         { label: 'Products', href: '/products', icon: ProductIcon },
-        { label: 'Import & Sync', href: '/sync', icon: ImportIcon },
+        { label: 'Import & Sync', href: '/sync', icon: ImportIcon, hideInSingleStore: true },
        
       ]
     },
@@ -84,6 +88,20 @@ export function Sidebar() {
         </div>
       </div>
 
+      <div className="px-4 mb-6">
+        <h3 className="px-3 mb-2 text-[11px] font-bold text-gray-500 tracking-wider uppercase">
+          {isStandalone ? 'STORE' : 'STORES'}
+        </h3>
+        <div className={`px-3 py-2 rounded-lg border shadow-sm flex flex-col relative ${isStandalone ? 'bg-blue-50 border-blue-200' : 'bg-[#ecfdf5] border-[#a7f3d0]'}`}>
+          <span className={`text-sm font-semibold flex items-center justify-between ${isStandalone ? 'text-blue-900' : 'text-[#065f46]'}`}>
+            {loading ? 'Loading...' : (currentStore?.label || currentStore?.shopDomain || 'Current Store')}
+          </span>
+          <span className={`text-[11px] font-bold mt-1 tracking-wide uppercase ${isStandalone ? 'text-blue-700' : 'text-[#059669]'}`}>
+            {isStandalone ? 'Standalone' : (currentStore?.isMaster ? 'Master Store' : 'Connected Store')}
+          </span>
+        </div>
+      </div>
+
       <div className="flex-1 overflow-y-scroll px-4 pb-6 ys-sidebar-scroll">
         {menuSections.map((section, idx) => (
           <div key={idx} className="mb-6">
@@ -92,6 +110,8 @@ export function Sidebar() {
             </h3>
             <div className="space-y-0.5">
               {section.items.map((item) => {
+                if (!canManageNetwork && item.hideInSingleStore) return null;
+                
                 const isActive = pathname === item.href;
                 return (
                   <Link

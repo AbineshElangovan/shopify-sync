@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db/prisma";
 import { getAdminClient } from "@/lib/shopify/admin";
+import { authenticate } from "@/lib/shopify/authenticate";
 
 export async function GET(
   req: NextRequest,
@@ -9,16 +10,28 @@ export async function GET(
   try {
     const { storeId } = await params;
 
-    // 1. Find the Master Store to act as the source of truth for collections
-    let targetStore = await prisma.store.findFirst({
-      where: { isMaster: true, isActive: true }
-    });
+    let currentStore = await prisma.store.findUnique({ where: { id: storeId } });
+    if (!currentStore || !currentStore.isActive) {
+      return new NextResponse("Active store not found", { status: 404 });
+    }
 
-    if (!targetStore) {
-      targetStore = await prisma.store.findUnique({ where: { id: storeId } });
-      if (!targetStore || !targetStore.isActive) {
-        return new NextResponse("Active store not found", { status: 404 });
+    const connections = await prisma.storeConnection.count({
+      where: {
+        OR: [
+          { sourceStoreId: currentStore.id },
+          { targetStoreId: currentStore.id }
+        ]
       }
+    });
+    const isStandalone = connections === 0 && !currentStore.isMaster;
+
+    let targetStore = currentStore;
+
+    // If it's a connected store (not master, not standalone), find its master
+    if (!currentStore.isMaster && !isStandalone) {
+      targetStore = await prisma.store.findFirst({
+        where: { isMaster: true, isActive: true }
+      }) || currentStore;
     }
 
     // 2. Fetch all collections from Target Store Shopify API to ensure fresh sync
@@ -91,7 +104,30 @@ export async function PUT(
   { params }: { params: Promise<{ storeId: string }> }
 ) {
   try {
+    const { store } = await authenticate(req);
+    
+    const connections = await prisma.storeConnection.count({
+      where: {
+        OR: [
+          { sourceStoreId: store.id },
+          { targetStoreId: store.id }
+        ]
+      }
+    });
+    const isStandalone = connections === 0 && !(store as any).isMaster;
+    const canManageSku = (store as any).isMaster || isStandalone;
+
+    if (!canManageSku) {
+      return new NextResponse("Unauthorized. Store lacks capability to manage SKU settings.", { status: 403 });
+    }
+
     const { storeId } = await params;
+    
+    // Ensure the store is operating on its own rules
+    if (store.id !== storeId) {
+      return new NextResponse("Forbidden", { status: 403 });
+    }
+
     const body = await req.json();
     const { rules } = body; // Array of { collectionId, enabled, skuPrefix, startSequence }
 

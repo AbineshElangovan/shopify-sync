@@ -4,7 +4,8 @@ import { prisma } from '@/lib/db/prisma';
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: NextRequest) {
-  const storeId = req.nextUrl.searchParams.get('storeId');
+  const storeIdsParam = req.nextUrl.searchParams.get('storeIds');
+  const storeIds = storeIdsParam ? storeIdsParam.split(',').filter(id => id.trim() !== '') : [];
 
   // Only query for activities that occurred AFTER the connection started
   let lastCreatedAt = new Date(); 
@@ -13,7 +14,7 @@ export async function GET(req: NextRequest) {
     start(controller) {
       // 1. Initial connection message
       controller.enqueue(
-        `event: connected\ndata: ${JSON.stringify({ message: "SSE Connected", storeId })}\n\n`
+        `event: connected\ndata: ${JSON.stringify({ message: "SSE Connected", storeIds })}\n\n`
       );
 
       // 2. Poll Database every 5 seconds
@@ -21,7 +22,7 @@ export async function GET(req: NextRequest) {
         try {
           const newActivities = await prisma.activityLog.findMany({
             where: {
-              ...(storeId ? { storeId: storeId } : {}),
+              ...(storeIds.length > 0 ? { storeId: { in: storeIds } } : {}),
               createdAt: { gt: lastCreatedAt }
             },
             include: {

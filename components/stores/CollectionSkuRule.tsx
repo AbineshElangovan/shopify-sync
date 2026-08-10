@@ -17,8 +17,21 @@ const CollectionSkuRule = forwardRef(({
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Store the single selected collection ID
   const [selectedCollectionId, setSelectedCollectionId] = useState<string>('');
+  const [customPrefixes, setCustomPrefixes] = useState<Record<string, string>>({});
+
+  const generatePrefix = (title: string) => {
+    const words = title.trim().split(/[\s\-]+/).filter((w: string) => w.length > 0);
+    let colPrefix = '';
+    if (words.length === 1) {
+      colPrefix = words[0].substring(0, 3).toUpperCase();
+    } else if (words.length === 2) {
+      colPrefix = (words[0][0] + words[1].substring(0, 2)).toUpperCase();
+    } else if (words.length >= 3) {
+      colPrefix = (words[0][0] + words[1][0] + words[2][0]).toUpperCase();
+    }
+    return colPrefix.padEnd(3, 'X').substring(0, 3);
+  };
 
   const loadCollections = async () => {
     setLoading(true);
@@ -28,21 +41,20 @@ const CollectionSkuRule = forwardRef(({
         const data = await res.json();
         setCollections(data);
 
+        const initialPrefixes: Record<string, string> = {};
+        for (const col of data) {
+          if (col.skuRule?.skuPrefix) {
+            initialPrefixes[col.id] = col.skuRule.skuPrefix;
+          }
+        }
+        setCustomPrefixes(initialPrefixes);
+
         // Find the currently enabled one (if any)
         const enabledCol = data.find((col: any) => col.skuRule?.enabled);
         if (enabledCol) {
           setSelectedCollectionId(enabledCol.id);
-          const words = enabledCol.title.trim().split(/[\s\-]+/).filter((w: string) => w.length > 0);
-          let colPrefix = '';
-          if (words.length === 1) {
-            colPrefix = words[0].substring(0, 3).toUpperCase();
-          } else if (words.length === 2) {
-            colPrefix = (words[0][0] + words[1].substring(0, 2)).toUpperCase();
-          } else if (words.length >= 3) {
-            colPrefix = (words[0][0] + words[1][0] + words[2][0]).toUpperCase();
-          }
-          colPrefix = (colPrefix || 'COL').padEnd(3, 'X').substring(0, 3);
-          onSelectCollection(enabledCol.id, colPrefix);
+          const savedPrefix = initialPrefixes[enabledCol.id] || generatePrefix(enabledCol.title);
+          onSelectCollection(enabledCol.id, savedPrefix);
         }
       }
     } catch (err) {
@@ -62,7 +74,8 @@ const CollectionSkuRule = forwardRef(({
     async saveRules() {
       const rules = collections.map(col => ({
         collectionId: col.id,
-        enabled: col.id === selectedCollectionId
+        enabled: col.id === selectedCollectionId,
+        skuPrefix: (col.id === selectedCollectionId ? customPrefixes[col.id] : '') || ''
       }));
 
       await shopifyFetch(`/api/stores/${storeId}/collection-sku-rules`, {
@@ -106,44 +119,57 @@ const CollectionSkuRule = forwardRef(({
         <BlockStack gap="300">
           {collections.filter(c => c.title.toLowerCase().includes(searchQuery.toLowerCase())).map((col) => {
             const isSelected = selectedCollectionId === col.id;
+            const autoPrefix = generatePrefix(col.title);
             
             return (
               <div key={col.id} style={{
                 display: 'flex',
                 alignItems: 'center',
-                justifyContent: 'flex-start',
+                justifyContent: 'space-between',
                 padding: '12px',
                 border: isSelected ? '1px solid #a855f7' : '1px solid #f3f4f6',
                 borderRadius: '8px',
                 backgroundColor: isSelected ? '#f5f3ff' : '#ffffff',
-                cursor: 'pointer',
                 transition: 'all 0.2s ease-in-out'
-              }}
-              onClick={() => {
-                const newId = isSelected ? '' : col.id;
-                setSelectedCollectionId(newId);
-                let colPrefix = '';
-                if (newId) {
-                  const words = col.title.trim().split(/[\s\-]+/).filter((w: string) => w.length > 0);
-                  if (words.length === 1) {
-                    colPrefix = words[0].substring(0, 3).toUpperCase();
-                  } else if (words.length === 2) {
-                    colPrefix = (words[0][0] + words[1].substring(0, 2)).toUpperCase();
-                  } else if (words.length >= 3) {
-                    colPrefix = (words[0][0] + words[1][0] + words[2][0]).toUpperCase();
-                  }
-                  colPrefix = colPrefix.padEnd(3, 'X').substring(0, 3); // ensure exactly 3 chars just in case
-                }
-                onSelectCollection(newId, colPrefix);
-              }}
-              >
-                <div style={{ pointerEvents: 'none' }}>
-                  <Checkbox
-                    label={col.title}
-                    checked={isSelected}
-                    onChange={() => {}} // handled by parent div click
-                  />
+              }}>
+                <div 
+                  style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', flex: 1 }}
+                  onClick={() => {
+                    const newId = isSelected ? '' : col.id;
+                    setSelectedCollectionId(newId);
+                    if (newId) {
+                      const prefixToUse = customPrefixes[newId] || generatePrefix(col.title);
+                      onSelectCollection(newId, prefixToUse);
+                    } else {
+                      onSelectCollection('', '');
+                    }
+                  }}
+                >
+                  <div style={{ pointerEvents: 'none' }}>
+                    <Checkbox
+                      label={col.title}
+                      checked={isSelected}
+                      onChange={() => {}} // handled by parent div click
+                    />
+                  </div>
                 </div>
+
+                {isSelected && (
+                  <div style={{ width: '120px' }}>
+                    <input
+                      type="text"
+                      placeholder={autoPrefix}
+                      value={customPrefixes[col.id] || ''}
+                      onChange={(e) => {
+                        const val = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 5);
+                        setCustomPrefixes(prev => ({ ...prev, [col.id]: val }));
+                        onSelectCollection(col.id, val || autoPrefix);
+                      }}
+                      className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-1 focus:ring-purple-500 focus:border-purple-500 uppercase"
+                      maxLength={5}
+                    />
+                  </div>
+                )}
               </div>
             );
           })}

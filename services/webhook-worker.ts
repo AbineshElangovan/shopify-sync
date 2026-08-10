@@ -136,7 +136,19 @@ async function handleProductsCreate(shop: string, payload: any, webhookId: strin
     where: { shopDomain: shop },
   });
 
-  if (!(store as any)?.isMaster) {
+  if (!store) return;
+
+  const isStandalone = !store.isMaster && 
+    (await prisma.storeConnection.count({
+      where: {
+        OR: [
+          { sourceStoreId: store.id },
+          { targetStoreId: store.id }
+        ]
+      }
+    })) === 0;
+
+  if (!store.isMaster && !isStandalone) {
     console.log(`[Worker:products/create] Ignored event from Sub Store: ${shop}`);
     return;
   }
@@ -241,7 +253,19 @@ async function handleProductsUpdate(shop: string, payload: any, webhookId: strin
     where: { shopDomain: shop },
   });
 
-  if (!(store as any)?.isMaster) {
+  if (!store) return;
+
+  const isStandalone = !store.isMaster && 
+    (await prisma.storeConnection.count({
+      where: {
+        OR: [
+          { sourceStoreId: store.id },
+          { targetStoreId: store.id }
+        ]
+      }
+    })) === 0;
+
+  if (!store.isMaster && !isStandalone) {
     console.log(`[Worker:products/update] Ignored event from Sub Store: ${shop}`);
     return;
   }
@@ -331,7 +355,17 @@ async function handleProductsDelete(shop: string, payload: any, webhookId: strin
 
   if (!store) return;
 
-  if (!(store as any)?.isMaster) {
+  const isStandalone = !store.isMaster && 
+    (await prisma.storeConnection.count({
+      where: {
+        OR: [
+          { sourceStoreId: store.id },
+          { targetStoreId: store.id }
+        ]
+      }
+    })) === 0;
+
+  if (!store.isMaster && !isStandalone) {
     console.log(`[Worker:products/delete] Ignored sync propagation from Sub Store, but cleaning up local cache: ${shop}`);
     const deletedGid = `gid://shopify/Product/${payload.id}`;
     

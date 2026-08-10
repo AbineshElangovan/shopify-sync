@@ -18,11 +18,14 @@ import { ProductAddIcon, EditIcon, DeleteIcon, CartIcon, InfoIcon, SearchIcon, E
 import { shopifyFetch } from "@/lib/shopify/Client";
 import { StoreRoleBadge } from '@/components/ui/StoreRoleBadge';
 import { Loading, SearchBar, CustomSelect } from '@/components/common';
+import { useStoreContext } from '@/components/providers/StoreProvider';
 
 export default function ActivityPage() {
+  const { isStandalone, isMultiStore } = useStoreContext();
   const [activities, setActivities] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentStoreId, setCurrentStoreId] = useState<string | null>(null);
+  const [allowedStoreIds, setAllowedStoreIds] = useState<string[]>([]);
   const [connectionStatus, setConnectionStatus] = useState<string>("Disconnected");
 
   // Filters state
@@ -44,7 +47,6 @@ export default function ActivityPage() {
   const [storeOptions, setStoreOptions] = useState<any[]>([]);
 
   const [isMaster, setIsMaster] = useState(false);
-  const [isMultiStore, setIsMultiStore] = useState(false);
 
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -68,11 +70,13 @@ export default function ActivityPage() {
         const data = await response.json();
         setActivities(data.activities || []);
         setIsMaster(data.isMaster || false);
-        setIsMultiStore(data.isMultiStore || false);
         setTotalPages(data.pagination?.totalPages || 1);
         setCollectionOptions(data.collectionOptions || []);
         setStoreOptions(data.storeOptions || []);
         setCurrentStoreId(data.currentStoreId || null);
+        
+        // Save the allowed store IDs to pass to the SSE stream
+        setAllowedStoreIds(data.allowedStoreIds || []);
       } else {
         const errData = await response.json();
         setErrorMsg(errData.error || "Failed to fetch activities");
@@ -90,13 +94,14 @@ export default function ActivityPage() {
   }, [fetchActivities]);
 
   useEffect(() => {
-    if (!currentStoreId) return;
+    if (allowedStoreIds.length === 0) return;
 
     let eventSource: EventSource | null = null;
 
     const connectSSE = () => {
       setConnectionStatus('Connecting...');
-      eventSource = new EventSource(`/api/activity/stream?storeId=${currentStoreId}`);
+      const storeIdsParam = allowedStoreIds.join(',');
+      eventSource = new EventSource(`/api/activity/stream?storeIds=${storeIdsParam}`);
 
       eventSource.onopen = () => {
         setConnectionStatus('Live');
@@ -129,7 +134,7 @@ export default function ActivityPage() {
         eventSource.close();
       }
     };
-  }, [currentStoreId]);
+  }, [allowedStoreIds]);
 
   const handleSearchChange = useCallback((value: string) => {
     setQueryValue(value);

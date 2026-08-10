@@ -37,10 +37,16 @@ export async function GET(req: NextRequest) {
       where: { sourceStoreId: masterStoreId }
     });
     
-    allowedStoreIds = [masterStoreId, ...connections.map((c: any) => c.targetStoreId)];
-    isMultiStore = connections.length > 0;
-
-    let storeIdsToQuery = allowedStoreIds;
+    let storeIdsToQuery: string[] = [];
+    if (store.isMaster) {
+      allowedStoreIds = [masterStoreId, ...connections.map((c: any) => c.targetStoreId)];
+      isMultiStore = connections.length > 0;
+      storeIdsToQuery = allowedStoreIds;
+    } else {
+      allowedStoreIds = [store.id];
+      isMultiStore = false;
+      storeIdsToQuery = [store.id];
+    }
     if (filterStoreId && filterStoreId !== 'all') {
       if (allowedStoreIds.includes(filterStoreId)) {
         storeIdsToQuery = [filterStoreId];
@@ -173,7 +179,8 @@ export async function GET(req: NextRequest) {
       isMaster: store.isMaster,
       isMultiStore,
       storeOptions,
-      collectionOptions
+      collectionOptions,
+      allowedStoreIds: storeIdsToQuery
     });
 
   } catch (err: any) {
